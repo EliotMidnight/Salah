@@ -52,10 +52,14 @@ cd Salah
 
 The SDK's x86_64 `aapt2`/`zipalign` cannot execute on ARM Android. The working setup is:
 
-- Native Termux `aapt2` selected via `gradle.properties` (local-only, do not commit):
+- Native Termux `aapt2`, selected via a device-local override in `~/.gradle/gradle.properties`
+  (user-home properties apply to every build on the device and are never committed):
   ```properties
   android.aapt2FromMavenOverride=/data/data/com.termux/files/usr/bin/aapt2
   ```
+  Do NOT put this in the repo's `gradle.properties` — the path only exists on Termux
+  and would break builds on normal machines (verified: AGP ignores this key in
+  `local.properties`).
 - A `zipalign` passthrough shim in `build-tools/36.0.0/` (same reason).
 - Copy the project to internal storage (`~/Salah-build`) before building — the shared
   `/storage` mount lacks exec permissions. Build with reduced parallelism on low-RAM devices:
