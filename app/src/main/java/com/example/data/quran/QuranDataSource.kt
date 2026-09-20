@@ -125,101 +125,77 @@ object QuranDataSource {
 
     fun getSurahByNumber(number: Int): Surah? = SURAHS.find { it.number == number }
 
+    /**
+     * Full verified Arabic text (Tanzil Uthmani) with Saheeh International
+     * English for every verse. Loaded once from bundled resources.
+     */
     fun getAyahsForSurah(surahNumber: Int): List<Ayah> {
-        val surah = getSurahByNumber(surahNumber) ?: return emptyList()
-        val specific = KNOWN_AYAHS[surahNumber]
-        if (specific != null && specific.isNotEmpty()) {
-            return specific
-        }
-
-        // Generate verified classical Quranic text structure for any Surah
-        val result = mutableListOf<Ayah>()
-        for (i in 1..surah.totalVerses) {
-            val textAr = when {
-                i == 1 && surahNumber != 9 -> "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ ۝"
-                i == 1 -> "بَرَاءَةٌ مِّنَ اللَّهِ وَرَسُولِهِ إِلَى الَّذِينَ عَاهَدتُّم مِّنَ الْمُشْرِكِينَ ۝"
-                else -> "${surah.arabicName} · الآية $i ۝"
-            }
-            val page = surah.startPage + ((i - 1) * 2 / surah.totalVerses).coerceAtLeast(0)
-            result.add(
-                Ayah(
-                    surahNumber = surahNumber,
-                    ayahNumber = i,
-                    textArabic = textAr,
-                    textEnglish = "Surah ${surah.englishName}, Verse $i",
-                    pageNumber = page.coerceIn(1, 604),
-                    juzNumber = ((page - 1) / 20) + 1
-                )
-            )
-        }
-        return result
+        return QuranCorpus.ayahs.filter { it.surahNumber == surahNumber }
     }
 
-    private val KNOWN_AYAHS: Map<Int, List<Ayah>> = mapOf(
-        // Al-Fatihah
-        1 to listOf(
-            Ayah(1, 1, "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ ۝١", "In the name of Allah, the Entirely Merciful, the Especially Merciful.", 1, 1),
-            Ayah(1, 2, "الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ ۝٢", "[All] praise is [due] to Allah, Lord of the worlds.", 1, 1),
-            Ayah(1, 3, "الرَّحْمَٰنِ الرَّحِيمِ ۝٣", "The Entirely Merciful, the Especially Merciful,", 1, 1),
-            Ayah(1, 4, "مَالِكِ يَوْمِ الدِّينِ ۝٤", "Sovereign of the Day of Recompense.", 1, 1),
-            Ayah(1, 5, "إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ ۝٥", "It is You we worship and You we ask for help.", 1, 1),
-            Ayah(1, 6, "اهْدِنَا الصِّرَاطَ الْمُسْتَقِيمَ ۝٦", "Guide us to the straight path -", 1, 1),
-            Ayah(1, 7, "صِرَاطَ الَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ الْمَغْضُوبِ عَلَيْهِمْ وَلَا الضَّالِّينَ ۝٧", "The path of those upon whom You have bestowed favor, not of those who have evoked [Your] anger or of those who are astray.", 1, 1)
-        ),
-        // Al-Baqarah (Selection of landmark verses including 2:183-186 and Ayat al-Kursi 2:255)
-        2 to listOf(
-            Ayah(2, 1, "الم ۝١", "Alif, Lam, Meem.", 2, 1),
-            Ayah(2, 2, "ذَٰلِكَ الْكِتَابُ لَا رَيْبَ ۛ فِيهِ ۛ هُدًى لِّلْمُتَّقِينَ ۝٢", "This is the Book about which there is no doubt, a guidance for those conscious of Allah -", 2, 1),
-            Ayah(2, 3, "الَّذِينَ يُؤْمِنُونَ بِالْغَيْبِ وَيُقِيمُونَ الصَّلَاةَ وَمِمَّا رَزَقْنَاهُمْ يُنفِقُونَ ۝٣", "Who believe in the unseen, establish prayer, and spend out of what We have provided for them,", 2, 1),
-            Ayah(2, 4, "وَالَّذِينَ يُؤْمِنُونَ بِمَا أُنزِلَ إِلَيْكَ وَمَا أُنزِلَ مِن قَبْلِكَ وَبِالْآخِرَةِ هُمْ يُوقِنُونَ ۝٤", "And who believe in what has been revealed to you, and what was revealed before you, and of the Hereafter they are certain.", 2, 1),
-            Ayah(2, 5, "أُولَٰئِكَ عَلَىٰ هُدًى مِّن رَّبِّهِمْ ۖ وَأُولَٰئِكَ هُمُ الْمُفْلِحُونَ ۝٥", "Those are upon guidance from their Lord, and it is those who are the successful.", 2, 1),
-            Ayah(2, 183, "يَا أَيُّهَا الَّذِينَ آمَنُوا كُتِبَ عَلَيْكُمُ الصِّيَامُ كَمَا كُتِبَ عَلَى الَّذِينَ مِن قَبْلِكُمْ لَعَلَّكُمْ تَتَّقُونَ ۝١٨٣", "O you who have believed, decreed upon you is fasting as it was decreed upon those before you that you may become righteous -", 28, 2),
-            Ayah(2, 184, "أَيَّامًا مَّعْدُودَاتٍ ۚ فَمَن كَانَ مِنكُم مَّرِيضًا أَوْ عَلَىٰ سَفَرٍ فَعِدَّةٌ مِّنْ أَيَّامٍ أُخَرَ ۚ وَعَلَى الَّذِينَ يُطِيقُونَهُ فِدْيَةٌ طَعَامُ مِسْكِينٍ ۖ فَمَن تَطَوَّعَ خَيْرًا فَهُوَ خَيْرٌ لَّهُ ۚ وَأَن تَصُومُوا خَيْرٌ لَّكُمْ ۖ إِن كُنتُمْ تَعْلَمُونَ ۝١٨٤", "[Fasting for] a limited number of days. So whoever among you is ill or on a journey - then an equal number of other days. And upon those who are able [to fast, but with hardship] - a ransom [as substitute] of feeding a poor person [each day]. And whoever volunteers excess - it is better for him. But to fast is best for you, if you only knew.", 28, 2),
-            Ayah(2, 185, "شَهْرُ رَمَضَانَ الَّذِي أُنزِلَ فِيهِ الْقُرْآنُ هُدًى لِّلنَّاسِ وَبَيِّنَاتٍ مِّنَ الْهُدَىٰ وَالْفُرْقَانِ ۚ فَمَن شَهِدَ مِنكُمُ الشَّهْرَ فَلْيَصُمْهُ ۝١٨٥", "The month of Ramadan [is that] in which was revealed the Quran, a guidance for the people and clear proofs of guidance and criterion.", 28, 2),
-            Ayah(2, 186, "وَإِذَا سَأَلَكَ عِبَادِي عَنِّي فَإِنِّي قَرِيبٌ ۖ أُجِيبُ دَعْوَةَ الدَّاعِ إِذَا دَعَانِ ۖ فَلْيَسْتَجِيبُوا لِي وَلْيُؤْمِنُوا بِي لَعَلَّهُمْ يَرْشُدُونَ ۝١٨٦", "And when My servants ask you concerning Me, indeed I am near. I respond to the invocation of the supplicant when he calls upon Me.", 28, 2),
-            Ayah(2, 255, "اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ ۚ لَا تَأْخُذُهُ سِنَةٌ وَلَا نَوْمٌ ۚ لَّهُ مَا فِي السَّمَاوَاتِ وَمَا فِي الْأَرْضِ ۗ مَن ذَا الَّذِي يَشْفَعُ عِندَهُ إِلَّا بِإِذْنِهِ ۚ يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ ۖ وَلَا يُحِيطُونَ بِشَيْءٍ مِّنْ عِلْمِهِ إِلَّا بِمَا شَاءَ ۚ وَسِعَ كُرْسِيُّهُ السَّمَاوَاتِ وَالْأَرْضَ ۖ وَلَا يَئُودُهُ حِفْظُهُمَا ۚ وَهُوَ الْعَلِيُّ الْعَظِيمُ ۝٢٥٥", "Allah - there is no deity except Him, the Ever-Living, the Sustainer of [all] existence. Neither drowsiness overtakes Him nor sleep. To Him belongs whatever is in the heavens and whatever is on the earth. Who is it that can intercede with Him except by His permission? He knows what is before them and what will be after them, and they encompass not a thing of His knowledge except for what He wills. His Kursi extends over the heavens and the earth, and their preservation tires Him not. And He is the Most High, the Most Great.", 42, 3)
-        ),
-        // Al-Ikhlas
-        112 to listOf(
-            Ayah(112, 1, "قُلْ هُوَ اللَّهُ أَحَدٌ ۝١", "Say, He is Allah, [who is] One,", 604, 30),
-            Ayah(112, 2, "اللَّهُ الصَّمَدُ ۝٢", "Allah, the Eternal Refuge.", 604, 30),
-            Ayah(112, 3, "لَمْ يَلِدْ وَلَمْ يُولَدْ ۝٣", "He neither begets nor is born,", 604, 30),
-            Ayah(112, 4, "وَلَمْ يَكُن لَّهُ كُفُوًا أَحَدٌ ۝٤", "Nor is there to Him any equivalent.", 604, 30)
-        ),
-        // Al-Falaq
-        113 to listOf(
-            Ayah(113, 1, "قُلْ أَعُوذُ بِرَبِّ الْفَلَقِ ۝١", "Say, I seek refuge in the Lord of daybreak", 604, 30),
-            Ayah(113, 2, "مِن شَرِّ مَا خَلَقَ ۝٢", "From the evil of that which He created", 604, 30),
-            Ayah(113, 3, "وَمِن شَرِّ غَاسِقٍ إِذَا وَقَبَ ۝٣", "And from the evil of darkness when it settles", 604, 30),
-            Ayah(113, 4, "وَمِن شَرِّ النَّفَّاثَاتِ فِي الْعُقَدِ ۝٤", "And from the evil of the blowers in knots", 604, 30),
-            Ayah(113, 5, "وَمِن شَرِّ حَاسِدٍ إِذَا حَسَدَ ۝٥", "And from the evil of an envier when he envies.", 604, 30)
-        ),
-        // An-Nas
-        114 to listOf(
-            Ayah(114, 1, "قُلْ أَعُوذُ بِرَبِّ النَّاسِ ۝١", "Say, I seek refuge in the Lord of mankind,", 604, 30),
-            Ayah(114, 2, "مَلِكِ النَّاسِ ۝٢", "The Sovereign of mankind,", 604, 30),
-            Ayah(114, 3, "إِلَٰهِ النَّاسِ ۝٣", "The God of mankind,", 604, 30),
-            Ayah(114, 4, "مِن شَرِّ الْوَسْوَاسِ الْخَنَّاسِ ۝٤", "From the evil of the retreating whisperer -", 604, 30),
-            Ayah(114, 5, "الَّذِي يُوَسْوِسُ فِي صُدُورِ النَّاسِ ۝٥", "Who whispers into the breasts of mankind -", 604, 30),
-            Ayah(114, 6, "مِنَ الْجِنَّةِ وَالنَّاسِ ۝٦", "From among the jinn and mankind.", 604, 30)
-        ),
-        // Al-Asr
-        103 to listOf(
-            Ayah(103, 1, "وَالْعَصْرِ ۝١", "By time,", 601, 30),
-            Ayah(103, 2, "إِنَّ الْإِنسَانَ لَفِي خُسْرٍ ۝٢", "Indeed, mankind is in loss,", 601, 30),
-            Ayah(103, 3, "إِلَّا الَّذِينَ آمَنُوا وَعَمِلُوا الصَّالِحَاتِ وَتَوَاصَوْا بِالْحَقِّ وَتَوَاصَوْا بِالصَّبْرِ ۝٣", "Except for those who have believed and done righteous deeds and advised each other to truth and advised each other to patience.", 601, 30)
-        ),
-        // Al-Kawthar
-        108 to listOf(
-            Ayah(108, 1, "إِنَّا أَعْطَيْنَاكَ الْكَوْثَرَ ۝١", "Indeed, We have granted you, [O Muhammad], al-Kawthar.", 602, 30),
-            Ayah(108, 2, "فَصَلِّ لِرَبِّكَ وَانْحَرْ ۝٢", "So pray to your Lord and sacrifice [to Him alone].", 602, 30),
-            Ayah(108, 3, "إِنَّ شَانِئَكَ هُوَ الْأَبْتَرُ ۝٣", "Indeed, your enemy is the one cut off.", 602, 30)
-        ),
-        // Al-Mulk (first verses)
-        67 to listOf(
-            Ayah(67, 1, "تَبَارَكَ الَّذِي بِيَدِهِ الْمُلْكُ وَهُوَ عَلَىٰ كُلِّ شَيْءٍ قَدِيرٌ ۝١", "Blessed is He in whose hand is dominion, and He is over all things competent -", 562, 29),
-            Ayah(67, 2, "الَّذِي خَلَقَ الْمَوْتَ وَالْحَيَاةَ لِيَبْلُوَكُمْ أَيُّكُمْ أَحْسَنُ عَمَلًا ۚ وَهُوَ الْعَزِيزُ الْغَفُورُ ۝٢", "[He] who created death and life to test you [as to] which of you is best in deed - and He is the Exalted in Might, the Forgiving -", 562, 29),
-            Ayah(67, 3, "الَّذِي خَلَقَ سَبْعَ سَمَاوَاتٍ طِبَاقًا ۖ مَّا تَرَىٰ فِي خَلْقِ الرَّحْمَٰنِ مِن تَفَاوُتٍ ۖ فَارْجِعِ الْبَصَرَ هَلْ تَرَىٰ مِن فُطُورٍ ۝٣", "[And] who created seven heavens in layers. You do not see in the creation of the Most Merciful any inconsistency. So return [your] vision; do you see any breaks?", 562, 29)
-        )
-    )
+    fun getAyahsForPage(pageNumber: Int): List<Ayah> {
+        val page = pageNumber.coerceIn(1, 604)
+        return QuranCorpus.ayahs.filter { it.pageNumber == page }
+    }
+
+    /**
+     * Resolves a single verse reference from the verified corpus, or null when
+     * the reference does not exist. Used to display bookmarks from live text.
+     */
+    fun resolveAyah(surahNumber: Int, ayahNumber: Int): Ayah? {
+        val surah = getSurahByNumber(surahNumber) ?: return null
+        if (ayahNumber < 1 || ayahNumber > surah.totalVerses) return null
+        return QuranCorpus.ayahs.firstOrNull {
+            it.surahNumber == surahNumber && it.ayahNumber == ayahNumber
+        }
+    }
+
+    /**
+     * Converts an integer to Eastern Arabic-Indic numerals (٠-٩) for
+     * authentic Uthmani ayah-end markers.
+     */
+    fun toArabicDigits(number: Int): String {
+        val arabicDigits = charArrayOf('٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩')
+        return number.toString().map { arabicDigits[it - '0'] }.joinToString("")
+    }
+
+    /**
+     * Normalizes Arabic text by removing tashkeel (diacritics), tatweel, and
+     * normalizing alif/hamza for seamless full-text offline search.
+     */
+    fun normalizeArabic(text: String): String {
+        return text
+            // Remove Harakat (Tashkeel)
+            .replace(Regex("[\\u064B-\\u065F\\u0670\\u06D6-\\u06ED]"), "")
+            // Remove Tatweel / Kashida
+            .replace("\u0640", "")
+            // Normalize Alif forms (أ, إ, آ, ٱ -> ا)
+            .replace(Regex("[\\u0622\\u0623\\u0625\\u0671]"), "\u0627")
+            // Normalize Taa Marbuta (ة -> ه)
+            .replace("\u0629", "\u0647")
+            // Normalize Yaa (ى -> ي)
+            .replace("\u0649", "\u064A")
+            .trim()
+    }
+
+    /**
+     * Offline search across surah names, Arabic text (diacritics-insensitive)
+     * and the English translation.
+     */
+    fun searchAyahs(query: String): List<Ayah> {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        val normalizedQuery = normalizeArabic(trimmed).lowercase(java.util.Locale.ROOT)
+        val lowerQuery = trimmed.lowercase(java.util.Locale.ROOT)
+        return QuranCorpus.ayahs.filter { ayah ->
+            val surah = getSurahByNumber(ayah.surahNumber)
+            normalizeArabic(ayah.textArabic).lowercase(java.util.Locale.ROOT).contains(normalizedQuery) ||
+                ayah.textEnglish.lowercase(java.util.Locale.ROOT).contains(lowerQuery) ||
+                (surah != null && (
+                    surah.englishName.contains(trimmed, ignoreCase = true) ||
+                        surah.arabicName.contains(trimmed) ||
+                        surah.englishTranslation.contains(trimmed, ignoreCase = true)
+                    ))
+        }
+    }
 }

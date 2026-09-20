@@ -1464,6 +1464,31 @@ val UiStrings.ayahLabel: String
         else -> "Ayah"
     }
 
+/**
+ * Quran reader strings (nour-style reading experience).
+ * English defaults; other languages fall back to English until translated.
+ */
+val UiStrings.cardsModeLabel: String get() = "Cards"
+val UiStrings.continuousModeLabel: String get() = "Continuous"
+val UiStrings.readingSettingsLabel: String get() = "Reading settings"
+val UiStrings.backToSurahsLabel: String get() = "Back to surahs"
+val UiStrings.copyVerseLabel: String get() = "Copy verse"
+val UiStrings.shareVerseLabel: String get() = "Share verse"
+val UiStrings.verseCopiedToast: String get() = "Verse copied"
+val UiStrings.shareChooserTitle: String get() = "Share verse via"
+val UiStrings.previousSurahLabel: String get() = "Previous"
+val UiStrings.nextSurahLabel: String get() = "Next"
+val UiStrings.translationSectionTitle: String get() = "Translation"
+val UiStrings.showTranslationLabel: String get() = "Show"
+val UiStrings.hideTranslationLabel: String get() = "Hide"
+val UiStrings.translationCreditLine: String get() = "English — Saheeh International"
+val UiStrings.tapVerseHint: String get() = "Tap a verse to inspect it"
+val UiStrings.popularSurahsLabel: String get() = "Popular surahs"
+val UiStrings.searchVersesHint: String get() = "Search Arabic text or English translation..."
+val UiStrings.translationNotAvailable: String get() = "Translation not available"
+val UiStrings.juzWord: String get() = "Juz"
+val UiStrings.pageWord: String get() = "Page"
+
 fun UiStrings.prayerName(prayer: com.example.data.model.Prayer): String {
     return when (prayer) {
         com.example.data.model.Prayer.FAJR -> fajr
