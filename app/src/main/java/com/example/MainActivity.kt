@@ -47,7 +47,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -66,6 +65,10 @@ import com.example.ui.qibla.QiblaScreen
 import com.example.ui.quran.QuranScreen
 import com.example.ui.settings.SettingsScreen
 import com.example.ui.theme.SalahTheme
+import com.example.ui.theme.expressiveEnterBack
+import com.example.ui.theme.expressiveEnterForward
+import com.example.ui.theme.expressiveExitBack
+import com.example.ui.theme.expressiveExitForward
 import com.example.ui.localization.LocalStrings
 import com.example.ui.localization.ProvideAppLanguage
 
@@ -191,7 +194,7 @@ fun SalahApp(viewModel: SalahViewModel) {
                             label = {
                                 Text(
                                     text = localizedLabel,
-                                    fontSize = 11.sp,
+                                    style = MaterialTheme.typography.labelMedium,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
@@ -214,6 +217,10 @@ fun SalahApp(viewModel: SalahViewModel) {
         NavHost(
             navController = navController,
             startDestination = SalahDestination.TODAY.route,
+            enterTransition = { expressiveEnterForward() },
+            exitTransition = { expressiveExitForward() },
+            popEnterTransition = { expressiveEnterBack() },
+            popExitTransition = { expressiveExitBack() },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = if (isTopLevelDestination) innerPadding.calculateBottomPadding() else 0.dp)

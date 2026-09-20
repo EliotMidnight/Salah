@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,7 +25,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -55,7 +55,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.data.model.CalculationMethod
 import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
@@ -136,17 +135,17 @@ fun PrayerScreen(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(20.dp))
+                        .clip(MaterialTheme.shapes.medium)
                         .clickable { showTrustLayerSheet = true }
                         .testTag("trust_layer_card"),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = RoundedCornerShape(20.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    shape = MaterialTheme.shapes.medium,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -159,13 +158,13 @@ fun PrayerScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = strings.transparentCalculationSource,
-                            fontSize = 13.5.sp,
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "${state.method.title} · ${state.location.name}",
-                            fontSize = 11.5.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -183,9 +182,8 @@ fun PrayerScreen(
             // Section 1 Header: Today's Times (or Selected Day's Times)
             Text(
                 text = if (isToday) strings.todaysTimes else strings.prayerTimesHeader,
-                fontSize = 12.5.sp,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.2.sp,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
             )
@@ -209,18 +207,17 @@ fun PrayerScreen(
             Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = strings.vigilsAndNightPeriods,
-                fontSize = 12.sp,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
             )
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
+                shape = MaterialTheme.shapes.medium,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     NightPeriodRow(
@@ -229,8 +226,8 @@ fun PrayerScreen(
                         time = dayPrayerTimes?.imsak?.format(DateTimeFormatter.ofPattern(timePattern)) ?: "--:--"
                     )
                     HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 10.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant
                     )
                     NightPeriodRow(
                         title = strings.midnightTitle,
@@ -238,8 +235,8 @@ fun PrayerScreen(
                         time = dayPrayerTimes?.midnight?.format(DateTimeFormatter.ofPattern(timePattern)) ?: "--:--"
                     )
                     HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 10.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant
                     )
                     NightPeriodRow(
                         title = strings.lastThirdTitle,
@@ -254,9 +251,8 @@ fun PrayerScreen(
             // Section 2 Header: Monthly Calendar merged underneath
             Text(
                 text = strings.monthlyCalendarHeader,
-                fontSize = 12.5.sp,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.2.sp,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
             )
@@ -270,13 +266,13 @@ fun PrayerScreen(
             ) {
                 Text(
                     text = "${currentMonth.name.lowercase().replaceFirstChar { it.uppercase() }} ${selectedDate.year}",
-                    fontSize = 15.sp,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
                     text = "Tap a day to view times",
-                    fontSize = 11.5.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -300,19 +296,20 @@ fun PrayerScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 3.dp)
-                    .clip(RoundedCornerShape(14.dp))
+                    .padding(vertical = 4.dp)
+                    .clip(MaterialTheme.shapes.small)
                     .clickable { selectedDate = date },
-                shape = RoundedCornerShape(14.dp),
-                color = if (isSelectedDay) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                shape = MaterialTheme.shapes.small,
+                color = if (isSelectedDay) MaterialTheme.colorScheme.primaryContainer
                 else MaterialTheme.colorScheme.surface,
-                border = if (isSelectedDay) BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f))
+                border = if (isSelectedDay) BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary)
                 else if (isCurrentDay) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 else null
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(min = 48.dp)
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -323,7 +320,7 @@ fun PrayerScreen(
                     ) {
                         Text(
                             text = String.format("%02d", day),
-                            fontSize = 13.sp,
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = if (isSelectedDay || isCurrentDay) FontWeight.Bold else FontWeight.Normal,
                             color = if (isSelectedDay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                         )
@@ -342,12 +339,12 @@ fun PrayerScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = pt.prayer.englishName.take(3),
-                                fontSize = 9.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
                                 text = pt.time.format(DateTimeFormatter.ofPattern("HH:mm")),
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 fontWeight = if (isSelectedDay) FontWeight.Bold else FontWeight.Normal
                             )
                         }
@@ -383,7 +380,7 @@ fun PrayerScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = "Prayer Times Trust Layer",
-                        fontSize = 18.sp,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -458,9 +455,9 @@ private fun DaySwitcher(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp)),
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(20.dp),
+            .clip(MaterialTheme.shapes.medium),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.medium,
         shadowElevation = 1.dp
     ) {
         Row(
@@ -489,7 +486,7 @@ private fun DaySwitcher(
             ) {
                 Text(
                     text = hijriText,
-                    fontSize = 15.5.sp,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center
@@ -498,7 +495,7 @@ private fun DaySwitcher(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = gregorianText,
-                        fontSize = 12.5.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -507,14 +504,14 @@ private fun DaySwitcher(
                         Spacer(modifier = Modifier.width(6.dp))
                         Surface(
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.primaryContainer
                         ) {
                             Text(
                                 text = todayLabel,
-                                fontSize = 9.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
                     }
@@ -544,13 +541,13 @@ private fun PrayerRowCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
-            containerColor = if (isNext) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+            containerColor = if (isNext) MaterialTheme.colorScheme.primaryContainer
             else MaterialTheme.colorScheme.surfaceContainerLow
         ),
         border = if (isNext) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-        else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+        else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = if (isNext) 2.dp else 0.dp)
     ) {
         Row(
@@ -589,7 +586,7 @@ private fun PrayerRowCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = localizedName,
-                            fontSize = 15.sp,
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = if (isNext) FontWeight.Bold else FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -606,7 +603,7 @@ private fun PrayerRowCard(
                     }
                     Text(
                         text = pt.prayer.arabicName,
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontFamily = FontFamily.Serif
                     )
@@ -615,7 +612,7 @@ private fun PrayerRowCard(
 
             Text(
                 text = pt.time.format(DateTimeFormatter.ofPattern(timePattern)),
-                fontSize = 16.sp,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = if (isNext) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
             )
@@ -631,18 +628,18 @@ private fun NightPeriodRow(title: String, arabic: String, time: String) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column {
-            Text(text = title, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
-            Text(text = arabic, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Serif)
+            Text(text = title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+            Text(text = arabic, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Serif)
         }
-        Text(text = time, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+        Text(text = time, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
 @Composable
 private fun TrustItem(label: String, value: String) {
-    Column(modifier = Modifier.padding(vertical = 5.dp)) {
-        Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-        Text(text = value, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+        Text(text = label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        Text(text = value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 

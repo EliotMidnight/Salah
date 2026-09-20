@@ -1,11 +1,14 @@
 package com.example.ui.quran
 
 import android.content.Intent
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,6 +29,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -57,6 +61,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -99,6 +104,7 @@ import com.example.data.model.RevelationType
 import com.example.data.model.Surah
 import com.example.data.quran.QuranDataSource
 import com.example.ui.SalahUiState
+import com.example.ui.components.CameraHoleSpacer
 import com.example.ui.localization.AppLanguage
 import com.example.ui.localization.LocalStrings
 import com.example.ui.localization.ayahLabel
@@ -120,6 +126,7 @@ import com.example.ui.localization.tapVerseHint
 import com.example.ui.localization.translationCreditLine
 import com.example.ui.localization.translationSectionTitle
 import com.example.ui.localization.verseCopiedToast
+import com.example.ui.theme.ExpressiveMotion
 
 /**
  * Filter mode matching Quran.json specification:
@@ -242,14 +249,49 @@ fun QuranScreen(
                 .widthIn(max = 680.dp)
         ) {
         if (!inReaderMode) {
-            // Safe insets padding for top camera cutout
-            Spacer(
-                modifier = Modifier
-                    .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top))
-                    .height(6.dp)
-            )
+            // Camera-hole safe padding: titles never slide under the cutout.
+            CameraHoleSpacer(extra = 6.dp)
 
-            // 1. TOP CHIPS (Quran.json layout: Surah, Page, Juz', Hizb, Bookmarks)
+            // Redesigned library header: title + collection summary + search.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = strings.navQuran,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "114 ${strings.surahTab} · 30 ${strings.juzTab} · 6,236 ${strings.versesCount}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                FilledTonalIconButton(
+                    onClick = { isSearchOpen = !isSearchOpen },
+                    modifier = Modifier
+                        .size(48.dp)
+                        .testTag("quran_search_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            // Library tabs: Surah, Page, Juz', Hizb, Bookmarks
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -275,21 +317,21 @@ fun QuranScreen(
                         label = {
                             Text(
                                 text = tabLabel,
-                                fontSize = 13.sp,
+                                style = MaterialTheme.typography.labelLarge,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                             )
                         },
-                        shape = RoundedCornerShape(24.dp),
+                        shape = MaterialTheme.shapes.small,
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary,
                             selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                            containerColor = MaterialTheme.colorScheme.surface,
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                             labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                         ),
                         border = FilterChipDefaults.filterChipBorder(
                             enabled = true,
                             selected = isSelected,
-                            borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f),
+                            borderColor = MaterialTheme.colorScheme.outlineVariant,
                             selectedBorderColor = MaterialTheme.colorScheme.primary
                         ),
                         modifier = Modifier.testTag("quran_tab_${tab.name.lowercase()}")
@@ -297,68 +339,20 @@ fun QuranScreen(
                 }
             }
 
-            // 2. DIVIDER (Quran.json: x: 34, y: 40)
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-            )
-
-            // 3. ROW: CONTINUE READING CARD + 56DP SEARCH BUTTON
-            Row(
+            // Continue-reading card (search now lives in the header above)
+            ContinueReadingCard(
+                surahNumber = state.continueReading.surahNumber,
+                ayahNumber = state.continueReading.ayahNumber,
+                arabicUi = arabicUi,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Continue reading card with live progress (nour-style)
-                ContinueReadingCard(
-                    surahNumber = state.continueReading.surahNumber,
-                    ayahNumber = state.continueReading.ayahNumber,
-                    arabicUi = arabicUi,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("quran_continue_reading_pill"),
-                    onClick = {
-                        resumeAyahNumber = state.continueReading.ayahNumber.coerceAtLeast(1)
-                        onSurahSelected(state.continueReading.surahNumber)
-                        inReaderMode = true
-                    }
-                )
-
-                // Search Icon Button (Quran.json: kind: iconButton, variant: filled, size: 56)
-                Surface(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .clickable { isSearchOpen = !isSearchOpen }
-                        .testTag("quran_search_button"),
-                    color = if (isSearchOpen || searchQuery.isNotEmpty()) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainerHigh
-                    },
-                    shape = CircleShape
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = if (isSearchOpen || searchQuery.isNotEmpty()) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .testTag("quran_continue_reading_pill"),
+                onClick = {
+                    resumeAyahNumber = state.continueReading.ayahNumber.coerceAtLeast(1)
+                    onSurahSelected(state.continueReading.surahNumber)
+                    inReaderMode = true
                 }
-            }
-
-            // 4. DIVIDER (Quran.json: x: 34, y: 128)
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
             )
 
             // 5. ANIMATED SEARCH INPUT (Toggled by Search button)
@@ -397,8 +391,16 @@ fun QuranScreen(
                 )
             }
 
-            // 6. LIBRARY LISTS
-            when (selectedTab) {
+            // 6. LIBRARY LISTS (animated across tabs)
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(durationMillis = ExpressiveMotion.SHORT)) togetherWith
+                        fadeOut(animationSpec = tween(durationMillis = ExpressiveMotion.SHORT))
+                },
+                label = "quran_tab_swap"
+            ) { tab ->
+            when (tab) {
                 QuranTab.SURAH -> {
                     SurahLibraryList(
                         searchQuery = searchQuery,
@@ -570,6 +572,7 @@ fun QuranScreen(
                         }
                     }
                 }
+            }
             }
         } else {
             // MUSHAF READER MODE (nour-style)
@@ -1078,10 +1081,11 @@ private fun ReaderView(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Reader Header with safe cutout insets
+        // Reader Header with camera-hole + status-bar safe insets
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars)
                 .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top)),
             color = MaterialTheme.colorScheme.surface,
             shadowElevation = 2.dp
@@ -1457,7 +1461,7 @@ private fun VerseCard(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onPlayClick, modifier = Modifier.size(36.dp)) {
+                    IconButton(onClick = onPlayClick, modifier = Modifier.size(48.dp)) {
                         Icon(
                             imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = if (isPlaying) "Pause" else "Play",
@@ -1466,7 +1470,7 @@ private fun VerseCard(
                         )
                     }
 
-                    IconButton(onClick = onToggleBookmark, modifier = Modifier.size(36.dp)) {
+                    IconButton(onClick = onToggleBookmark, modifier = Modifier.size(48.dp)) {
                         Icon(
                             imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                             contentDescription = "Bookmark",
@@ -1480,7 +1484,7 @@ private fun VerseCard(
                             clipboardManager.setText(AnnotatedString(ayahShareText(ayah, surah)))
                             Toast.makeText(context, strings.verseCopiedToast, Toast.LENGTH_SHORT).show()
                         },
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.ContentCopy,
@@ -1499,7 +1503,7 @@ private fun VerseCard(
                             }
                             context.startActivity(Intent.createChooser(sendIntent, strings.shareChooserTitle))
                         },
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Share,
@@ -1695,7 +1699,7 @@ private fun AyahInspectorCard(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                     )
                 }
-                IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
+                IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Default.Clear, contentDescription = strings.hideTranslationLabel)
                 }
             }
@@ -1741,7 +1745,7 @@ private fun AyahInspectorCard(
                         clipboardManager.setText(AnnotatedString(ayahShareText(ayah, surah)))
                         Toast.makeText(context, strings.verseCopiedToast, Toast.LENGTH_SHORT).show()
                     },
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         Icons.Default.ContentCopy,
@@ -1758,7 +1762,7 @@ private fun AyahInspectorCard(
                         }
                         context.startActivity(Intent.createChooser(sendIntent, strings.shareChooserTitle))
                     },
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         Icons.Default.Share,

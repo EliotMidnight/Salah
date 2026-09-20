@@ -5,6 +5,10 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -15,14 +19,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CompassCalibration
@@ -48,6 +54,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -56,6 +63,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -65,6 +73,7 @@ import androidx.compose.ui.unit.sp
 import com.example.engine.MagneticFieldStatus
 import com.example.ui.SalahUiState
 import com.example.ui.localization.LocalStrings
+import com.example.ui.theme.LocalSuccessColors
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.cos
@@ -86,11 +95,15 @@ fun QiblaDirectionFinder(
 ) {
     val isFacing = state.isFacingQibla
     val strings = LocalStrings.current
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val surfaceColor = MaterialTheme.colorScheme.surface
-    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
-    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
-    val outlineVariantColor = MaterialTheme.colorScheme.outlineVariant
+    val successColors = LocalSuccessColors.current
+    val colorScheme = MaterialTheme.colorScheme
+    val primaryColor = colorScheme.primary
+    val tertiaryColor = colorScheme.tertiary
+    val errorColor = colorScheme.error
+    val surfaceColor = colorScheme.surface
+    val onSurfaceColor = colorScheme.onSurface
+    val onSurfaceVariant = colorScheme.onSurfaceVariant
+    val outlineVariantColor = colorScheme.outlineVariant
 
     // Smooth spring rotation for heading
     val animatedHeading by animateFloatAsState(
@@ -99,11 +112,11 @@ fun QiblaDirectionFinder(
         label = "animatedHeading"
     )
 
-    // Smooth color change when locked on Kaaba
-    val alignedGold = Color(0xFFFFB300)
-    val alignedGreen = Color(0xFF00C853)
+    // Smooth color change when locked on Kaaba (theme-aware success)
+    val alignedSuccess = successColors.success
+    val alignedGold = tertiaryColor
     val dialRingColor by animateColorAsState(
-        targetValue = if (isFacing) alignedGreen else outlineVariantColor,
+        targetValue = if (isFacing) alignedSuccess else outlineVariantColor,
         label = "dialRingColor"
     )
 
@@ -131,15 +144,14 @@ fun QiblaDirectionFinder(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = "${String.format(Locale.US, "%.1f", state.qiblaBearing)}°",
-                    fontSize = 38.sp,
+                    style = MaterialTheme.typography.displaySmall,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = (-1).sp,
-                    color = if (isFacing) alignedGreen else onSurfaceColor,
+                    color = if (isFacing) alignedSuccess else onSurfaceColor,
                     modifier = Modifier.testTag("qibla_bearing_text")
                 )
                 Text(
                     text = strings.kaabaDistance,
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Medium,
                     color = onSurfaceVariant
                 )
@@ -150,22 +162,21 @@ fun QiblaDirectionFinder(
                 modifier = Modifier
                     .width(1.dp)
                     .height(36.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    .background(MaterialTheme.colorScheme.outlineVariant)
             )
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 val cardinal = getCardinalDirection(state.compassAzimuth)
                 Text(
                     text = "${state.compassAzimuth.toInt()}° $cardinal",
-                    fontSize = 38.sp,
+                    style = MaterialTheme.typography.displaySmall,
                     fontWeight = FontWeight.Light,
-                    letterSpacing = (-1).sp,
                     color = onSurfaceColor,
                     modifier = Modifier.testTag("current_heading_text")
                 )
                 Text(
                     text = if (state.useTrueNorth) strings.trueNorth else strings.magneticNorth,
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Medium,
                     color = onSurfaceVariant
                 )
@@ -174,16 +185,34 @@ fun QiblaDirectionFinder(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Interactive 2D Sensor Compass Dial (Fusion of Magnetometer & Accelerometer)
+        // Interactive 2D Sensor Compass Dial (responsive: fills width, capped for tablets)
         Box(
             modifier = Modifier
-                .size(290.dp)
+                .fillMaxWidth()
+                .widthIn(max = 420.dp)
+                .aspectRatio(1f)
                 .testTag("qibla_sensor_compass_dial"),
             contentAlignment = Alignment.Center
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val center = Offset(size.width / 2f, size.height / 2f)
                 val outerRadius = (size.width / 2f) - 20f
+
+                // Alignment halo: soft success glow behind the dial when locked on
+                if (isFacing) {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                alignedSuccess.copy(alpha = 0.22f),
+                                Color.Transparent
+                            ),
+                            center = center,
+                            radius = outerRadius + 18.dp.toPx()
+                        ),
+                        radius = outerRadius + 18.dp.toPx(),
+                        center = center
+                    )
+                }
 
                 // Outer Dial Background
                 drawCircle(
@@ -192,12 +221,18 @@ fun QiblaDirectionFinder(
                     center = center
                 )
 
-                // Outer Border Ring
+                // Bezel: hairline outer ring plus the expressive state ring
                 drawCircle(
-                    color = dialRingColor,
+                    color = outlineVariantColor,
                     radius = outerRadius,
                     center = center,
-                    style = Stroke(width = if (isFacing) 4.dp.toPx() else 1.8.dp.toPx())
+                    style = Stroke(width = 1.dp.toPx())
+                )
+                drawCircle(
+                    color = dialRingColor,
+                    radius = outerRadius - 5.dp.toPx(),
+                    center = center,
+                    style = Stroke(width = if (isFacing) 5.dp.toPx() else 2.5.dp.toPx(), cap = StrokeCap.Round)
                 )
 
                 // Subtly shaded compass track
@@ -215,11 +250,17 @@ fun QiblaDirectionFinder(
                     center = center
                 )
 
-                // Rotating dial markings (Magnetometer azimuth)
+                // Rotating bezel: ticks, degree numerals and cardinal letters
                 rotate(degrees = -animatedHeading, pivot = center) {
-                    val paint = android.graphics.Paint().apply {
+                    val numeralPaint = android.graphics.Paint().apply {
                         isAntiAlias = true
-                        textSize = 12.sp.toPx()
+                        textSize = 10.sp.toPx()
+                        textAlign = android.graphics.Paint.Align.CENTER
+                        typeface = android.graphics.Typeface.DEFAULT
+                    }
+                    val cardinalPaint = android.graphics.Paint().apply {
+                        isAntiAlias = true
+                        textSize = 17.sp.toPx()
                         textAlign = android.graphics.Paint.Align.CENTER
                         typeface = android.graphics.Typeface.DEFAULT_BOLD
                     }
@@ -229,21 +270,22 @@ fun QiblaDirectionFinder(
                         val angleRad = Math.toRadians(angle)
                         val isCardinal = i % 18 == 0
                         val isMajor = i % 6 == 0
+                        val tickOuter = outerRadius - 10.dp.toPx()
                         val tickLen = when {
-                            isCardinal -> 16.dp.toPx()
-                            isMajor -> 10.dp.toPx()
-                            else -> 5.dp.toPx()
+                            isCardinal -> 14.dp.toPx()
+                            isMajor -> 9.dp.toPx()
+                            else -> 4.5.dp.toPx()
                         }
                         val strokeWidth = if (isCardinal) 2.4.dp.toPx() else 1.dp.toPx()
 
-                        val startX = (center.x + (outerRadius - tickLen) * sin(angleRad)).toFloat()
-                        val startY = (center.y - (outerRadius - tickLen) * cos(angleRad)).toFloat()
-                        val endX = (center.x + outerRadius * sin(angleRad)).toFloat()
-                        val endY = (center.y - outerRadius * cos(angleRad)).toFloat()
+                        val startX = (center.x + (tickOuter - tickLen) * sin(angleRad)).toFloat()
+                        val startY = (center.y - (tickOuter - tickLen) * cos(angleRad)).toFloat()
+                        val endX = (center.x + tickOuter * sin(angleRad)).toFloat()
+                        val endY = (center.y - tickOuter * cos(angleRad)).toFloat()
 
                         drawLine(
                             color = when {
-                                angle == 0.0 -> Color(0xFFEF4444) // North
+                                angle == 0.0 -> errorColor // North
                                 isCardinal -> primaryColor
                                 else -> dialRingColor
                             },
@@ -252,48 +294,79 @@ fun QiblaDirectionFinder(
                             strokeWidth = strokeWidth,
                             cap = StrokeCap.Round
                         )
-
-                        // Cardinal letters
-                        if (isCardinal) {
-                            val label = when (i) {
-                                0 -> "N"
-                                18 -> "E"
-                                36 -> "S"
-                                else -> "W"
-                            }
-                            paint.color = if (i == 0) android.graphics.Color.RED else android.graphics.Color.GRAY
-                            val textRadius = outerRadius - 26.dp.toPx()
-                            val textX = (center.x + textRadius * sin(angleRad)).toFloat()
-                            val textY = (center.y - textRadius * cos(angleRad)).toFloat() + (paint.textSize / 3)
-                            drawContext.canvas.nativeCanvas.drawText(label, textX, textY, paint)
-                        }
                     }
 
-                    // Golden Qibla Pointer Needle towards Kaaba
+                    // Degree numerals every 30° (cardinal slots carry letters instead)
+                    numeralPaint.color = onSurfaceVariant.toArgb()
+                    numeralPaint.alpha = 204
+                    for (deg in 0 until 360 step 30) {
+                        if (deg % 90 == 0) continue
+                        val rad = Math.toRadians(deg.toDouble())
+                        val r = outerRadius - 32.dp.toPx()
+                        val x = (center.x + r * sin(rad)).toFloat()
+                        val y = (center.y - r * cos(rad)).toFloat() + (numeralPaint.textSize / 3)
+                        drawContext.canvas.nativeCanvas.drawText("$deg", x, y, numeralPaint)
+                    }
+
+                    // Cardinal letters
+                    listOf(0 to "N", 90 to "E", 180 to "S", 270 to "W").forEach { (deg, label) ->
+                        val rad = Math.toRadians(deg.toDouble())
+                        cardinalPaint.color =
+                            if (deg == 0) errorColor.toArgb() else onSurfaceColor.toArgb()
+                        val r = outerRadius - 32.dp.toPx()
+                        val x = (center.x + r * sin(rad)).toFloat()
+                        val y = (center.y - r * cos(rad)).toFloat() + (cardinalPaint.textSize / 3)
+                        drawContext.canvas.nativeCanvas.drawText(label, x, y, cardinalPaint)
+                    }
+
+                    // Tapered Qibla needle towards the Kaaba
                     val qiblaRad = Math.toRadians(state.qiblaBearing.toDouble())
-                    val kaabaIndicatorRadius = outerRadius - 38.dp.toPx()
-                    val kaabaX = (center.x + kaabaIndicatorRadius * sin(qiblaRad)).toFloat()
-                    val kaabaY = (center.y - kaabaIndicatorRadius * cos(qiblaRad)).toFloat()
-
-                    // Needle stem line
-                    drawLine(
-                        color = if (isFacing) alignedGreen else primaryColor,
-                        start = center,
-                        end = Offset(kaabaX, kaabaY),
-                        strokeWidth = if (isFacing) 4.dp.toPx() else 3.dp.toPx(),
-                        cap = StrokeCap.Round
+                    val dirX = sin(qiblaRad).toFloat()
+                    val dirY = (-cos(qiblaRad)).toFloat()
+                    val needleReach = outerRadius - 56.dp.toPx()
+                    val tipX = center.x + dirX * needleReach
+                    val tipY = center.y + dirY * needleReach
+                    val baseDist = 30.dp.toPx()
+                    val baseX = center.x - dirX * baseDist
+                    val baseY = center.y - dirY * baseDist
+                    val halfWidth = 6.5.dp.toPx()
+                    val perpX = -dirY
+                    val perpY = dirX
+                    val needlePath = Path().apply {
+                        moveTo(tipX, tipY)
+                        lineTo(baseX + perpX * halfWidth, baseY + perpY * halfWidth)
+                        lineTo(baseX - perpX * halfWidth, baseY - perpY * halfWidth)
+                        close()
+                    }
+                    drawPath(
+                        path = needlePath,
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                if (isFacing) alignedSuccess else primaryColor,
+                                if (isFacing) alignedSuccess else alignedGold
+                            ),
+                            start = Offset(baseX, baseY),
+                            end = Offset(tipX, tipY)
+                        ),
+                        style = Fill
                     )
 
-                    // Kaaba Target Disc
+                    // Kaaba target disc with halo ring
+                    val discCenter = Offset(tipX, tipY)
                     drawCircle(
-                        color = if (isFacing) alignedGreen else alignedGold,
+                        color = (if (isFacing) alignedSuccess else alignedGold).copy(alpha = 0.25f),
+                        radius = 19.dp.toPx(),
+                        center = discCenter
+                    )
+                    drawCircle(
+                        color = if (isFacing) alignedSuccess else alignedGold,
                         radius = 13.dp.toPx(),
-                        center = Offset(kaabaX, kaabaY)
+                        center = discCenter
                     )
                     drawCircle(
-                        color = Color.White,
+                        color = if (isFacing) successColors.onSuccess else colorScheme.onTertiary,
                         radius = 4.dp.toPx(),
-                        center = Offset(kaabaX, kaabaY)
+                        center = discCenter
                     )
                 }
 
@@ -307,19 +380,19 @@ fun QiblaDirectionFinder(
                 }
                 drawPath(
                     path = arrowPath,
-                    color = if (isFacing) alignedGreen else primaryColor,
+                    color = if (isFacing) alignedSuccess else primaryColor,
                     style = Fill
                 )
 
                 // 2D Spirit Bubble Level in center (Accelerometer Sensor)
                 val levelRingRadius = 24.dp.toPx()
                 drawCircle(
-                    color = if (state.isDeviceLevel) alignedGreen.copy(alpha = 0.25f) else outlineVariantColor.copy(alpha = 0.35f),
+                    color = if (state.isDeviceLevel) alignedSuccess.copy(alpha = 0.25f) else outlineVariantColor.copy(alpha = 0.35f),
                     radius = levelRingRadius,
                     center = center
                 )
                 drawCircle(
-                    color = if (state.isDeviceLevel) alignedGreen else outlineVariantColor,
+                    color = if (state.isDeviceLevel) alignedSuccess else outlineVariantColor,
                     radius = levelRingRadius,
                     center = center,
                     style = Stroke(width = 1.5.dp.toPx())
@@ -332,25 +405,39 @@ fun QiblaDirectionFinder(
                 val bubbleCenter = Offset(center.x + bubbleOffsetX, center.y + bubbleOffsetY)
 
                 drawCircle(
-                    color = if (state.isDeviceLevel) alignedGreen else alignedGold,
+                    color = if (state.isDeviceLevel) alignedSuccess else alignedGold,
                     radius = 5.5.dp.toPx(),
                     center = bubbleCenter
                 )
             }
 
-            // Central Icon (Kaaba or Level indicator)
-            if (isFacing) {
+            // Central Icon (Kaaba indicator) with expressive spring pop
+            val badgeScale by animateFloatAsState(
+                targetValue = if (isFacing) 1f else 0f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                ),
+                label = "badge_scale"
+            )
+            if (badgeScale > 0.02f) {
                 Surface(
                     shape = CircleShape,
-                    color = alignedGreen,
-                    contentColor = Color.White,
-                    modifier = Modifier.size(24.dp)
+                    color = alignedSuccess,
+                    contentColor = successColors.onSuccess,
+                    modifier = Modifier
+                        .size(28.dp)
+                        .graphicsLayer {
+                            scaleX = badgeScale
+                            scaleY = badgeScale
+                            alpha = badgeScale.coerceIn(0f, 1f)
+                        }
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = "Aligned",
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
@@ -358,12 +445,15 @@ fun QiblaDirectionFinder(
         }
 
         // Tilt Alert Reminder if device is not held flat
-        if (!state.isDeviceLevel) {
-            Spacer(modifier = Modifier.height(6.dp))
+        AnimatedVisibility(
+            visible = !state.isDeviceLevel,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.padding(horizontal = 16.dp)
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Sensors,
@@ -373,7 +463,7 @@ fun QiblaDirectionFinder(
                 )
                 Text(
                     text = "Hold device flat for optimal compass precision",
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Medium,
                     color = onSurfaceVariant
                 )
@@ -390,25 +480,25 @@ fun QiblaDirectionFinder(
             // Kaaba Distance Card
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                shape = MaterialTheme.shapes.medium,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.weight(1f)
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     Text(
                         text = "Distance",
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelMedium,
                         color = onSurfaceVariant
                     )
                     Text(
                         text = "${String.format(Locale.US, "%,d", state.distanceToKaabaKm)} km",
-                        fontSize = 16.sp,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = onSurfaceColor
                     )
                     Text(
                         text = "Great-Circle to Mecca",
-                        fontSize = 10.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         color = onSurfaceVariant
                     )
                 }
@@ -417,14 +507,14 @@ fun QiblaDirectionFinder(
             // North Mode Card
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                shape = MaterialTheme.shapes.medium,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier
                     .weight(1f)
                     .clickable { onToggleTrueNorth() }
                     .testTag("north_mode_card")
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -432,7 +522,7 @@ fun QiblaDirectionFinder(
                     ) {
                         Text(
                             text = "Reference",
-                            fontSize = 11.sp,
+                            style = MaterialTheme.typography.labelMedium,
                             color = onSurfaceVariant
                         )
                         Icon(
@@ -444,13 +534,13 @@ fun QiblaDirectionFinder(
                     }
                     Text(
                         text = if (state.useTrueNorth) strings.trueNorth else strings.magneticNorth,
-                        fontSize = 15.sp,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = onSurfaceColor
                     )
                     Text(
                         text = "Tap to switch",
-                        fontSize = 10.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         color = primaryColor
                     )
                 }
@@ -475,12 +565,13 @@ fun QiblaDirectionFinder(
         ) {
             // Sun Verification Button
             Surface(
-                shape = RoundedCornerShape(14.dp),
+                shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(14.dp))
+                    .heightIn(min = 48.dp)
+                    .clip(MaterialTheme.shapes.small)
                     .clickable { onShowSunVerification() }
                     .testTag("verify_with_sun_button")
             ) {
@@ -493,12 +584,12 @@ fun QiblaDirectionFinder(
                         imageVector = Icons.Default.WbSunny,
                         contentDescription = null,
                         tint = alignedGold,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "Verify with Sun",
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium,
                         color = onSurfaceColor
                     )
@@ -507,12 +598,13 @@ fun QiblaDirectionFinder(
 
             // Sensor Calibration Button
             Surface(
-                shape = RoundedCornerShape(14.dp),
+                shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(14.dp))
+                    .heightIn(min = 48.dp)
+                    .clip(MaterialTheme.shapes.small)
                     .clickable { onShowCalibrationTip() }
                     .testTag("sensor_calibration_button")
             ) {
@@ -525,12 +617,12 @@ fun QiblaDirectionFinder(
                         imageVector = Icons.Default.CompassCalibration,
                         contentDescription = null,
                         tint = primaryColor,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "${state.magneticFieldMagnitude.toInt()} µT · Status",
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium,
                         color = onSurfaceColor
                     )
@@ -551,28 +643,29 @@ private fun QiblaGuidanceBanner(
 ) {
     val relativeAngle = state.relativeQiblaAngle
     val isFacing = state.isFacingQibla
-    val alignedGreen = Color(0xFF00C853)
+    val successColors = LocalSuccessColors.current
+    val colorScheme = MaterialTheme.colorScheme
 
     val (bannerColor, contentColor, guidanceText) = when {
         isFacing -> Triple(
-            alignedGreen,
-            Color.White,
+            successColors.success,
+            successColors.onSuccess,
             "✦ ALIGNED WITH THE KAABA 🕋 ✦"
         )
         relativeAngle > 0 -> Triple(
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
-            MaterialTheme.colorScheme.onPrimaryContainer,
+            colorScheme.primaryContainer,
+            colorScheme.onPrimaryContainer,
             "Turn ${abs(relativeAngle).toInt()}° Right  ➔"
         )
         else -> Triple(
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
-            MaterialTheme.colorScheme.onPrimaryContainer,
+            colorScheme.primaryContainer,
+            colorScheme.onPrimaryContainer,
             "⬅  Turn ${abs(relativeAngle).toInt()}° Left"
         )
     }
 
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = MaterialTheme.shapes.small,
         color = bannerColor,
         contentColor = contentColor,
         modifier = modifier
@@ -596,9 +689,8 @@ private fun QiblaGuidanceBanner(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = guidanceText,
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 0.3.sp,
                 textAlign = TextAlign.Center
             )
         }
@@ -614,15 +706,16 @@ private fun LocationStatusCard(
     onFetchLocation: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val successColors = LocalSuccessColors.current
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shape = MaterialTheme.shapes.medium,
         modifier = modifier.testTag("location_status_card")
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -636,12 +729,12 @@ private fun LocationStatusCard(
                         imageVector = Icons.Default.LocationOn,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                     Column {
                         Text(
                             text = "${state.location.name}, ${state.location.country}",
-                            fontSize = 13.sp,
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -653,7 +746,7 @@ private fun LocationStatusCard(
                                 state.location.longitude,
                                 if (state.location.isGps) "GPS Cached" else "Selected City"
                             ),
-                            fontSize = 10.5.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -666,16 +759,16 @@ private fun LocationStatusCard(
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary
                     ),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = MaterialTheme.shapes.small,
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = 10.dp,
-                        vertical = 6.dp
+                        horizontal = 14.dp,
+                        vertical = 10.dp
                     ),
                     modifier = Modifier.testTag("fetch_gps_location_button")
                 ) {
                     if (state.isLocating) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
+                            modifier = Modifier.size(16.dp),
                             color = MaterialTheme.colorScheme.onPrimary,
                             strokeWidth = 2.dp
                         )
@@ -687,11 +780,11 @@ private fun LocationStatusCard(
                             Icon(
                                 imageVector = Icons.Default.MyLocation,
                                 contentDescription = "Locate",
-                                modifier = Modifier.size(13.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                             Text(
                                 text = "Locate",
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -708,12 +801,12 @@ private fun LocationStatusCard(
                 Icon(
                     imageVector = Icons.Default.CheckCircle,
                     contentDescription = null,
-                    tint = Color(0xFF00C853),
-                    modifier = Modifier.size(11.dp)
+                    tint = successColors.success,
+                    modifier = Modifier.size(14.dp)
                 )
                 Text(
                     text = "Coordinates cached offline. Calculations run 100% on-device.",
-                    fontSize = 10.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

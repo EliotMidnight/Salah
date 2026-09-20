@@ -1,7 +1,17 @@
 package com.example.ui.home
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -13,13 +23,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -63,6 +73,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.testTag
@@ -81,6 +92,9 @@ import com.example.ui.components.LivingSkyCanvas
 import com.example.ui.components.SalahTopBar
 import com.example.ui.localization.LocalStrings
 import com.example.ui.localization.prayerName
+import com.example.ui.theme.ExpressiveMotion
+import com.example.ui.theme.expressiveCollapse
+import com.example.ui.theme.expressiveExpand
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -184,6 +198,23 @@ fun HomeScreen(
                 .testTag("living_astronomical_sky_canvas")
         )
 
+        // Cinematic legibility scrim: shields the camera-hole zone and the hero
+        // countdown from bright sky wash, and grounds the bottom above the nav bar.
+        // No click handling — touches pass straight through to content.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0.52f),
+                        0.24f to Color.Black.copy(alpha = 0.20f),
+                        0.46f to Color.Transparent,
+                        0.74f to Color.Transparent,
+                        1f to Color.Black.copy(alpha = 0.40f)
+                    )
+                )
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -258,10 +289,14 @@ fun HomeScreen(
                 // Living Astronomical Sky Badge (High visibility affordance on sky background)
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(onSkyColor.copy(alpha = 0.16f))
+                        .clip(CircleShape)
+                        .background(onSkyColor.copy(alpha = 0.30f))
+                        .border(
+                            BorderStroke(1.dp, onSkyColor.copy(alpha = 0.45f)),
+                            CircleShape
+                        )
                         .clickable { showAstroSheet = true }
-                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                         .testTag("astronomical_sky_badge"),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -297,18 +332,22 @@ fun HomeScreen(
             }
 
             // Interactive simulation reset banner when user scrubbed time
-            if (simulatedMinutes != null) {
-                Spacer(modifier = Modifier.height(8.dp))
+            AnimatedVisibility(
+                visible = simulatedMinutes != null,
+                enter = expressiveExpand(),
+                exit = expressiveCollapse()
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
+                        .padding(horizontal = 24.dp)
+                        .padding(top = 8.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     AssistChip(
                         onClick = { simulatedMinutes = null },
-                        label = { Text(strings.resetToRealtime, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold) },
+                        label = { Text(strings.resetToRealtime, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.RestartAlt,
@@ -330,14 +369,18 @@ fun HomeScreen(
             }
 
             // Live Adhan / Alert Playing Banner
-            if (state.audioPreviewPlaying != null) {
-                Spacer(modifier = Modifier.height(8.dp))
+            AnimatedVisibility(
+                visible = state.audioPreviewPlaying != null,
+                enter = expressiveExpand(),
+                exit = expressiveCollapse()
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.92f))
+                        .padding(top = 8.dp)
+                        .clip(MaterialTheme.shapes.small)
+                        .background(MaterialTheme.colorScheme.errorContainer)
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -352,7 +395,7 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "Adhan Playing · ${state.audioPreviewPlaying}",
-                            fontSize = 11.5.sp,
+                            style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -360,13 +403,13 @@ fun HomeScreen(
                     FilledTonalButton(
                         onClick = onSilenceActiveAlert,
                         modifier = Modifier
-                            .height(28.dp)
+                            .height(40.dp)
                             .testTag("home_silence_adhan_button"),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                     ) {
                         Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Silence", fontSize = 11.sp)
+                        Text("Silence", style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }
@@ -380,12 +423,17 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val silentContainer by animateColorAsState(
+                    targetValue = if (state.isGlobalSilentMode) MaterialTheme.colorScheme.errorContainer
+                    else MaterialTheme.colorScheme.surface,
+                    label = "silent_chip_container"
+                )
                 AssistChip(
                     onClick = onToggleGlobalSilent,
                     label = {
                         Text(
                             text = if (state.isGlobalSilentMode) strings.silentModeOn else strings.alertsActive,
-                            fontSize = 11.5.sp,
+                            style = MaterialTheme.typography.labelLarge,
                             fontWeight = if (state.isGlobalSilentMode) FontWeight.Bold else FontWeight.SemiBold
                         )
                     },
@@ -398,15 +446,14 @@ fun HomeScreen(
                         )
                     },
                     colors = AssistChipDefaults.assistChipColors(
-                        containerColor = if (state.isGlobalSilentMode) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.94f)
-                                        else MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                        containerColor = silentContainer,
                         labelColor = if (state.isGlobalSilentMode) MaterialTheme.colorScheme.onErrorContainer
                                     else MaterialTheme.colorScheme.onSurface
                     ),
                     border = BorderStroke(
                         width = 1.dp,
-                        color = if (state.isGlobalSilentMode) MaterialTheme.colorScheme.error.copy(alpha = 0.40f)
-                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
+                        color = if (state.isGlobalSilentMode) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.outlineVariant
                     ),
                     modifier = Modifier.testTag("home_silent_mode_chip")
                 )
@@ -415,7 +462,7 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     AssistChip(
                         onClick = onSettingsClick,
-                        label = { Text("${strings.masjidMode} (${state.autoSilentDurationMinutes}m)", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold) },
+                        label = { Text("${strings.masjidMode} (${state.autoSilentDurationMinutes}m)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.VolumeOff,
@@ -424,12 +471,12 @@ fun HomeScreen(
                             )
                         },
                         colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                            containerColor = MaterialTheme.colorScheme.surface,
                             labelColor = MaterialTheme.colorScheme.onSurface
                         ),
                         border = BorderStroke(
                             width = 1.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
+                            color = MaterialTheme.colorScheme.outlineVariant
                         ),
                         modifier = Modifier.testTag("home_masjid_mode_chip")
                     )
@@ -518,12 +565,12 @@ fun HomeScreen(
                     val timeFormatter = DateTimeFormatter.ofPattern(if (state.timeFormat24h) "HH:mm" else "h:mm a")
                     Surface(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
+                            .clip(MaterialTheme.shapes.medium)
                             .clickable(onClick = onOpenPrayerDetails)
                             .testTag("next_prayer_badge"),
-                        shape = RoundedCornerShape(20.dp),
-                        color = onSkyColor.copy(alpha = 0.16f),
-                        border = BorderStroke(1.dp, onSkyColor.copy(alpha = 0.25f))
+                        shape = MaterialTheme.shapes.medium,
+                        color = onSkyColor.copy(alpha = 0.30f),
+                        border = BorderStroke(1.dp, onSkyColor.copy(alpha = 0.45f))
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -595,14 +642,15 @@ fun HomeScreen(
             ) {
                 Text(
                     text = strings.todaysPrayers,
-                    fontSize = 16.5.sp,
+                    style = MaterialTheme.typography.titleLarge.copy(shadow = textShadow),
                     fontWeight = FontWeight.Bold,
                     color = onSkyColor
                 )
                 Text(
                     text = strings.tapToMarkCompleted,
-                    fontSize = 11.5.sp,
-                    color = onSkyColor.copy(alpha = 0.75f)
+                    style = MaterialTheme.typography.labelMedium.copy(shadow = textShadow),
+                    fontWeight = FontWeight.Medium,
+                    color = onSkyColor
                 )
             }
 
@@ -627,16 +675,16 @@ fun HomeScreen(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 3.5.dp)
-                        .clip(RoundedCornerShape(20.dp))
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .clip(MaterialTheme.shapes.medium)
                         .clickable { onTogglePrayer(prayer) }
                         .testTag("prayer_row_${prayer.name}"),
-                    color = if (isNext) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
-                    else MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.92f),
-                    shape = RoundedCornerShape(20.dp),
-                    border = if (isNext) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) 
-                    else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                    shadowElevation = if (isNext) 2.dp else 0.5.dp
+                    color = if (isNext) MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surfaceContainerLow,
+                    shape = MaterialTheme.shapes.medium,
+                    border = if (isNext) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+                    else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    shadowElevation = if (isNext) 2.dp else 0.dp
                 ) {
                     Row(
                         modifier = Modifier
@@ -696,16 +744,21 @@ fun HomeScreen(
                             // Interactive Prayer Alert Mode Pill (Tap to cycle modes: Adhan -> Takbeer -> Chime -> Vibrate -> Silent)
                             val alertMode = state.prayerAlertModes[prayer] ?: "Full Adhan"
                             val isSilenced = state.isGlobalSilentMode || alertMode == "Silent" || alertMode == "Silent Reminder"
+                            val alertContainer by animateColorAsState(
+                                targetValue = if (isSilenced) MaterialTheme.colorScheme.surfaceContainerHighest
+                                else MaterialTheme.colorScheme.primaryContainer,
+                                label = "alert_pill_container"
+                            )
                             Surface(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
+                                    .heightIn(min = 48.dp)
+                                    .clip(MaterialTheme.shapes.extraSmall)
                                     .clickable { onCyclePrayerAlertMode(prayer) }
                                     .testTag("prayer_alert_toggle_${prayer.name}"),
-                                color = if (isSilenced) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                                        else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                color = alertContainer
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
@@ -760,10 +813,9 @@ fun HomeScreen(
             // Section 2: First-Class "Continue Reading" Card directly on background
             Text(
                 text = strings.continueReading.uppercase(),
-                fontSize = 11.5.sp,
+                style = MaterialTheme.typography.labelLarge.copy(shadow = textShadow),
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-                color = onSkyColor.copy(alpha = 0.85f),
+                color = onSkyColor,
                 modifier = Modifier.padding(horizontal = 20.dp)
             )
 
@@ -773,12 +825,12 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
-                    .clip(RoundedCornerShape(24.dp))
+                    .clip(MaterialTheme.shapes.large)
                     .clickable(onClick = onContinueReadingClick)
                     .testTag("continue_reading_card"),
-                color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.94f),
-                shape = RoundedCornerShape(24.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                shape = MaterialTheme.shapes.large,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 shadowElevation = 2.dp
             ) {
                 Column(
@@ -825,19 +877,19 @@ fun HomeScreen(
 
                         Button(
                             onClick = onContinueReadingClick,
-                            shape = RoundedCornerShape(16.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            shape = MaterialTheme.shapes.small,
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary
                             ),
                             modifier = Modifier.testTag("continue_reading_button")
                         ) {
-                            Text(strings.continueButton, fontSize = 12.sp)
+                            Text(strings.continueButton, style = MaterialTheme.typography.labelLarge)
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                 contentDescription = null,
-                                modifier = Modifier.size(13.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
@@ -863,9 +915,9 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                shape = RoundedCornerShape(14.dp),
-                shadowElevation = 0.5.dp
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                shape = MaterialTheme.shapes.medium,
+                shadowElevation = 0.dp
             ) {
                 Row(
                     modifier = Modifier
@@ -984,9 +1036,9 @@ private fun AstronomicalObservatoryContent(
 
         // Telemetry Grid Card
         Card(
-            shape = RoundedCornerShape(16.dp),
+            shape = MaterialTheme.shapes.medium,
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -1215,23 +1267,37 @@ private fun CountdownSegment(
         modifier = Modifier.padding(horizontal = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = value,
-            fontSize = 44.sp,
-            fontWeight = FontWeight.Normal,
-            letterSpacing = 1.sp,
-            color = onSkyColor,
-            style = TextStyle(shadow = shadow),
-            lineHeight = 46.sp
-        )
+        AnimatedContent(
+            targetState = value,
+            transitionSpec = {
+                (slideInVertically(
+                    animationSpec = tween(durationMillis = ExpressiveMotion.SHORT),
+                    initialOffsetY = { it / 3 }
+                ) + fadeIn()) togetherWith
+                    (slideOutVertically(
+                        animationSpec = tween(durationMillis = ExpressiveMotion.SHORT),
+                        targetOffsetY = { -it / 3 }
+                    ) + fadeOut())
+            },
+            label = "countdown_digit"
+        ) { digit ->
+            Text(
+                text = digit,
+                fontSize = 44.sp,
+                fontWeight = FontWeight.Normal,
+                letterSpacing = 1.sp,
+                color = onSkyColor,
+                style = TextStyle(shadow = shadow),
+                lineHeight = 46.sp
+            )
+        }
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = label,
-            fontSize = 9.5.sp,
+            style = MaterialTheme.typography.labelSmall.copy(shadow = shadow),
             fontWeight = FontWeight.Bold,
             letterSpacing = 2.sp,
             color = onSkyColor,
-            style = TextStyle(shadow = shadow)
         )
     }
 }

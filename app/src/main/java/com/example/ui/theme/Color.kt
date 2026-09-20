@@ -66,3 +66,31 @@ val SurfaceContainerLowLight = Color(0xFFF8FAFC)
 val SurfaceContainerLight = Color(0xFFF1F5F9)
 val SurfaceContainerHighLight = Color(0xFFE2E8F0)
 val SurfaceContainerHighestLight = Color(0xFFCBD5E1)
+
+// Error roles (symmetric light/dark, M3 baseline-derived)
+val ErrorLight = Color(0xFFBA1A1A)
+val OnErrorLight = Color(0xFFFFFFFF)
+val ErrorContainerLight = Color(0xFFFFDAD6)
+val OnErrorContainerLight = Color(0xFF410002)
+
+val ErrorDark = Color(0xFFFFB4AB)
+val OnErrorDark = Color(0xFF690005)
+val ErrorContainerDark = Color(0xFF93000A)
+val OnErrorContainerDark = Color(0xFFFFDAD6)
+
+// Success roles (tonal green, adaptive both modes)
+val SuccessLight = Color(0xFF1B7A3D)
+val OnSuccessLight = Color(0xFFFFFFFF)
+val SuccessContainerLight = Color(0xFFC6F0D2)
+val OnSuccessContainerLight = Color(0xFF0A3D1E)
+
+val SuccessDark = Color(0xFF7ED99A)
+val OnSuccessDark = Color(0xFF0A3D1E)
+val SuccessContainerDark = Color(0xFF14532D)
+val OnSuccessContainerDark = Color(0xFFC6F0D2)
+
+// Dim/Bright anchors for expressive gradients and scrims
+val SurfaceDimLight = Color(0xFFDDE3EA)
+val SurfaceBrightLight = Color(0xFFF8FAFC)
+val SurfaceDimDark = Color(0xFF05080F)
+val SurfaceBrightDark = Color(0xFF2B3A55)

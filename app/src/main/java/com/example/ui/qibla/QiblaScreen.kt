@@ -1,6 +1,10 @@
 package com.example.ui.qibla
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,7 +26,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CompassCalibration
@@ -51,7 +54,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.engine.MagneticFieldStatus
 import com.example.ui.SalahUiState
 import com.example.ui.localization.LocalStrings
@@ -98,22 +100,26 @@ fun QiblaScreen(
             Column {
                 Text(
                     text = strings.qiblaDirectionTitle,
-                    fontSize = 22.sp,
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = strings.sensoryCompassSubtitle,
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
         // Magnetic Interference Warning if severe field detected
-        AnimatedVisibility(visible = state.magneticStatus == MagneticFieldStatus.INTERFERENCE) {
+        AnimatedVisibility(
+            visible = state.magneticStatus == MagneticFieldStatus.INTERFERENCE,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
             Card(
-                shape = RoundedCornerShape(14.dp),
+                shape = MaterialTheme.shapes.medium,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -121,7 +127,7 @@ fun QiblaScreen(
                     .clickable { showCalibrateTip = true }
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -129,19 +135,19 @@ fun QiblaScreen(
                         imageVector = Icons.Default.Warning,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                     Column {
                         Text(
                             text = strings.magneticInterferenceDetected,
-                            fontSize = 12.5.sp,
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                         Text(
                             text = strings.moveAwayMetal,
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
                         )
                     }
                 }
@@ -179,13 +185,13 @@ fun QiblaScreen(
                     Icon(
                         imageVector = Icons.Default.WbSunny,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = "Solar Verification Reference",
-                        fontSize = 18.sp,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -205,26 +211,25 @@ fun QiblaScreen(
 
                     Text(
                         text = explanation,
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        lineHeight = 20.sp
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
                         text = "• Sun Azimuth: ${String.format(Locale.US, "%.1f", sun.azimuth)}°",
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = "• Sun Altitude: ${String.format(Locale.US, "%.1f", sun.altitude)}° above horizon",
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = "• Target Qibla Bearing: ${String.format(Locale.US, "%.1f", state.qiblaBearing)}°",
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -263,17 +268,16 @@ fun QiblaScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         "To ensure high sensor accuracy, wave your device gently in a figure-8 pattern (∞) a few times. This re-aligns the magnetic sensor with Earth's geomagnetic field.",
-                        fontSize = 13.5.sp,
-                        lineHeight = 19.sp
+                        style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
                         "• Ambient Field: ${String.format(Locale.US, "%.1f", state.magneticFieldMagnitude)} µT (${state.magneticStatus.label})",
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         "• Sensor Accuracy: ${state.compassAccuracy}",
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }

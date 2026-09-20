@@ -1,6 +1,7 @@
 package com.example.ui.settings
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -103,6 +105,8 @@ import com.example.data.model.UserLocation
 import com.example.ui.SalahUiState
 import com.example.ui.localization.AppLanguage
 import com.example.ui.localization.LocalStrings
+import com.example.ui.theme.expressiveCollapse
+import com.example.ui.theme.expressiveExpand
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -195,9 +199,9 @@ fun SettingsScreen(
                 SectionHeader(strings.sectionGeneral)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
+                    shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         SettingsClickableRow(
@@ -208,7 +212,7 @@ fun SettingsScreen(
                             tag = "setting_language"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
                             icon = Icons.Default.Palette,
@@ -218,7 +222,7 @@ fun SettingsScreen(
                             tag = "setting_theme"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsToggleRow(
                             icon = Icons.Default.AccessTime,
@@ -238,9 +242,9 @@ fun SettingsScreen(
                 SectionHeader(strings.sectionPrayerCalc)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
+                    shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         SettingsClickableRow(
@@ -251,7 +255,7 @@ fun SettingsScreen(
                             tag = "setting_location"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
                             icon = Icons.Default.Tune,
@@ -261,7 +265,7 @@ fun SettingsScreen(
                             tag = "setting_method"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
                             icon = Icons.Default.Tune,
@@ -271,7 +275,7 @@ fun SettingsScreen(
                             tag = "setting_madhhab"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
                             icon = Icons.Default.Edit,
@@ -281,7 +285,7 @@ fun SettingsScreen(
                             tag = "setting_adjustments"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
                             icon = Icons.Default.CalendarMonth,
@@ -300,9 +304,9 @@ fun SettingsScreen(
                 SectionHeader(strings.sectionAudioAlerts)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
+                    shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         // Master Silent Mode
@@ -315,7 +319,7 @@ fun SettingsScreen(
                             tag = "setting_master_silent_toggle"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         // Auto-Silent at Prayer (Masjid Mode)
                         SettingsToggleRow(
@@ -327,12 +331,15 @@ fun SettingsScreen(
                             tag = "setting_auto_silent_toggle"
                         )
 
-                        if (state.autoSilentDuringPrayer) {
-                            Spacer(modifier = Modifier.height(8.dp))
+                        AnimatedVisibility(
+                            visible = state.autoSilentDuringPrayer,
+                            enter = expressiveExpand(),
+                            exit = expressiveCollapse()
+                        ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(start = 36.dp),
+                                    .padding(start = 36.dp, top = 8.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -348,12 +355,12 @@ fun SettingsScreen(
                                         modifier = Modifier
                                             .clickable { onAutoSilentDurationChange(min) }
                                             .testTag("auto_silent_duration_${min}m"),
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                        shape = MaterialTheme.shapes.extraSmall,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest
                                     ) {
                                         Text(
                                             text = "${min}m",
-                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                                             fontSize = 12.sp,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                             color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
@@ -363,7 +370,7 @@ fun SettingsScreen(
                             }
                         }
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsToggleRow(
                             icon = Icons.Default.Notifications,
@@ -374,7 +381,7 @@ fun SettingsScreen(
                             tag = "setting_adhan_toggle"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
                             icon = Icons.Default.Notifications,
@@ -384,7 +391,7 @@ fun SettingsScreen(
                             tag = "setting_prayer_alerts_matrix"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
                             icon = Icons.Default.AccessTime,
@@ -394,7 +401,7 @@ fun SettingsScreen(
                             tag = "setting_pre_prayer_sheet"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
                             icon = Icons.Default.VolumeUp,
@@ -404,7 +411,7 @@ fun SettingsScreen(
                             tag = "setting_adhan_sound"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
                             icon = Icons.Default.Speed,
@@ -414,7 +421,7 @@ fun SettingsScreen(
                             tag = "setting_adhan_tester"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsToggleRow(
                             icon = Icons.Default.VolumeUp,
@@ -434,9 +441,9 @@ fun SettingsScreen(
                 SectionHeader(strings.sectionQuran)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
+                    shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         SettingsClickableRow(
@@ -447,7 +454,7 @@ fun SettingsScreen(
                             tag = "setting_riwayah"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
                             icon = Icons.Default.FontDownload,
@@ -457,7 +464,7 @@ fun SettingsScreen(
                             tag = "setting_script"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
                             icon = Icons.Default.RecordVoiceOver,
@@ -467,7 +474,7 @@ fun SettingsScreen(
                             tag = "setting_reciter"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
                             icon = Icons.Default.Translate,
@@ -477,7 +484,7 @@ fun SettingsScreen(
                             tag = "setting_translation"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         Column {
                             Row(
@@ -515,9 +522,9 @@ fun SettingsScreen(
                 SectionHeader(strings.sectionSystemDiagnostics)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
+                    shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         SettingsClickableRow(
@@ -528,7 +535,7 @@ fun SettingsScreen(
                             tag = "setting_cache_manager"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
                             icon = Icons.Default.Storage,
@@ -538,7 +545,7 @@ fun SettingsScreen(
                             tag = "setting_quran_storage"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
                             icon = Icons.Default.Explore,
@@ -548,7 +555,7 @@ fun SettingsScreen(
                             tag = "setting_compass_diag"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
                             icon = Icons.Default.Refresh,
@@ -558,7 +565,7 @@ fun SettingsScreen(
                             tag = "setting_network_sync"
                         )
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
                             icon = Icons.Default.RestartAlt,
@@ -573,9 +580,9 @@ fun SettingsScreen(
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
+                    shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Column(modifier = Modifier.padding(18.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -714,7 +721,7 @@ fun SettingsScreen(
                     onValueChange = { citySearchQuery = it },
                     placeholder = { Text("Search city or country...") },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = MaterialTheme.shapes.small,
                     singleLine = true
                 )
 
@@ -725,7 +732,7 @@ fun SettingsScreen(
                             it.country.contains(citySearchQuery, ignoreCase = true)
                 }
 
-                LazyColumn(modifier = Modifier.height(320.dp)) {
+                LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
                     items(filteredCities) { city ->
                         SelectionSheetItem(
                             title = "${city.name}, ${city.country}",
@@ -749,7 +756,7 @@ fun SettingsScreen(
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
                 Text(text = "Select Calculation Method", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(12.dp))
-                LazyColumn(modifier = Modifier.height(360.dp)) {
+                LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
                     items(CalculationMethod.entries) { method ->
                         SelectionSheetItem(
                             title = method.title,
@@ -1016,7 +1023,7 @@ fun SettingsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 6.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.shapes.small)
                             .padding(12.dp)
                     ) {
                         Row(
@@ -1034,7 +1041,7 @@ fun SettingsScreen(
                                             if (state.audioPreviewPlaying == currentMode) onStopAudioPreview()
                                             else onPlayAudioPreview(currentMode)
                                         },
-                                        modifier = Modifier.size(36.dp)
+                                        modifier = Modifier.size(48.dp)
                                     ) {
                                         Icon(
                                             imageVector = if (state.audioPreviewPlaying == currentMode) Icons.Default.Stop else Icons.Default.VolumeUp,
@@ -1055,7 +1062,7 @@ fun SettingsScreen(
                                         .weight(1f)
                                         .clickable { onPrayerAlertModeChange(prayer, opt) }
                                         .testTag("prayer_alert_option_${prayer.name}_${opt.replace(" ", "_")}"),
-                                    shape = RoundedCornerShape(10.dp),
+                                    shape = MaterialTheme.shapes.extraSmall,
                                     color = if (isChosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
                                     border = BorderStroke(1.dp, if (isChosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
                                 ) {
@@ -1119,7 +1126,7 @@ fun SettingsScreen(
                                 else onPlayAudioPreview(mode)
                             },
                             modifier = Modifier.weight(1f).testTag("audition_mode_${mode.replace(" ", "_")}"),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = MaterialTheme.shapes.extraSmall,
                             colors = if (isPlayingThis) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                                      else ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
                         ) {
@@ -1166,8 +1173,8 @@ fun SettingsScreen(
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                    shape = RoundedCornerShape(12.dp)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    shape = MaterialTheme.shapes.small
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         StatusRow(label = "Storage Engine", value = "Room SQLite (Encrypted)", isGood = true)
@@ -1188,7 +1195,7 @@ fun SettingsScreen(
                         Toast.makeText(context, "365-day solar ephemeris recomputed successfully!", Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = MaterialTheme.shapes.small
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
@@ -1213,7 +1220,7 @@ fun SettingsScreen(
                         Toast.makeText(context, "Today's schedule copied to clipboard!", Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = MaterialTheme.shapes.small
                 ) {
                     Icon(Icons.Default.ContentCopy, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
@@ -1235,8 +1242,8 @@ fun SettingsScreen(
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                    shape = RoundedCornerShape(12.dp)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    shape = MaterialTheme.shapes.small
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         StatusRow(label = "Surahs Bundled", value = "114 Surahs (Complete)", isGood = true)
@@ -1258,7 +1265,7 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = MaterialTheme.shapes.small
                 ) {
                     Icon(Icons.Default.Delete, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
@@ -1280,8 +1287,8 @@ fun SettingsScreen(
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                    shape = RoundedCornerShape(12.dp)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    shape = MaterialTheme.shapes.small
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         StatusRow(label = "Sensor Accuracy", value = state.compassAccuracy, isGood = true)
@@ -1448,7 +1455,7 @@ private fun SettingsClickableRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 4.dp)
+            .padding(vertical = 8.dp)
             .testTag(tag),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -1481,7 +1488,7 @@ private fun SettingsClickableRow(
         Icon(
             imageVector = Icons.Default.Tune,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(18.dp)
         )
     }
@@ -1499,7 +1506,7 @@ private fun SettingsToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1548,8 +1555,8 @@ private fun SelectionSheetItem(
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(vertical = 4.dp),
-        shape = RoundedCornerShape(12.dp),
-        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+        shape = MaterialTheme.shapes.small,
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
         else MaterialTheme.colorScheme.surface,
         border = if (isSelected) BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)) else null
     ) {
@@ -1600,8 +1607,8 @@ private fun SelectionSheetItemWithPreview(
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(vertical = 4.dp),
-        shape = RoundedCornerShape(12.dp),
-        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+        shape = MaterialTheme.shapes.small,
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
         else MaterialTheme.colorScheme.surface,
         border = if (isSelected) BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)) else null
     ) {
@@ -1629,7 +1636,7 @@ private fun SelectionSheetItemWithPreview(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
                     onClick = onPreviewClick,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
