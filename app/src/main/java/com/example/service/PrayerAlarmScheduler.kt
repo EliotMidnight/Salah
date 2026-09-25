@@ -56,26 +56,37 @@ object PrayerAlarmScheduler {
                         isGps = cachedLoc.isGps
                     )
                 } else {
-                    val lat = prefs.getFloat("pref_loc_lat", UserLocation.DEFAULT.latitude.toFloat()).toDouble()
-                    val lon = prefs.getFloat("pref_loc_lon", UserLocation.DEFAULT.longitude.toFloat()).toDouble()
-                    val name = prefs.getString("pref_loc_name", UserLocation.DEFAULT.name) ?: UserLocation.DEFAULT.name
-                    val country = prefs.getString("pref_loc_country", UserLocation.DEFAULT.country) ?: UserLocation.DEFAULT.country
+                    val lat = (if (prefs.contains("loc_lat")) prefs.getFloat("loc_lat", UserLocation.DEFAULT.latitude.toFloat())
+                               else prefs.getFloat("pref_loc_lat", UserLocation.DEFAULT.latitude.toFloat())).toDouble()
+                    val lon = (if (prefs.contains("loc_lng")) prefs.getFloat("loc_lng", UserLocation.DEFAULT.longitude.toFloat())
+                               else prefs.getFloat("pref_loc_lon", UserLocation.DEFAULT.longitude.toFloat())).toDouble()
+                    val name = if (prefs.contains("loc_name")) prefs.getString("loc_name", UserLocation.DEFAULT.name) ?: UserLocation.DEFAULT.name
+                               else prefs.getString("pref_loc_name", UserLocation.DEFAULT.name) ?: UserLocation.DEFAULT.name
+                    val country = if (prefs.contains("loc_country")) prefs.getString("loc_country", UserLocation.DEFAULT.country) ?: UserLocation.DEFAULT.country
+                                  else prefs.getString("pref_loc_country", UserLocation.DEFAULT.country) ?: UserLocation.DEFAULT.country
                     UserLocation(name, country, lat, lon)
                 }
 
-                val methodName = prefs.getString("pref_calc_method", CalculationMethod.MOROCCO_MINISTRY.name) ?: CalculationMethod.MOROCCO_MINISTRY.name
+                // Repository writes keys without the "pref_" prefix; accept both for reliability.
+                fun prefOr(key: String, legacy: String, def: String): String =
+                    if (prefs.contains(key)) prefs.getString(key, def) ?: def
+                    else prefs.getString(legacy, def) ?: def
+                fun prefOrInt(key: String, legacy: String, def: Int): Int =
+                    if (prefs.contains(key)) prefs.getInt(key, def) else prefs.getInt(legacy, def)
+
+                val methodName = prefOr("calc_method", "pref_calc_method", CalculationMethod.MOROCCO_MINISTRY.name)
                 val method = try { CalculationMethod.valueOf(methodName) } catch (_: Exception) { CalculationMethod.MOROCCO_MINISTRY }
 
-                val madhhabName = prefs.getString("pref_madhhab", Madhhab.STANDARD.name) ?: Madhhab.STANDARD.name
+                val madhhabName = prefOr("calc_madhhab", "pref_madhhab", Madhhab.STANDARD.name)
                 val madhhab = try { Madhhab.valueOf(madhhabName) } catch (_: Exception) { Madhhab.STANDARD }
 
                 val adjustments = PrayerAdjustments(
-                    fajr = prefs.getInt("pref_adj_fajr", 0),
-                    sunrise = prefs.getInt("pref_adj_sunrise", 0),
-                    dhuhr = prefs.getInt("pref_adj_dhuhr", 0),
-                    asr = prefs.getInt("pref_adj_asr", 0),
-                    maghrib = prefs.getInt("pref_adj_maghrib", 0),
-                    isha = prefs.getInt("pref_adj_isha", 0)
+                    fajr = prefOrInt("adj_fajr", "pref_adj_fajr", 0),
+                    sunrise = prefOrInt("adj_sunrise", "pref_adj_sunrise", 0),
+                    dhuhr = prefOrInt("adj_dhuhr", "pref_adj_dhuhr", 0),
+                    asr = prefOrInt("adj_asr", "pref_adj_asr", 0),
+                    maghrib = prefOrInt("adj_maghrib", "pref_adj_maghrib", 0),
+                    isha = prefOrInt("adj_isha", "pref_adj_isha", 0)
                 )
 
                 val today = LocalDate.now()

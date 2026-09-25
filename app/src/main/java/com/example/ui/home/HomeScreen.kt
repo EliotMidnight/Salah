@@ -32,6 +32,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AutoStories
@@ -42,8 +44,6 @@ import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.Stop
@@ -77,6 +77,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -167,7 +169,7 @@ fun HomeScreen(
     // Ambient contrast shadow to ensure crisp legibility over dynamic sky gradients
     val textShadowColor = remember(activeSkyPeriod.isNight) {
         if (activeSkyPeriod.isNight) Color.Black.copy(alpha = 0.75f)
-        else Color.White.copy(alpha = 0.55f)
+        else Color.White.copy(alpha = 0.65f)
     }
     val textShadow = remember(textShadowColor) {
         Shadow(
@@ -206,11 +208,12 @@ fun HomeScreen(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = 0.52f),
-                        0.24f to Color.Black.copy(alpha = 0.20f),
-                        0.46f to Color.Transparent,
-                        0.74f to Color.Transparent,
-                        1f to Color.Black.copy(alpha = 0.40f)
+                        0f to Color.Black.copy(alpha = 0.55f),
+                        0.22f to Color.Black.copy(alpha = 0.28f),
+                        0.42f to Color.Black.copy(alpha = 0.12f),
+                        0.62f to Color.Black.copy(alpha = 0.08f),
+                        0.82f to Color.Black.copy(alpha = 0.22f),
+                        1f to Color.Black.copy(alpha = 0.45f)
                     )
                 )
         )
@@ -269,10 +272,9 @@ fun HomeScreen(
                 // Gregorian Date & Transliterated Hijri Subtitle
                 val formattedGregorian = today.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.getDefault()))
                 val hijriTransliterated = state.hijriDate?.let { "${it.day} ${it.monthNameEn} ${it.year} AH" }
-                    ?: "24 Rabi' al-Awwal 1448 AH"
 
                 Text(
-                    text = "$formattedGregorian · $hijriTransliterated",
+                    text = if (hijriTransliterated != null) "$formattedGregorian · $hijriTransliterated" else formattedGregorian,
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.Medium,
                     letterSpacing = 0.3.sp,
@@ -289,6 +291,7 @@ fun HomeScreen(
                 // Living Astronomical Sky Badge (High visibility affordance on sky background)
                 Row(
                     modifier = Modifier
+                        .heightIn(min = 48.dp)
                         .clip(CircleShape)
                         .background(onSkyColor.copy(alpha = 0.30f))
                         .border(
@@ -296,7 +299,7 @@ fun HomeScreen(
                             CircleShape
                         )
                         .clickable { showAstroSheet = true }
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
                         .testTag("astronomical_sky_badge"),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -387,7 +390,7 @@ fun HomeScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Default.VolumeUp,
+                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier.size(16.dp)
@@ -403,9 +406,9 @@ fun HomeScreen(
                     FilledTonalButton(
                         onClick = onSilenceActiveAlert,
                         modifier = Modifier
-                            .height(40.dp)
+                            .height(48.dp)
                             .testTag("home_silence_adhan_button"),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
                     ) {
                         Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
@@ -439,7 +442,7 @@ fun HomeScreen(
                     },
                     leadingIcon = {
                         Icon(
-                            imageVector = if (state.isGlobalSilentMode) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                            imageVector = if (state.isGlobalSilentMode) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
                             contentDescription = null,
                             tint = if (state.isGlobalSilentMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(14.dp)
@@ -455,7 +458,11 @@ fun HomeScreen(
                         color = if (state.isGlobalSilentMode) MaterialTheme.colorScheme.error
                                 else MaterialTheme.colorScheme.outlineVariant
                     ),
-                    modifier = Modifier.testTag("home_silent_mode_chip")
+                    modifier = Modifier
+                        .semantics {
+                            stateDescription = if (state.isGlobalSilentMode) "Silent mode on" else "Alerts active"
+                        }
+                        .testTag("home_silent_mode_chip")
                 )
 
                 if (state.autoSilentDuringPrayer) {
@@ -465,7 +472,7 @@ fun HomeScreen(
                         label = { Text("${strings.masjidMode} (${state.autoSilentDurationMinutes}m)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold) },
                         leadingIcon = {
                             Icon(
-                                imageVector = Icons.Default.VolumeOff,
+                                imageVector = Icons.AutoMirrored.Filled.VolumeOff,
                                 contentDescription = null,
                                 modifier = Modifier.size(14.dp)
                             )
@@ -565,6 +572,7 @@ fun HomeScreen(
                     val timeFormatter = DateTimeFormatter.ofPattern(if (state.timeFormat24h) "HH:mm" else "h:mm a")
                     Surface(
                         modifier = Modifier
+                            .heightIn(min = 48.dp)
                             .clip(MaterialTheme.shapes.medium)
                             .clickable(onClick = onOpenPrayerDetails)
                             .testTag("next_prayer_badge"),
@@ -636,7 +644,7 @@ fun HomeScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -754,6 +762,7 @@ fun HomeScreen(
                                     .heightIn(min = 48.dp)
                                     .clip(MaterialTheme.shapes.extraSmall)
                                     .clickable { onCyclePrayerAlertMode(prayer) }
+                                    .semantics { stateDescription = "Alert mode: $alertMode" }
                                     .testTag("prayer_alert_toggle_${prayer.name}"),
                                 color = alertContainer
                             ) {
@@ -763,13 +772,13 @@ fun HomeScreen(
                                 ) {
                                     Icon(
                                         imageVector = when {
-                                            state.isGlobalSilentMode || alertMode == "Silent" || alertMode == "Silent Reminder" -> Icons.Default.VolumeOff
+                                            state.isGlobalSilentMode || alertMode == "Silent" || alertMode == "Silent Reminder" -> Icons.AutoMirrored.Filled.VolumeOff
                                             alertMode == "Vibrate Only" -> Icons.Default.Vibration
                                             alertMode == "Gentle Chime" -> Icons.Default.NotificationsNone
-                                            else -> Icons.Default.VolumeUp
+                                            else -> Icons.AutoMirrored.Filled.VolumeUp
                                         },
                                         contentDescription = "Alert mode: $alertMode",
-                                        tint = if (isSilenced) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                                        tint = if (isSilenced) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
@@ -783,7 +792,7 @@ fun HomeScreen(
                                         },
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium,
-                                        color = if (isSilenced) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
+                                        color = if (isSilenced) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                 }
                             }
@@ -816,7 +825,7 @@ fun HomeScreen(
                 style = MaterialTheme.typography.labelLarge.copy(shadow = textShadow),
                 fontWeight = FontWeight.Bold,
                 color = onSkyColor,
-                modifier = Modifier.padding(horizontal = 20.dp)
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -1013,8 +1022,7 @@ private fun AstronomicalObservatoryContent(
             Column {
                 Text(
                     text = "Astronomical Observatory",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
@@ -1283,12 +1291,12 @@ private fun CountdownSegment(
         ) { digit ->
             Text(
                 text = digit,
-                fontSize = 44.sp,
-                fontWeight = FontWeight.Normal,
-                letterSpacing = 1.sp,
-                color = onSkyColor,
-                style = TextStyle(shadow = shadow),
-                lineHeight = 46.sp
+                style = MaterialTheme.typography.displayMedium.copy(
+                    fontWeight = FontWeight.Normal,
+                    letterSpacing = 1.sp,
+                    shadow = shadow
+                ),
+                color = onSkyColor
             )
         }
         Spacer(modifier = Modifier.height(2.dp))

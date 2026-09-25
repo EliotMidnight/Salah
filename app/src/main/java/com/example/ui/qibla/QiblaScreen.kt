@@ -1,10 +1,6 @@
 package com.example.ui.qibla
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import com.example.engine.MagneticFieldStatus
 import com.example.ui.SalahUiState
 import com.example.ui.localization.LocalStrings
+import com.example.ui.theme.expressiveCollapse
+import com.example.ui.theme.expressiveExpand
 import java.util.Locale
 import kotlin.math.abs
 
@@ -86,10 +84,10 @@ fun QiblaScreen(
                 .widthIn(max = 680.dp)
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .verticalScroll(scrollState)
-                .padding(horizontal = 20.dp),
+                .padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         // Top Header
         Row(
@@ -115,8 +113,8 @@ fun QiblaScreen(
         // Magnetic Interference Warning if severe field detected
         AnimatedVisibility(
             visible = state.magneticStatus == MagneticFieldStatus.INTERFERENCE,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
+            enter = expressiveExpand(),
+            exit = expressiveCollapse()
         ) {
             Card(
                 shape = MaterialTheme.shapes.medium,
@@ -179,7 +177,7 @@ fun QiblaScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 12.dp)
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -191,8 +189,7 @@ fun QiblaScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = "Solar Verification Reference",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.titleLarge
                     )
                 }
 

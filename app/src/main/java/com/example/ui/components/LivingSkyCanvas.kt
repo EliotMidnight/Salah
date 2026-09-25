@@ -13,7 +13,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -29,6 +34,7 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.example.data.model.UserLocation
 import com.example.engine.AstronomicalSky
@@ -113,59 +119,58 @@ fun LivingSkyCanvas(
         AstronomicalSky.getMoonPhaseInfo(hijriDay)
     }
 
-    // 3. Infinite animations for living atmosphere (twinkling, corona breathing, cloud drift, meteor)
-    val infiniteTransition = rememberInfiniteTransition(label = "livingAtmosphere")
+    // 3. Infinite animations for living atmosphere — only animate what this sky period needs.
+    // Night twinkle/meteor paused during full day; sun rays/corona paused when sun is below horizon.
+    val needStars = rawPalette.starAlpha > 0.03f || rawPalette.isNight || sunAltitude < 6f
+    val needSunFx = sunAltitude > -8f
+    val atmosphere = rememberInfiniteTransition(label = "livingAtmosphere")
 
-    // Star twinkle phase
-    val twinkleTime by infiniteTransition.animateFloat(
+    val twinkleTime by atmosphere.animateFloat(
         initialValue = 0f,
         targetValue = (2 * PI).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3600, easing = LinearEasing),
+            animation = tween(durationMillis = if (needStars) 3600 else 600_000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "twinkle"
     )
 
-    // Solar corona breathing pulse
-    val coronaPulse by infiniteTransition.animateFloat(
+    val coronaPulse by atmosphere.animateFloat(
         initialValue = 0.94f,
-        targetValue = 1.08f,
+        targetValue = if (needSunFx) 1.08f else 1.0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 4200, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = if (needSunFx) 4200 else 600_000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "coronaPulse"
     )
 
-    // Solar diffraction rays slow rotation
-    val rayRotation by infiniteTransition.animateFloat(
+    val rayRotation by atmosphere.animateFloat(
         initialValue = 0f,
-        targetValue = 360f,
+        targetValue = if (needSunFx) 360f else 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 120000, easing = LinearEasing),
+            animation = tween(durationMillis = 120_000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "rayRotation"
     )
 
-    // Cloud drift across the sky
-    val cloudDrift by infiniteTransition.animateFloat(
+    val cloudDrift by atmosphere.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 65000, easing = LinearEasing),
+            animation = tween(durationMillis = 65_000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "cloudDrift"
     )
 
-    // Periodic shooting star cycle (every 14 seconds)
-    val meteorCycle by infiniteTransition.animateFloat(
+    // Meteor window only advances while stars can actually show (saves most day frames).
+    val meteorCycle by atmosphere.animateFloat(
         initialValue = 0f,
-        targetValue = 1f,
+        targetValue = if (needStars) 1f else 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 14000, easing = LinearEasing),
+            animation = tween(durationMillis = if (needStars) 14_000 else 600_000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "meteorCycle"
@@ -214,8 +219,24 @@ fun LivingSkyCanvas(
         )
     }
 
+    // Static silhouette geometry does not depend on animation values — build once per size.
+    var canvasW by remember { mutableStateOf(0f) }
+    var canvasH by remember { mutableStateOf(0f) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val staticSilhouette = remember(canvasW, canvasH, density) {
+        if (canvasW <= 0f || canvasH <= 0f) null
+        else with(density) { buildHorizonSilhouette(canvasW, canvasH) }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .onSizeChanged { size ->
+                    canvasW = size.width.toFloat()
+                    canvasH = size.height.toFloat()
+                }
+        ) {
             val width = size.width
             val height = size.height
             val arcZoneHeight = minOf(height * 0.50f, 380.dp.toPx())
@@ -404,13 +425,17 @@ fun LivingSkyCanvas(
                 cloudTint = animatedCloudTint
             )
 
-            // G. Horizon Silhouette with Desert Dunes & Architectural Minaret
-            drawHorizonSilhouette(
-                width = width,
-                height = height,
-                horizonY = horizonY,
-                horizonColor = animatedHorizon
-            )
+            // G. Horizon Silhouette with Desert Dunes & Architectural Minaret (static paths)
+            staticSilhouette?.let { sil ->
+                drawPath(path = sil.backDune, color = animatedHorizon.copy(alpha = 0.45f), style = Fill)
+                drawPath(path = sil.minaret, color = animatedHorizon.copy(alpha = 0.65f), style = Fill)
+                drawCircle(
+                    color = animatedHorizon.copy(alpha = 0.75f),
+                    radius = 1.4.dp.toPx(),
+                    center = sil.finial
+                )
+                drawPath(path = sil.frontDune, color = animatedHorizon.copy(alpha = 0.75f), style = Fill)
+            }
         }
     }
 }
@@ -769,16 +794,19 @@ private fun DrawScope.drawAtmosphericClouds(
     drawPath(path = cloudPath2, color = cloudTint.copy(alpha = cloudTint.alpha * 0.45f), style = Fill)
 }
 
+private data class HorizonSilhouette(
+    val backDune: Path,
+    val frontDune: Path,
+    val minaret: Path,
+    val finial: Offset
+)
+
 /**
- * Draws the layered foreground desert dunes and delicate Islamic minaret silhouette.
+ * Builds static desert dune + minaret silhouette paths once per canvas size.
  */
-private fun DrawScope.drawHorizonSilhouette(
-    width: Float,
-    height: Float,
-    horizonY: Float,
-    horizonColor: Color
-) {
-    // 1. Distant Background Dunes (Layer 1)
+private fun Density.buildHorizonSilhouette(width: Float, height: Float): HorizonSilhouette {
+    val horizonY = height * 0.88f
+
     val backDune = Path().apply {
         moveTo(0f, height)
         lineTo(0f, horizonY * 0.94f)
@@ -790,26 +818,17 @@ private fun DrawScope.drawHorizonSilhouette(
         lineTo(width, height)
         close()
     }
-    drawPath(
-        path = backDune,
-        color = horizonColor.copy(alpha = 0.45f),
-        style = Fill
-    )
 
-    // 2. Subtle Minaret & Crescent Finial on the distant ridge
     val minaretX = width * 0.76f
     val minaretBaseY = horizonY * 0.93f
     val minaretTopY = minaretBaseY - 32.dp.toPx()
 
     val minaretPath = Path().apply {
-        // Minaret Tower
         moveTo(minaretX - 3.5.dp.toPx(), minaretBaseY)
         lineTo(minaretX - 2.5.dp.toPx(), minaretTopY + 8.dp.toPx())
-        // Balcony
         lineTo(minaretX - 5.dp.toPx(), minaretTopY + 8.dp.toPx())
         lineTo(minaretX - 5.dp.toPx(), minaretTopY + 6.dp.toPx())
         lineTo(minaretX - 2.dp.toPx(), minaretTopY + 6.dp.toPx())
-        // Spire & Dome
         lineTo(minaretX, minaretTopY)
         lineTo(minaretX + 2.dp.toPx(), minaretTopY + 6.dp.toPx())
         lineTo(minaretX + 5.dp.toPx(), minaretTopY + 6.dp.toPx())
@@ -818,19 +837,7 @@ private fun DrawScope.drawHorizonSilhouette(
         lineTo(minaretX + 3.5.dp.toPx(), minaretBaseY)
         close()
     }
-    drawPath(
-        path = minaretPath,
-        color = horizonColor.copy(alpha = 0.65f),
-        style = Fill
-    )
-    // Tiny crescent finial on spire tip
-    drawCircle(
-        color = horizonColor.copy(alpha = 0.75f),
-        radius = 1.4.dp.toPx(),
-        center = Offset(minaretX, minaretTopY - 2.dp.toPx())
-    )
 
-    // 3. Foreground Dunes (Layer 2)
     val frontDune = Path().apply {
         moveTo(0f, height)
         lineTo(0f, horizonY * 0.97f)
@@ -842,10 +849,12 @@ private fun DrawScope.drawHorizonSilhouette(
         lineTo(width, height)
         close()
     }
-    drawPath(
-        path = frontDune,
-        color = horizonColor.copy(alpha = 0.75f),
-        style = Fill
+
+    return HorizonSilhouette(
+        backDune = backDune,
+        frontDune = frontDune,
+        minaret = minaretPath,
+        finial = Offset(minaretX, minaretTopY - 2.dp.toPx())
     )
 }
 

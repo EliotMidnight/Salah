@@ -94,3 +94,9 @@ val SurfaceDimLight = Color(0xFFDDE3EA)
 val SurfaceBrightLight = Color(0xFFF8FAFC)
 val SurfaceDimDark = Color(0xFF05080F)
 val SurfaceBrightDark = Color(0xFF2B3A55)
+
+// Outline roles (tokenized so light/dark stay in sync with the palette)
+val OutlineLight = Color(0xFFCBD5E1)
+val OutlineVariantLight = Color(0xFFE2E8F0)
+val OutlineDark = CardBorderDark
+val OutlineVariantDark = TwilightIndigo

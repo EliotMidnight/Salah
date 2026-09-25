@@ -161,6 +161,27 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
     private var lastVibrateTimestamp: Long = 0L
     private var wasFacingQibla: Boolean = false
     private var lastAzimuth: Float = 0f
+    private var declCacheLat = Float.NaN
+    private var declCacheLon = Float.NaN
+    private var declCacheValue = 0f
+    private var declCacheAtMs = 0L
+
+    private fun cachedDeclinationFor(lat: Float, lon: Float): Float {
+        val now = System.currentTimeMillis()
+        if (lat == declCacheLat && lon == declCacheLon && now - declCacheAtMs < 6 * 60 * 60 * 1000L) {
+            return declCacheValue
+        }
+        val value = try {
+            GeomagneticField(lat, lon, 50f, now).declination
+        } catch (_: Exception) {
+            0f
+        }
+        declCacheLat = lat
+        declCacheLon = lon
+        declCacheValue = value
+        declCacheAtMs = now
+        return value
+    }
 
     init {
         val database = SalahDatabase.getDatabase(application)
@@ -748,36 +769,43 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
     }
 
     // Quran actions
-    fun selectSurah(surahNumber: Int) {
+    fun selectSurah(surahNumber: Int, ayahNumber: Int = 1) {
         val surah = QuranDataSource.getSurahByNumber(surahNumber) ?: QuranDataSource.SURAHS[0]
         val ayahs = QuranDataSource.getAyahsForSurah(surahNumber)
+        val startAyah = ayahNumber.coerceIn(1, ayahs.size.coerceAtLeast(1))
         _uiState.value = _uiState.value.copy(
             selectedSurah = surah,
             currentSurahAyahs = ayahs,
-            activeReadingAyahNumber = 1
+            activeReadingAyahNumber = startAyah
         )
     }
 
     fun selectPage(pageNumber: Int) {
         val page = pageNumber.coerceIn(1, 604)
-        val surah = QuranDataSource.SURAHS.lastOrNull { it.startPage <= page } ?: QuranDataSource.SURAHS[0]
-        val ayahs = QuranDataSource.getAyahsForSurah(surah.number)
-        val targetAyah = ayahs.find { it.pageNumber == page } ?: ayahs.firstOrNull()
-        _uiState.value = _uiState.value.copy(
-            selectedSurah = surah,
-            currentSurahAyahs = ayahs,
-            activeReadingAyahNumber = targetAyah?.ayahNumber ?: 1
-        )
+        val resolved = QuranDataSource.resolvePage(page)
+        if (resolved != null) {
+            selectSurah(resolved.first.number, resolved.second)
+        } else {
+            selectSurah(1, 1)
+        }
     }
 
     fun selectJuz(juzNumber: Int) {
-        val targetPage = ((juzNumber.coerceIn(1, 30) - 1) * 20 + 1).coerceIn(1, 604)
-        selectPage(targetPage)
+        val target = QuranDataSource.firstAyahForJuz(juzNumber)
+        if (target != null) {
+            selectSurah(target.surahNumber, target.ayahNumber)
+        } else {
+            selectSurah(1, 1)
+        }
     }
 
     fun selectHizb(hizbNumber: Int) {
-        val targetPage = ((hizbNumber.coerceIn(1, 60) - 1) * 10 + 1).coerceIn(1, 604)
-        selectPage(targetPage)
+        val target = QuranDataSource.firstAyahForHizb(hizbNumber)
+        if (target != null) {
+            selectSurah(target.surahNumber, target.ayahNumber)
+        } else {
+            selectSurah(1, 1)
+        }
     }
 
     fun onAyahViewed(ayah: Ayah) {
@@ -798,8 +826,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     fun jumpToContinueReading() {
         val cr = _uiState.value.continueReading
-        selectSurah(cr.surahNumber)
-        _uiState.value = _uiState.value.copy(activeReadingAyahNumber = cr.ayahNumber)
+        selectSurah(cr.surahNumber, cr.ayahNumber)
     }
 
     fun toggleBookmark(ayah: Ayah) {
@@ -925,19 +952,10 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         val smoothAzimuth = ((lastAzimuth + 0.20f * diff) + 360f) % 360f
         lastAzimuth = smoothAzimuth
 
-        // Calculate geomagnetic declination for True North vs Magnetic North
+        // Calculate geomagnetic declination for True North vs Magnetic North.
+        // Cached — recomputing GeomagneticField on every sensor event is expensive.
         val loc = _uiState.value.location
-        val geoField = try {
-            GeomagneticField(
-                loc.latitude.toFloat(),
-                loc.longitude.toFloat(),
-                50f,
-                System.currentTimeMillis()
-            )
-        } catch (e: Exception) {
-            null
-        }
-        val declination = geoField?.declination ?: 0f
+        val declination = cachedDeclinationFor(loc.latitude.toFloat(), loc.longitude.toFloat())
 
         val finalAzimuth = if (_uiState.value.useTrueNorth) {
             (smoothAzimuth + declination + 360f) % 360f

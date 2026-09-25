@@ -138,6 +138,63 @@ object QuranDataSource {
         return QuranCorpus.ayahs.filter { it.pageNumber == page }
     }
 
+    /** First verse on each mushaf page (1..604), built once from corpus order. */
+    private val pageStarts: Map<Int, Ayah> by lazy {
+        val starts = HashMap<Int, Ayah>(604)
+        for (ayah in QuranCorpus.ayahs) {
+            starts.putIfAbsent(ayah.pageNumber, ayah)
+        }
+        starts
+    }
+
+    /** First verse on a mushaf page (canonical page start). */
+    fun firstAyahOnPage(pageNumber: Int): Ayah? =
+        pageStarts[pageNumber.coerceIn(1, 604)]
+
+    /** Surah that contains the start of a mushaf page. */
+    fun surahForPage(pageNumber: Int): Surah? =
+        firstAyahOnPage(pageNumber)?.let { getSurahByNumber(it.surahNumber) }
+
+    fun getAyahsForJuz(juzNumber: Int): List<Ayah> {
+        val juz = juzNumber.coerceIn(1, 30)
+        return QuranCorpus.ayahs.filter { it.juzNumber == juz }
+    }
+
+    private val juzStarts: Map<Int, Ayah> by lazy {
+        val starts = HashMap<Int, Ayah>(30)
+        for (ayah in QuranCorpus.ayahs) {
+            starts.putIfAbsent(ayah.juzNumber, ayah)
+        }
+        starts
+    }
+
+    /** First verse of a Juz'. */
+    fun firstAyahForJuz(juzNumber: Int): Ayah? =
+        juzStarts[juzNumber.coerceIn(1, 30)]
+
+    private val hizbStarts: Map<Int, Ayah> by lazy {
+        val starts = HashMap<Int, Ayah>(60)
+        for (ayah in QuranCorpus.ayahs) {
+            val hizb = ((ayah.hizbQuarter - 1) / 4) + 1
+            starts.putIfAbsent(hizb, ayah)
+        }
+        starts
+    }
+
+    /**
+     * First verse of a Hizb (1..60). Corpus stores hizb-quarters (1..240);
+     * four quarters make one hizb.
+     */
+    fun firstAyahForHizb(hizbNumber: Int): Ayah? =
+        hizbStarts[hizbNumber.coerceIn(1, 60)]
+
+    /** Resolves a mushaf page to the surah + ayah the reader should open at. */
+    fun resolvePage(pageNumber: Int): Pair<Surah, Int>? {
+        val start = firstAyahOnPage(pageNumber) ?: return null
+        val surah = getSurahByNumber(start.surahNumber) ?: return null
+        return surah to start.ayahNumber
+    }
+
     /**
      * Resolves a single verse reference from the verified corpus, or null when
      * the reference does not exist. Used to display bookmarks from live text.

@@ -3,9 +3,12 @@ package com.example.service
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.media.AudioManager
+import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import androidx.core.app.NotificationCompat
 import com.example.data.model.Prayer
 import com.example.engine.AdhanAudioSynthesizer
 import com.example.engine.PrayerNotificationManager
@@ -29,6 +32,7 @@ class PrayerAlertService : Service() {
         const val EXTRA_TIME_FORMATTED = "EXTRA_TIME_FORMATTED"
         const val EXTRA_IS_PRE_PRAYER = "EXTRA_IS_PRE_PRAYER"
         const val EXTRA_OFFSET_MINS = "EXTRA_OFFSET_MINS"
+        const val FOREGROUND_NOTIFICATION_ID = 4100
 
         fun startAlert(
             context: Context,
@@ -45,7 +49,11 @@ class PrayerAlertService : Service() {
                 putExtra(EXTRA_OFFSET_MINS, offsetMinutes)
             }
             try {
-                context.startService(intent)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
             } catch (_: Exception) {
             }
         }
@@ -85,6 +93,19 @@ class PrayerAlertService : Service() {
     }
 
     private fun handlePlayAlert(intent: Intent, startId: Int) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    FOREGROUND_NOTIFICATION_ID,
+                    buildForegroundNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                )
+            } else {
+                startForeground(FOREGROUND_NOTIFICATION_ID, buildForegroundNotification())
+            }
+        } catch (_: Exception) {
+        }
+
         val prayerName = intent.getStringExtra(EXTRA_PRAYER_NAME) ?: return
         val timeFormatted = intent.getStringExtra(EXTRA_TIME_FORMATTED) ?: ""
         val isPrePrayer = intent.getBooleanExtra(EXTRA_IS_PRE_PRAYER, false)
@@ -107,6 +128,8 @@ class PrayerAlertService : Service() {
         val alertMode = prefs.getString("pref_alert_mode_${prayer.name}", "Full Adhan") ?: "Full Adhan"
         val autoSilentDuringPrayer = prefs.getBoolean("pref_auto_silent_during_prayer", false)
         val autoSilentDuration = prefs.getInt("pref_auto_silent_duration", 20)
+
+        try { PrayerNotificationManager.initChannels(this) } catch (_: Exception) {}
 
         // Acquire WakeLock briefly to guarantee completion while screen is off
         acquireWakeLock()
@@ -213,6 +236,25 @@ class PrayerAlertService : Service() {
             }
         } catch (_: Exception) {}
         wakeLock = null
+    }
+
+    private fun buildForegroundNotification(): android.app.Notification {
+        val openIntent = Intent(this, com.example.MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val contentPi = android.app.PendingIntent.getActivity(
+            this, 0, openIntent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(this, PrayerNotificationManager.CHANNEL_SILENT)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle("Adhan in progress")
+            .setContentText("Prayer alert is playing")
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setContentIntent(contentPi)
+            .setSilent(true)
+            .build()
     }
 
     override fun onDestroy() {

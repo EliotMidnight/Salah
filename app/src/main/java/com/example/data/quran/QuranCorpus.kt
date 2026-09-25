@@ -72,7 +72,7 @@ internal object QuranCorpus {
     val ayahs: List<Ayah> by lazy {
         // Force translation load first so a corrupt translation fails fast with a clear error.
         val translations = englishByRef
-        val text = resource("uthmani.txt", TEXT_HASH).toString(Charsets.UTF_8).removePrefix("﻿")
+        val text = resource("uthmani.txt", TEXT_HASH).toString(Charsets.UTF_8).removePrefix("\uFEFF")
         val verses = text.lineSequence().filter { it.firstOrNull()?.isDigit() == true }.map { line ->
             val fields = line.split('|', limit = 3)
             require(fields.size == 3 && fields[2].isNotBlank())

@@ -2,7 +2,6 @@ package com.example.ui.theme
 
 import android.os.Build
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
@@ -68,8 +67,8 @@ private val DarkColorScheme = darkColorScheme(
     surfaceContainer = SurfaceContainerDark,
     surfaceContainerHigh = SurfaceContainerHighDark,
     surfaceContainerHighest = SurfaceContainerHighestDark,
-    outline = CardBorderDark,
-    outlineVariant = Color(0xFF1E293B),
+    outline = OutlineDark,
+    outlineVariant = OutlineVariantDark,
     error = ErrorDark,
     onError = OnErrorDark,
     errorContainer = ErrorContainerDark,
@@ -102,8 +101,8 @@ private val LightColorScheme = lightColorScheme(
     surfaceContainer = SurfaceContainerLight,
     surfaceContainerHigh = SurfaceContainerHighLight,
     surfaceContainerHighest = SurfaceContainerHighestLight,
-    outline = Color(0xFFCBD5E1),
-    outlineVariant = Color(0xFFE2E8F0),
+    outline = OutlineLight,
+    outlineVariant = OutlineVariantLight,
     error = ErrorLight,
     onError = OnErrorLight,
     errorContainer = ErrorContainerLight,
@@ -114,7 +113,7 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 private fun ColorScheme.animated(): ColorScheme {
-    val animSpec = tween<Color>(durationMillis = 350, easing = FastOutSlowInEasing)
+    val animSpec = tween<Color>(durationMillis = ExpressiveMotion.MEDIUM, easing = ExpressiveEmphasized)
     return this.copy(
         primary = animateColorAsState(primary, animSpec, label = "primary").value,
         onPrimary = animateColorAsState(onPrimary, animSpec, label = "onPrimary").value,

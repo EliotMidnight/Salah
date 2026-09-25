@@ -51,10 +51,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.data.model.CalculationMethod
 import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
@@ -177,7 +180,7 @@ fun PrayerScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             // Section 1 Header: Today's Times (or Selected Day's Times)
             Text(
@@ -185,6 +188,7 @@ fun PrayerScreen(
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
+                letterSpacing = 0.5.sp,
                 modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
             )
         }
@@ -298,11 +302,12 @@ fun PrayerScreen(
                     .fillMaxWidth()
                     .padding(vertical = 4.dp)
                     .clip(MaterialTheme.shapes.small)
+                    .semantics { selected = isSelectedDay }
                     .clickable { selectedDate = date },
                 shape = MaterialTheme.shapes.small,
                 color = if (isSelectedDay) MaterialTheme.colorScheme.primaryContainer
                 else MaterialTheme.colorScheme.surface,
-                border = if (isSelectedDay) BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary)
+                border = if (isSelectedDay) BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
                 else if (isCurrentDay) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 else null
             ) {
@@ -510,7 +515,7 @@ private fun DaySwitcher(
                                 text = todayLabel,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }

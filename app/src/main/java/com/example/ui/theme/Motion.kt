@@ -51,6 +51,10 @@ fun expressiveCollapse(): ExitTransition =
     fadeOut(animationSpec = tween(durationMillis = ExpressiveMotion.SHORT)) +
         shrinkVertically(animationSpec = tween(durationMillis = ExpressiveMotion.MEDIUM, easing = ExpressiveEmphasized))
 
+/** Sheet/dialog content entrance used by settings and trust sheets. */
+fun expressiveFadeIn(): EnterTransition =
+    fadeIn(animationSpec = tween(durationMillis = ExpressiveMotion.SHORT, easing = ExpressiveDecelerate))
+
 /** Screen-to-screen transitions for the top-level NavHost. */
 fun expressiveEnterForward(): EnterTransition =
     fadeIn(animationSpec = tween(durationMillis = ExpressiveMotion.MEDIUM, easing = ExpressiveDecelerate)) +

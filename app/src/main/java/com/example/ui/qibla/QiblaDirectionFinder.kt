@@ -5,10 +5,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -74,6 +72,8 @@ import com.example.engine.MagneticFieldStatus
 import com.example.ui.SalahUiState
 import com.example.ui.localization.LocalStrings
 import com.example.ui.theme.LocalSuccessColors
+import com.example.ui.theme.expressiveCollapse
+import com.example.ui.theme.expressiveExpand
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.cos
@@ -447,8 +447,8 @@ fun QiblaDirectionFinder(
         // Tilt Alert Reminder if device is not held flat
         AnimatedVisibility(
             visible = !state.isDeviceLevel,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
+            enter = expressiveExpand(),
+            exit = expressiveCollapse()
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,

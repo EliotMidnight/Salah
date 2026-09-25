@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <uses-feature android:name="android.hardware.sensor.compass" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
@@ -36,6 +38,9 @@
             </intent-filter>
         </activity>
         
+        <!-- System broadcasts only. App-internal alarm actions use explicit
+             intents (Intent(context, PrayerAlarmReceiver::class.java)) and do
+             not need an intent-filter, so they are not spoofable by other apps. -->
         <receiver
             android:name=".service.PrayerAlarmReceiver"
             android:enabled="true"
@@ -45,17 +50,14 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.TIME_SET" />
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
-                <action android:name="com.example.salah.ACTION_PRAYER_ALARM" />
-                <action android:name="com.example.salah.ACTION_PRE_PRAYER_ALARM" />
-                <action android:name="com.example.salah.ACTION_SILENCE_ACTIVE" />
-                <action android:name="com.example.salah.ACTION_MARK_PRAYED" />
             </intent-filter>
         </receiver>
 
         <service
             android:name=".service.PrayerAlertService"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 
 </manifest>

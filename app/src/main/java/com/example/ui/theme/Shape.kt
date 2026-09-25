@@ -23,3 +23,9 @@ val HeroSurfaceShape = RoundedCornerShape(32.dp)
 val CardSurfaceShape = RoundedCornerShape(24.dp)
 val ChipSurfaceShape = RoundedCornerShape(16.dp)
 val SheetSurfaceShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
+
+/** Canonical section-card shape used across Settings, Prayer, Qibla, and lists. */
+val SectionCardShape = Shapes.large
+
+/** Canonical row/list-item shape used for prayer rows, day lists, and pills. */
+val RowCardShape = Shapes.medium

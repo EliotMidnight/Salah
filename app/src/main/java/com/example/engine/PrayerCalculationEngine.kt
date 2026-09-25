@@ -198,8 +198,10 @@ object PrayerCalculationEngine {
             }
         }
         // If all prayers today have passed, the next is tomorrow's Fajr
-        val fajr = day.prayers.first { it.prayer == Prayer.FAJR }
-        return fajr.copy(dateTime = fajr.dateTime.plusDays(1))
+        val fajr = day.prayers.firstOrNull { it.prayer == Prayer.FAJR }
+        if (fajr != null) return fajr.copy(dateTime = fajr.dateTime.plusDays(1))
+        val first = day.prayers.firstOrNull() ?: return day.prayers.first()
+        return first.copy(dateTime = first.dateTime.plusDays(1))
     }
 
     fun getPreviousPrayer(day: PrayerTimesDay, currentTime: LocalTime = LocalTime.now()): PrayerTime {
@@ -210,8 +212,10 @@ object PrayerCalculationEngine {
             }
         }
         // If before Fajr, previous was yesterday's Isha
-        val isha = day.prayers.first { it.prayer == Prayer.ISHA }
-        return isha.copy(dateTime = isha.dateTime.minusDays(1))
+        val isha = day.prayers.firstOrNull { it.prayer == Prayer.ISHA }
+        if (isha != null) return isha.copy(dateTime = isha.dateTime.minusDays(1))
+        val last = day.prayers.lastOrNull() ?: return day.prayers.first()
+        return last.copy(dateTime = last.dateTime.minusDays(1))
     }
 
     fun formatRemainingCountdown(targetTime: LocalDateTime, now: LocalDateTime = LocalDateTime.now()): String {

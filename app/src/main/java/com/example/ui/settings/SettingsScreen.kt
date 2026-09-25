@@ -29,6 +29,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeMute
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AddLocation
@@ -57,9 +60,6 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material.icons.filled.VolumeOff
-import androidx.compose.material.icons.filled.VolumeMute
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -92,6 +92,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -255,6 +257,20 @@ fun SettingsScreen(
                             tag = "setting_location"
                         )
 
+                        val locStatus = state.locationStatusMessage
+                        if (locStatus != null || state.isLocating) {
+                            Text(
+                                text = locStatus ?: "Locating…",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (state.isLocating) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 56.dp, bottom = 8.dp)
+                                    .testTag("location_status")
+                            )
+                        }
+
                         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
@@ -311,7 +327,7 @@ fun SettingsScreen(
                     Column(modifier = Modifier.padding(16.dp)) {
                         // Master Silent Mode
                         SettingsToggleRow(
-                            icon = if (state.isGlobalSilentMode) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                            icon = if (state.isGlobalSilentMode) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
                             title = strings.globalSilentLabel,
                             subtitle = if (state.isGlobalSilentMode) "All adhans and chimes are currently silenced" else "Silence all prayer alarms and adhan calls",
                             checked = state.isGlobalSilentMode,
@@ -323,7 +339,7 @@ fun SettingsScreen(
 
                         // Auto-Silent at Prayer (Masjid Mode)
                         SettingsToggleRow(
-                            icon = Icons.Default.VolumeMute,
+                            icon = Icons.AutoMirrored.Filled.VolumeMute,
                             title = strings.autoMasjidModeLabel,
                             subtitle = "Automatically mutes device during prayer for ${state.autoSilentDurationMinutes} min",
                             checked = state.autoSilentDuringPrayer,
@@ -353,16 +369,18 @@ fun SettingsScreen(
                                     val isSelected = state.autoSilentDurationMinutes == min
                                     Surface(
                                         modifier = Modifier
+                                            .heightIn(min = 48.dp)
                                             .clickable { onAutoSilentDurationChange(min) }
+                                            .semantics { selected = isSelected }
                                             .testTag("auto_silent_duration_${min}m"),
                                         shape = MaterialTheme.shapes.extraSmall,
                                         color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest
                                     ) {
                                         Text(
                                             text = "${min}m",
-                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                                            fontSize = 12.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                             color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                                         )
                                     }
@@ -404,7 +422,7 @@ fun SettingsScreen(
                         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsClickableRow(
-                            icon = Icons.Default.VolumeUp,
+                            icon = Icons.AutoMirrored.Filled.VolumeUp,
                             title = strings.adhanSoundLabel,
                             subtitle = state.adhanSound,
                             onClick = { showAdhanSoundSheet = true },
@@ -424,7 +442,7 @@ fun SettingsScreen(
                         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                         SettingsToggleRow(
-                            icon = Icons.Default.VolumeUp,
+                            icon = Icons.AutoMirrored.Filled.VolumeUp,
                             title = strings.vibrationOnlyLabel,
                             subtitle = "Silences audio playback and uses gentle haptics",
                             checked = state.vibrateOnly,
@@ -492,17 +510,17 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = strings.arabicTextSizeLabel,
-                                    fontSize = 14.5.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = "${(state.quranFontScale * 100).toInt()}%",
-                                    fontSize = 12.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                        Text(
+                            text = strings.arabicTextSizeLabel,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "${(state.quranFontScale * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                             }
                             Slider(
                                 value = state.quranFontScale,
@@ -576,7 +594,7 @@ fun SettingsScreen(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -588,12 +606,12 @@ fun SettingsScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text(text = strings.privacyPhilosophyTitle, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Text(text = strings.privacyPhilosophyTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "SALAH is your spiritual companion, designed with pure craft and intention.\n\n• Zero accounts, logins, or cloud tracking\n• Zero ads, zero commercial affiliates\n• Zero analytics SDKs or remote telemetry\n• 100% offline-first on-device calculations\n• All bookmarks and logs are stored privately in your local SQLite database.",
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 18.sp
                         )
@@ -607,8 +625,8 @@ fun SettingsScreen(
     // 1. Language Sheet
     if (showLanguageSheet) {
         ModalBottomSheet(onDismissRequest = { showLanguageSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                Text(text = strings.languageLabel, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(text = strings.languageLabel, style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(14.dp))
                 AppLanguage.values().forEach { appLang ->
                     SelectionSheetItem(
@@ -631,8 +649,8 @@ fun SettingsScreen(
     // 2. Riwayah Sheet
     if (showRiwayahSheet) {
         ModalBottomSheet(onDismissRequest = { showRiwayahSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                Text(text = "Select Riwāyah (Recitation Tradition)", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(text = "Select Riwāyah (Recitation Tradition)", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(14.dp))
                 listOf(
                     Pair("Hafs 'an 'Asim", "Standard worldwide prevalent recitation"),
@@ -658,8 +676,8 @@ fun SettingsScreen(
     // 3. Theme Sheet
     if (showThemeSheet) {
         ModalBottomSheet(onDismissRequest = { showThemeSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                Text(text = "Select App Theme", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(text = "Select App Theme", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(14.dp))
                 listOf(
                     Pair("System Default", "Follows device system settings automatically"),
@@ -685,13 +703,13 @@ fun SettingsScreen(
     if (showLocationSheet) {
         var citySearchQuery by remember { mutableStateOf("") }
         ModalBottomSheet(onDismissRequest = { showLocationSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "Select City Location", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "Select City Location", style = MaterialTheme.typography.titleLarge)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TextButton(
                             onClick = {
@@ -753,8 +771,8 @@ fun SettingsScreen(
     // 5. Method Sheet
     if (showMethodSheet) {
         ModalBottomSheet(onDismissRequest = { showMethodSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                Text(text = "Select Calculation Method", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(text = "Select Calculation Method", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(12.dp))
                 LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
                     items(CalculationMethod.entries) { method ->
@@ -777,8 +795,8 @@ fun SettingsScreen(
     // 6. Madhhab Sheet
     if (showMadhhabSheet) {
         ModalBottomSheet(onDismissRequest = { showMadhhabSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                Text(text = "Asr Juristic Method (Madhhab)", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(text = "Asr Juristic Method (Madhhab)", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(14.dp))
                 Madhhab.entries.forEach { m ->
                     SelectionSheetItem(
@@ -799,13 +817,13 @@ fun SettingsScreen(
     // 7. Adjustments Sheet
     if (showAdjustmentsSheet) {
         ModalBottomSheet(onDismissRequest = { showAdjustmentsSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "Manual Minute Adjustments", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "Manual Minute Adjustments", style = MaterialTheme.typography.titleLarge)
                     TextButton(onClick = { onAdjustmentsChange(PrayerAdjustments()) }) {
                         Text("Reset All")
                     }
@@ -840,9 +858,9 @@ fun SettingsScreen(
     // 8. Hijri Calibration Sheet
     if (showHijriSheet) {
         ModalBottomSheet(onDismissRequest = { showHijriSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
-                Text(text = "Hijri Date Calibration", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(text = "Align with local moonsighting authority declaration", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(text = "Hijri Date Calibration", style = MaterialTheme.typography.titleLarge)
+                Text(text = "Align with local moonsighting authority declaration", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 listOf(-2, -1, 0, 1, 2).forEach { offset ->
@@ -873,9 +891,9 @@ fun SettingsScreen(
             onStopAudioPreview()
             showAdhanSoundSheet = false
         }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                Text(text = "Adhan Recitation Sound", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(text = "Tap the play icon to audition each melody offline", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(text = "Adhan Recitation Sound", style = MaterialTheme.typography.titleLarge)
+                Text(text = "Tap the play icon to audition each melody offline", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(14.dp))
                 listOf(
                     Pair("Makkah Al-Mukarramah", "Majestic Haram Makkah style adhan"),
@@ -907,8 +925,8 @@ fun SettingsScreen(
     // 10. Script Style Sheet
     if (showScriptSheet) {
         ModalBottomSheet(onDismissRequest = { showScriptSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                Text(text = "Quran Arabic Script Style", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(text = "Quran Arabic Script Style", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(14.dp))
                 listOf(
                     Pair("Uthmani (Madani)", "King Fahd Complex Madinah standard typography"),
@@ -936,9 +954,9 @@ fun SettingsScreen(
             onStopAudioPreview()
             showReciterSheet = false
         }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                Text(text = "Quran Audio Reciter", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(text = "Tap play icon to audition tone sample offline", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(text = "Quran Audio Reciter", style = MaterialTheme.typography.titleLarge)
+                Text(text = "Tap play icon to audition tone sample offline", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(14.dp))
                 listOf(
                     Pair("Mishary Rashid Alafasy", "Clear, melodic modern recitation (Kuwait)"),
@@ -969,9 +987,9 @@ fun SettingsScreen(
     // 12. Pre-Prayer Timing Sheet
     if (showPrePrayerSheet) {
         ModalBottomSheet(onDismissRequest = { showPrePrayerSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                Text(text = "Pre-Prayer Reminder Timing", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(text = "Set how early you want a gentle reminder before the Adhan", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(text = "Pre-Prayer Reminder Timing", style = MaterialTheme.typography.titleLarge)
+                Text(text = "Set how early you want a gentle reminder before the Adhan", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(14.dp))
 
                 listOf(
@@ -1011,9 +1029,9 @@ fun SettingsScreen(
     // 13. Per-Prayer Alert Matrix Sheet
     if (showPrayerAlertMatrixSheet) {
         ModalBottomSheet(onDismissRequest = { showPrayerAlertMatrixSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                Text(text = "Individual Prayer Notifications", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(text = "Customize sound or silent mode for each prayer individually", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(text = "Individual Prayer Notifications", style = MaterialTheme.typography.titleLarge)
+                Text(text = "Customize sound or silent mode for each prayer individually", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(12.dp))
 
                 val alertOptions = listOf("Full Adhan", "Takbeer Only", "Gentle Chime", "Vibrate Only", "Silent")
@@ -1044,7 +1062,7 @@ fun SettingsScreen(
                                         modifier = Modifier.size(48.dp)
                                     ) {
                                         Icon(
-                                            imageVector = if (state.audioPreviewPlaying == currentMode) Icons.Default.Stop else Icons.Default.VolumeUp,
+                                            imageVector = if (state.audioPreviewPlaying == currentMode) Icons.Default.Stop else Icons.AutoMirrored.Filled.VolumeUp,
                                             contentDescription = "Audition",
                                             tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(18.dp)
@@ -1060,17 +1078,19 @@ fun SettingsScreen(
                                 Surface(
                                     modifier = Modifier
                                         .weight(1f)
+                                        .heightIn(min = 48.dp)
                                         .clickable { onPrayerAlertModeChange(prayer, opt) }
+                                        .semantics { selected = isChosen }
                                         .testTag("prayer_alert_option_${prayer.name}_${opt.replace(" ", "_")}"),
                                     shape = MaterialTheme.shapes.extraSmall,
                                     color = if (isChosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
                                     border = BorderStroke(1.dp, if (isChosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
                                 ) {
-                                    Box(modifier = Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                                    Box(modifier = Modifier.padding(horizontal = 6.dp, vertical = 14.dp), contentAlignment = Alignment.Center) {
                                         Text(
                                             text = if (opt == "Vibrate Only") "Vibrate" else if (opt == "Gentle Chime") "Chime" else if (opt == "Takbeer Only") "Takbeer" else opt,
-                                            fontSize = 10.sp,
-                                            fontWeight = if (isChosen) FontWeight.Bold else FontWeight.Normal,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = if (isChosen) FontWeight.Bold else FontWeight.Medium,
                                             color = if (isChosen) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                                             maxLines = 1
                                         )
@@ -1091,9 +1111,9 @@ fun SettingsScreen(
             onStopAudioPreview()
             showAdhanTesterSheet = false
         }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
-                Text(text = "Adhan Volume & Audio Tester", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(text = "Adjust the alert loudness and preview the synthesizer tone", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(text = "Adhan Volume & Audio Tester", style = MaterialTheme.typography.titleLarge)
+                Text(text = "Adjust the alert loudness and preview the synthesizer tone", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Row(
@@ -1166,10 +1186,10 @@ fun SettingsScreen(
     // 15. Cache & Ephemeris Manager Sheet
     if (showCacheManagerSheet) {
         ModalBottomSheet(onDismissRequest = { showCacheManagerSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 16.dp)) {
-                Text(text = "Offline Ephemeris Cache Manager", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(text = "On-device solar algorithms calculate 365 days of prayer schedules", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.height(16.dp))
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(text = "Offline Ephemeris Cache Manager", style = MaterialTheme.typography.titleLarge)
+                Text(text = "On-device solar algorithms calculate 365 days of prayer schedules", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(20.dp))
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -1235,10 +1255,10 @@ fun SettingsScreen(
     // 16. Quran Storage Manager Sheet
     if (showQuranStorageSheet) {
         ModalBottomSheet(onDismissRequest = { showQuranStorageSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 16.dp)) {
-                Text(text = "Quran Database & Storage Assets", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(text = "Entire text of the Holy Quran is bundled and queryable 100% offline", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.height(16.dp))
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(text = "Quran Database & Storage Assets", style = MaterialTheme.typography.titleLarge)
+                Text(text = "Entire text of the Holy Quran is bundled and queryable 100% offline", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(20.dp))
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -1280,10 +1300,10 @@ fun SettingsScreen(
     // 17. Compass Diagnostics Sheet
     if (showCompassDiagnosticsSheet) {
         ModalBottomSheet(onDismissRequest = { showCompassDiagnosticsSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 16.dp)) {
-                Text(text = "Compass Sensors & Diagnostics", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(text = "Real-time magnetometer and Kaaba geometric coordinates", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.height(16.dp))
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(text = "Compass Sensors & Diagnostics", style = MaterialTheme.typography.titleLarge)
+                Text(text = "Real-time magnetometer and Kaaba geometric coordinates", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(20.dp))
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -1304,7 +1324,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(
                     text = "Tip: If the heading drifts, wave your device in a figure-8 motion in the air to calibrate magnetic sensors.",
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -1315,8 +1335,8 @@ fun SettingsScreen(
     // 18. Translation Edition Sheet
     if (showTranslationSheet) {
         ModalBottomSheet(onDismissRequest = { showTranslationSheet = false }, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                Text(text = "Quran Translation & Exegesis", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text(text = "Quran Translation & Exegesis", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(14.dp))
                 listOf(
                     Pair("English (Saheeh International)", "Clear, precise contemporary English"),
@@ -1435,7 +1455,7 @@ fun SettingsScreen(
 private fun SectionHeader(title: String) {
     Text(
         text = title,
-        fontSize = 12.sp,
+        style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.Bold,
         letterSpacing = 1.2.sp,
         color = MaterialTheme.colorScheme.primary,
@@ -1454,6 +1474,7 @@ private fun SettingsClickableRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .clickable(onClick = onClick)
             .padding(vertical = 8.dp)
             .testTag(tag),
@@ -1474,13 +1495,13 @@ private fun SettingsClickableRow(
             Column {
                 Text(
                     text = title,
-                    fontSize = 14.5.sp,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = subtitle,
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -1506,6 +1527,7 @@ private fun SettingsToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -1524,13 +1546,13 @@ private fun SettingsToggleRow(
             Column {
                 Text(
                     text = title,
-                    fontSize = 14.5.sp,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = subtitle,
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -1553,12 +1575,15 @@ private fun SelectionSheetItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .clickable(onClick = onClick)
-            .padding(vertical = 4.dp),
+            .semantics { selected = isSelected }
+            .padding(vertical = 4.dp)
+            .testTag("selection_${title.take(24).lowercase().replace(' ', '_')}"),
         shape = MaterialTheme.shapes.small,
         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
         else MaterialTheme.colorScheme.surface,
-        border = if (isSelected) BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)) else null
+        border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)) else null
     ) {
         Row(
             modifier = Modifier
@@ -1570,13 +1595,13 @@ private fun SelectionSheetItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    fontSize = 14.5.sp,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
                     color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = description,
-                    fontSize = 11.5.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -1584,7 +1609,7 @@ private fun SelectionSheetItem(
                 Spacer(modifier = Modifier.width(8.dp))
                 Icon(
                     imageVector = Icons.Default.CheckCircle,
-                    contentDescription = null,
+                    contentDescription = "Selected",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
                 )
@@ -1605,12 +1630,14 @@ private fun SelectionSheetItemWithPreview(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .clickable(onClick = onClick)
+            .semantics { selected = isSelected }
             .padding(vertical = 4.dp),
         shape = MaterialTheme.shapes.small,
         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
         else MaterialTheme.colorScheme.surface,
-        border = if (isSelected) BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)) else null
+        border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)) else null
     ) {
         Row(
             modifier = Modifier
@@ -1622,13 +1649,13 @@ private fun SelectionSheetItemWithPreview(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    fontSize = 14.5.sp,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
                     color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = description,
-                    fontSize = 11.5.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -1649,7 +1676,7 @@ private fun SelectionSheetItemWithPreview(
                     Spacer(modifier = Modifier.width(4.dp))
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
-                        contentDescription = null,
+                        contentDescription = "Selected",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                     )

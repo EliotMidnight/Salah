@@ -7,11 +7,6 @@ import org.junit.Test
 
 class ExampleUnitTest {
   @Test
-  fun addition_isCorrect() {
-    assertEquals(4, 2 + 2)
-  }
-
-  @Test
   fun relativeQiblaAngle_calculation() {
     // Exact match
     val direct = QiblaEngine.calculateRelativeAngle(110f, 110f)
