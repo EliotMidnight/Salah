@@ -204,6 +204,21 @@ Release notes:
 - Qibla accuracy depends on the device magnetometer; the app shows
   interference diagnostics when the field looks unreliable.
 
+## Credits
+
+**Icons by Salah Icons — CC BY 4.0**
+<https://creativecommons.org/licenses/by/4.0/>
+
+The per-prayer, Quran, mosque and sky glyphs in `app/src/main/res/drawable*/salah_*.xml`
+come from the Salah Icons set. They are generated from the set's `themeable/` SVGs by
+`tools/convert_salah_icons.py`, which maps the set's six semantic colour tokens
+(`--ink`, `--tone`, `--paper`, `--soft-line`, `--mid-line`) onto this app's palette and
+emits a light and a dark variant. Re-run it after changing the palette:
+
+```bash
+python3 tools/convert_salah_icons.py
+```
+
 ## License
 
 Copyright 2026 The SALAH Project Authors — Apache License 2.0. See [LICENSE](LICENSE).

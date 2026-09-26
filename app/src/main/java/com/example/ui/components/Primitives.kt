@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,6 +57,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.ui.theme.DotShape
 import com.example.ui.theme.Space
+import com.example.ui.theme.QuranShape
 import com.example.ui.theme.Tonal
 import com.example.ui.theme.layoutMetrics
 
@@ -225,6 +227,7 @@ fun EmptyState(
     modifier: Modifier = Modifier,
     message: String? = null,
     icon: ImageVector? = null,
+    painter: androidx.compose.ui.graphics.painter.Painter? = null,
     action: (@Composable () -> Unit)? = null
 ) {
     val space = Space.current
@@ -234,15 +237,27 @@ fun EmptyState(
             .padding(vertical = space.xxxl, horizontal = space.lg),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (icon != null) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.outline,
-                modifier = Modifier
-                    .size(32.dp)
-                    .clearAndSetSemantics { }
-            )
+        if (icon != null || painter != null) {
+            val iconModifier = Modifier
+                .size(32.dp)
+                .clearAndSetSemantics { }
+            val iconTint = MaterialTheme.colorScheme.outline
+            val vector = icon
+            if (painter != null) {
+                Icon(
+                    painter = painter,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = iconModifier
+                )
+            } else if (vector != null) {
+                Icon(
+                    imageVector = vector,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = iconModifier
+                )
+            }
             Spacer(Modifier.height(space.md))
         }
         Text(
@@ -681,4 +696,80 @@ fun SearchInput(
             .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
             .focusRequester(focusRequester)
     )
+}
+
+/**
+ * A floating row of pill tabs, drawn over the content beneath it.
+ *
+ * The Quran library uses this instead of a Material `TabRow`. The difference
+ * matters: a `TabRow` is a full-width band with an underline, which claims
+ * horizontal space and adds a second rule to the page. Pills carry their own
+ * shape, so the row reads as controls sitting on the content rather than as
+ * another structural element - and because each pill has a visible boundary,
+ * the selected state does not need an indicator to be legible.
+ *
+ * Callers must reserve the row's height themselves (see `PillTabBarHeight`)
+ * before their scrolling content, otherwise the first row can slide underneath.
+ */
+val PillTabBarHeight = 48.dp
+
+@Composable
+fun PillTabRow(
+    tabs: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val space = Space.current
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = space.lg, vertical = space.sm),
+        horizontalArrangement = Arrangement.spacedBy(space.sm)
+    ) {
+        tabs.forEachIndexed { index, label ->
+            val selected = index == selectedIndex
+            Surface(
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surface
+                },
+                shape = QuranShape.pill,
+                border = if (selected) {
+                    BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                } else {
+                    BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = PillTabBarHeight)
+                    .selectable(
+                        selected = selected,
+                        role = Role.Tab,
+                        onClick = { onSelect(index) }
+                    )
+                    .semantics { stateDescription = label }
+            ) {
+                Box(
+                    modifier = Modifier.padding(horizontal = space.xs, vertical = space.sm),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
 }

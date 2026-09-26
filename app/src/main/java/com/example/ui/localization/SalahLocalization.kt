@@ -235,7 +235,7 @@ data class UiStrings(
      * `ClassFormatError: Too many arguments in method signature`. A second
      * data class keeps both well inside the limit.
      *
-     * Read them as `strings.more.someLabel`. Every value here replaces an
+     * Read them as `strings.someLabel`. Every value here replaces an
      * English literal that used to sit directly in a layout file, which is
      * exactly why none of them could ever be translated. They are English
      * defaults; add a per-language override as each is translated.
@@ -409,6 +409,39 @@ data class UiStringsMore(
     val juzWord: String = "Juz’",
     val pageWord: String = "Page",
     val privacyNote: String = "Prayer times, the Qibla direction and the Quran are all calculated on this device. Nothing is uploaded.",
+    val referenceTab: String = "Reference",
+    val allSurahsLabel: String = "All surahs",
+    val verseOf: String = "Verse %1\$d of %2\$d",
+    val searchHintTitle: String = "Search the Quran",
+    val searchHintMessage: String = "Find a surah by name or meaning, or a verse by its Arabic or English text.",
+    val surahLabel: String = "Surah",
+    val juzLabel: String = "Juz\u2019",
+    val selectLayoutTitle: String = "Reading layout",
+    val selectLayoutSubtitle: String = "Per verse suits study; continuous suits reading straight through.",
+    val layoutPerVerse: String = "Per verse",
+    val layoutContinuous: String = "Continuous",
+    val verseActionsLabel: String = "Verse actions",
+    val readingOptions: String = "Reading options",
+    val closeReader: String = "Back to surahs",
+    val referenceLabel: String = "Reference",
+    val translationShownFor: String = "Showing %s",
+    val selectVerse: String = "Select verse",
+    val cardsModeLabel: String = "Cards",
+    val continuousModeLabel: String = "Continuous",
+    val readingSettingsLabel: String = "Reading settings",
+    val backToSurahsLabel: String = "Back to surahs",
+    val copyVerseLabel: String = "Copy verse",
+    val shareVerseLabel: String = "Share verse",
+    val verseCopiedToast: String = "Verse copied",
+    val shareChooserTitle: String = "Share verse via",
+    val translationSectionTitle: String = "Translation",
+    val showTranslationLabel: String = "Show",
+    val hideTranslationLabel: String = "Hide",
+    val translationCreditLine: String = "English — Saheeh International",
+    val tapVerseHint: String = "Tap a verse to inspect it",
+    val popularSurahsLabel: String = "Popular surahs",
+    val searchVersesHint: String = "Search Arabic text or English translation...",
+    val translationNotAvailable: String = "Translation not available",
 )
 
 val EnglishStrings = UiStrings(
@@ -1655,22 +1688,6 @@ val UiStrings.ayahLabel: String
  * Quran reader strings (nour-style reading experience).
  * English defaults; other languages fall back to English until translated.
  */
-val UiStrings.cardsModeLabel: String get() = "Cards"
-val UiStrings.continuousModeLabel: String get() = "Continuous"
-val UiStrings.readingSettingsLabel: String get() = "Reading settings"
-val UiStrings.backToSurahsLabel: String get() = "Back to surahs"
-val UiStrings.copyVerseLabel: String get() = "Copy verse"
-val UiStrings.shareVerseLabel: String get() = "Share verse"
-val UiStrings.verseCopiedToast: String get() = "Verse copied"
-val UiStrings.shareChooserTitle: String get() = "Share verse via"
-val UiStrings.translationSectionTitle: String get() = "Translation"
-val UiStrings.showTranslationLabel: String get() = "Show"
-val UiStrings.hideTranslationLabel: String get() = "Hide"
-val UiStrings.translationCreditLine: String get() = "English — Saheeh International"
-val UiStrings.tapVerseHint: String get() = "Tap a verse to inspect it"
-val UiStrings.popularSurahsLabel: String get() = "Popular surahs"
-val UiStrings.searchVersesHint: String get() = "Search Arabic text or English translation..."
-val UiStrings.translationNotAvailable: String get() = "Translation not available"
 
 fun UiStrings.prayerName(prayer: com.example.data.model.Prayer): String {
     return when (prayer) {

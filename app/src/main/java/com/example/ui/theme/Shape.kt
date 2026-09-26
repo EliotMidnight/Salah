@@ -33,3 +33,22 @@ val SheetShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
 
 /** Circular status dots, avatars and count badges. */
 val DotShape = CircleShape
+
+/**
+ * The Quran reading page runs rounder than the rest of the app.
+ *
+ * The library and the reader are places a person sits with rather than scans, so
+ * they get a softer silhouette than a settings list does: 20dp cards, 12dp tiles
+ * and true pills for anything selectable. Still only three values, so it reads as
+ * a deliberate variant of the same system rather than a second one.
+ */
+object QuranShape {
+    /** Surah and verse cards, the continue-reading hero. */
+    val card = RoundedCornerShape(20.dp)
+
+    /** The number badge on a surah row, small chips. */
+    val tile = RoundedCornerShape(12.dp)
+
+    /** Every selectable control: tabs, option rows, the layout toggle. */
+    val pill = CircleShape
+}

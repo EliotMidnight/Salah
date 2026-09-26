@@ -1,29 +1,28 @@
 package com.example.data.model
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bedtime
-import androidx.compose.material.icons.filled.Brightness5
-import androidx.compose.material.icons.filled.Brightness6
-import androidx.compose.material.icons.filled.Brightness7
-import androidx.compose.material.icons.filled.NightsStay
-import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.annotation.DrawableRes
+import com.example.R
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 
+/**
+ * @param iconRes per-prayer artwork from the Salah Icons set (CC BY 4.0). Each
+ *   prayer gets its own glyph rather than a generic sun/moon, which is what
+ *   makes the schedule scannable at a glance instead of requiring the name.
+ */
 enum class Prayer(
     val englishName: String,
     val arabicName: String,
-    val icon: ImageVector,
+    @DrawableRes val iconRes: Int,
     val isFard: Boolean = true
 ) {
-    FAJR("Fajr", "الفجر", Icons.Default.Brightness6),
-    SUNRISE("Sunrise", "الشروق", Icons.Default.Brightness5, isFard = false),
-    DHUHR("Dhuhr", "الظهر", Icons.Default.WbSunny),
-    ASR("Asr", "العصر", Icons.Default.Brightness7),
-    MAGHRIB("Maghrib", "المغرب", Icons.Default.Brightness5),
-    ISHA("Isha", "العشاء", Icons.Default.NightsStay)
+    FAJR("Fajr", "الفجر", R.drawable.salah_times_fajr),
+    SUNRISE("Sunrise", "الشروق", R.drawable.salah_times_sunrise, isFard = false),
+    DHUHR("Dhuhr", "الظهر", R.drawable.salah_times_dhuhr),
+    ASR("Asr", "العصر", R.drawable.salah_times_asr),
+    MAGHRIB("Maghrib", "المغرب", R.drawable.salah_times_maghrib),
+    ISHA("Isha", "العشاء", R.drawable.salah_times_isha)
 }
 
 data class PrayerTime(

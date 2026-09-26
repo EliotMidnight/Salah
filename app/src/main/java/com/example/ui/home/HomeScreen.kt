@@ -51,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -174,7 +175,6 @@ fun HomeScreen(
     } else {
         MaterialTheme.colorScheme.onSurface
     }
-    val heroMuted = if (heroOnSky) heroText.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant
 
     Box(modifier = modifier.fillMaxSize()) {
         if (state.livingSkyEnabled) {
@@ -192,7 +192,7 @@ fun HomeScreen(
         } else {
             StaticSkyBackground(
                 palette = palette,
-                isDark = isDark,
+                page = MaterialTheme.colorScheme.background,
                 modifier = Modifier.testTag("static_sky")
             )
         }
@@ -218,8 +218,7 @@ fun HomeScreen(
                     ),
                     skyLabel = skyPeriod.title,
                     onClick = { showObservatory = true },
-                    contentColor = heroText,
-                    mutedColor = heroMuted
+                    contentColor = heroText
                 )
 
                 if (state.audioPreviewPlaying != null) {
@@ -242,8 +241,7 @@ fun HomeScreen(
                     state = state,
                     timeFormatter = timeFormatter,
                     onOpenPrayerTimes = onOpenPrayerTimes,
-                    contentColor = heroText,
-                    mutedColor = heroMuted
+                    contentColor = heroText
                 )
 
                 Spacer(Modifier.height(space.xl))
@@ -353,7 +351,7 @@ private fun HomeTopBar(
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
-    val semantic = Tonal.colors
+    val strings = LocalStrings.current
 
     Row(
         modifier = modifier
@@ -390,8 +388,8 @@ private fun HomeTopBar(
             } else if (!isOnline) {
                 Spacer(Modifier.width(space.sm))
                 StatusDot(
-                    color = semantic.warning,
-                    description = "Offline"
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    description = strings.offlineStatus
                 )
             }
         }
@@ -406,7 +404,6 @@ private fun DateBlock(
     skyLabel: String,
     onClick: () -> Unit,
     contentColor: Color,
-    mutedColor: Color,
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
@@ -425,14 +422,14 @@ private fun DateBlock(
                 text = hijriArabic,
                 style = MaterialTheme.typography.bodyMedium,
                 fontFamily = ArabicFamily,
-                color = mutedColor
+                color = contentColor
             )
         }
         Spacer(Modifier.height(space.xs))
         Text(
             text = skyLabel,
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+            color = contentColor,
             modifier = Modifier
                 .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
                 .clip(MaterialTheme.shapes.extraSmall)
@@ -454,7 +451,6 @@ private fun NextPrayerBlock(
     timeFormatter: DateTimeFormatter,
     onOpenPrayerTimes: () -> Unit,
     contentColor: Color,
-    mutedColor: Color,
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
@@ -468,7 +464,7 @@ private fun NextPrayerBlock(
         Text(
             text = strings.nextPrayerLabel,
             style = MaterialTheme.typography.labelLarge,
-            color = mutedColor
+            color = contentColor
         )
 
         if (next == null) {
@@ -497,11 +493,7 @@ private fun NextPrayerBlock(
             )
         }
 
-        Countdown(
-            value = state.countdownString,
-            contentColor = contentColor,
-            mutedColor = mutedColor
-        )
+        Countdown(value = state.countdownString, contentColor = contentColor)
 
         Spacer(Modifier.height(space.xs))
 
@@ -522,13 +514,13 @@ private fun NextPrayerBlock(
             Text(
                 text = strings.viewDetails,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary
+                color = contentColor
             )
             Spacer(Modifier.width(space.xs))
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = contentColor,
                 modifier = Modifier
                     .size(16.dp)
                     .clearAndSetSemantics { }
@@ -548,7 +540,6 @@ private fun NextPrayerBlock(
 private fun Countdown(
     value: String,
     contentColor: Color,
-    mutedColor: Color,
     modifier: Modifier = Modifier
 ) {
     val strings = LocalStrings.current
@@ -592,7 +583,6 @@ private fun AlertStatusRow(
 ) {
     val space = Space.current
     val strings = LocalStrings.current
-    val semantic = Tonal.colors
 
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -621,7 +611,7 @@ private fun AlertStatusRow(
                     Icons.AutoMirrored.Filled.VolumeUp
                 },
                 contentDescription = null,
-                tint = if (isSilent) semantic.warning else contentColor,
+                tint = contentColor,
                 modifier = Modifier
                     .size(18.dp)
                     .clearAndSetSemantics { }
@@ -630,7 +620,7 @@ private fun AlertStatusRow(
             Text(
                 text = if (isSilent) strings.silentModeOn else strings.alertsActive,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (isSilent) semantic.warning else contentColor
+                color = contentColor
             )
         }
 
@@ -678,6 +668,19 @@ private fun PrayerRow(
                 .padding(vertical = space.sm),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Icon(
+                painter = painterResource(prayer.iconRes),
+                contentDescription = null,
+                tint = if (isNext) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier
+                    .padding(end = space.md)
+                    .size(26.dp)
+                    .clearAndSetSemantics { }
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -703,7 +706,7 @@ private fun PrayerRow(
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = ArabicFamily,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                    )
             }
 
             Text(

@@ -49,6 +49,14 @@ tasks.withType<Test>().configureEach {
   if (!robolectricSupported) {
     robolectricTestClasses.forEach { cls -> filter { excludeTestsMatching(cls) } }
   }
+  // Robolectric 4.15+ loads a native runtime per fork. With four workers on a
+  // 4 GB machine the forks race each other extracting and binding it, and the
+  // suite fails with "Unable to load Robolectric native runtime library" or an
+  // UnsatisfiedLinkError on RenderNode - reproducibly when the whole suite runs,
+  // and never when a single class runs alone. One fork at a time costs a little
+  // wall clock and makes the result deterministic.
+  maxParallelForks = 1
+  forkEvery = 0
 }
 
 android {
