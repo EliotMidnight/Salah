@@ -1,11 +1,10 @@
-package com.example
+package com.example.engine
 
-import com.example.engine.MagneticFieldStatus
-import com.example.engine.QiblaEngine
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
-class ExampleUnitTest {
+/** Pure-JVM tests for the on-device Qibla bearing maths. */
+class QiblaEngineTest {
   @Test
   fun relativeQiblaAngle_calculation() {
     // Exact match

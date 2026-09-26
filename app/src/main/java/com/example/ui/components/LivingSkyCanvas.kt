@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.example.data.model.UserLocation
+import com.example.ui.theme.ExpressiveMotion
 import com.example.engine.AstronomicalSky
 import com.example.engine.MoonPhaseInfo
 import com.example.engine.QiblaEngine
@@ -105,7 +106,7 @@ fun LivingSkyCanvas(
     }
 
     // Smooth color transitions across sky changes
-    val colorAnimSpec = tween<Color>(durationMillis = 1600, easing = FastOutSlowInEasing)
+    val colorAnimSpec = tween<Color>(durationMillis = ExpressiveMotion.duration(1600), easing = FastOutSlowInEasing)
     val animatedZenith by animateColorAsState(targetValue = rawPalette.zenithColor, animationSpec = colorAnimSpec, label = "zenith")
     val animatedMidSky by animateColorAsState(targetValue = rawPalette.midSkyColor, animationSpec = colorAnimSpec, label = "midSky")
     val animatedHorizon by animateColorAsState(targetValue = rawPalette.horizonColor, animationSpec = colorAnimSpec, label = "horizon")
@@ -121,15 +122,22 @@ fun LivingSkyCanvas(
 
     // 3. Infinite animations for living atmosphere — only animate what this sky period needs.
     // Night twinkle/meteor paused during full day; sun rays/corona paused when sun is below horizon.
+    // When the user has reduced motion enabled, none of these loops start: the sky
+    // renders the same scene statically (large, slow, full-screen movement is the
+    // classic vestibular trigger, so this matters more here than almost anywhere).
     val needStars = rawPalette.starAlpha > 0.03f || rawPalette.isNight || sunAltitude < 6f
     val needSunFx = sunAltitude > -8f
+    val reducedMotion = !ExpressiveMotion.allowContinuous
     val atmosphere = rememberInfiniteTransition(label = "livingAtmosphere")
 
     val twinkleTime by atmosphere.animateFloat(
         initialValue = 0f,
         targetValue = (2 * PI).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (needStars) 3600 else 600_000, easing = LinearEasing),
+            animation = tween(
+                durationMillis = if (reducedMotion) 1 else if (needStars) 3600 else 600_000,
+                easing = LinearEasing
+            ),
             repeatMode = RepeatMode.Restart
         ),
         label = "twinkle"
@@ -139,7 +147,10 @@ fun LivingSkyCanvas(
         initialValue = 0.94f,
         targetValue = if (needSunFx) 1.08f else 1.0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (needSunFx) 4200 else 600_000, easing = FastOutSlowInEasing),
+            animation = tween(
+                durationMillis = if (reducedMotion) 1 else if (needSunFx) 4200 else 600_000,
+                easing = FastOutSlowInEasing
+            ),
             repeatMode = RepeatMode.Reverse
         ),
         label = "coronaPulse"
@@ -149,7 +160,7 @@ fun LivingSkyCanvas(
         initialValue = 0f,
         targetValue = if (needSunFx) 360f else 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 120_000, easing = LinearEasing),
+            animation = tween(durationMillis = if (reducedMotion) 1 else 120_000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "rayRotation"
@@ -159,7 +170,7 @@ fun LivingSkyCanvas(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 65_000, easing = LinearEasing),
+            animation = tween(durationMillis = if (reducedMotion) 1 else 65_000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "cloudDrift"
@@ -170,7 +181,10 @@ fun LivingSkyCanvas(
         initialValue = 0f,
         targetValue = if (needStars) 1f else 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (needStars) 14_000 else 600_000, easing = LinearEasing),
+            animation = tween(
+                durationMillis = if (reducedMotion) 1 else if (needStars) 14_000 else 600_000,
+                easing = LinearEasing
+            ),
             repeatMode = RepeatMode.Restart
         ),
         label = "meteorCycle"

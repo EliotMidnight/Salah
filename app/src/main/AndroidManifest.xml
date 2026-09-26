@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Network: the ONLY network use in the app is streaming per-verse Quran
+         recitation audio from everyayah.com (see QuranAudioPlayer). Prayer times,
+         Qibla, the Quran text and its translation are all on-device; there is no
+         account, no analytics and no tracking. ACCESS_NETWORK_STATE lets the
+         player check reachability so it can fall back to the offline chime
+         instead of hanging when there is no connection. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -29,7 +34,6 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name"
             android:theme="@style/Theme.MyApplication">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

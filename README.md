@@ -15,9 +15,10 @@ Built with Kotlin and Jetpack Compose (Material 3). No account, no tracking, wor
 
 ## Requirements
 
-- Android Studio (recent) with JDK 17+
+- Android Studio (recent) with JDK 17+ (JDK 21 also verified)
 - Android SDK with API 36 (compile/target) and build-tools 36
 - `minSdk 24` — runs on Android 7.0+
+- No separate Gradle install: the Gradle wrapper is checked in (`./gradlew`, Gradle 9.3.1)
 
 ## Quick start
 
@@ -37,12 +38,8 @@ cd Salah
      -storepass android -keypass android \
      -dname "CN=Android Debug, O=Android, C=US"
    ```
-3. Copy the secrets template (placeholders are fine for a debug build):
-   ```bash
-   cp .env.example .env
-   ```
-   `google-services.json` is optional — the build warns and continues without it.
-4. Build and install the debug APK:
+3. Build and install the debug APK. No `.env` or `google-services.json` is needed —
+   the app has no server and reads no secrets at build time:
    ```bash
    ./gradlew assembleDebug
    adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -96,6 +93,122 @@ app/src/test/                  # JVM unit tests incl. QuranCorpusTest
 ./gradlew testDebugUnitTest
 ```
 
-Pure-JVM tests (including the 6,236-verse corpus integrity test) run anywhere.
-Robolectric/screenshot tests require an x86_64 host — they cannot run on ARM devices
-(`native runtime is not supported on Linux (aarch64)`).
+24 pure-JVM tests (Quran corpus integrity, prayer math, Qibla bearing, location
+validation, sky-text contrast) run on any host, including ARM64 Linux/Termux.
+
+Three Robolectric classes (`ExampleRobolectricTest`, `GreetingScreenshotTest`)
+need an **x86_64 Linux or macOS** host: Robolectric 4.15+ requires its native
+runtime, which has no ARM64 Linux build. The build detects this and skips exactly
+those classes on ARM64 with a loud log line, so the suite stays green for the
+right reason instead of failing for a platform one. Run them on CI or an x86_64
+machine to exercise them:
+
+```bash
+./gradlew testDebugUnitTest   # pure-JVM suites on any host
+./gradlew recordRoborazziDebug  # regenerate screenshot baselines (x86_64 only)
+```
+
+## Configuration & environment
+
+| Variable / file | Required | Notes |
+| --- | --- | --- |
+| `local.properties` (`sdk.dir`) | Yes, local builds | Not committed. Points Gradle at your Android SDK. |
+| `debug.keystore` | Yes, debug builds | Not committed. Generate with the `keytool` command above. |
+| `KEYSTORE_PATH`, `STORE_PASSWORD`, `KEY_PASSWORD` (env) | Release builds | Release signing credentials. Never commit; provide via CI secrets. |
+
+There is no `.env` file, no `google-services.json` and no secret-injection
+Gradle plugin: the app has no server, no Firebase and no AI API, so it reads
+nothing from disk at build time. `.env.example` documents the signing variables
+for reference. No other secrets exist. Debug signing uses the well-known `android`/`androiddebugkey`
+credentials, which are standard for debug builds and never used for release.
+
+## Privacy
+
+- No account, no analytics, no tracking, no ads.
+- Prayer math, Hijri calendar, Qibla bearing, and the full Quran corpus run on-device.
+- Location is used only to compute prayer times/Qibla and stays on the device
+  (SharedPreferences + local Room cache). It is included in the standard OS app
+  backup (`res/xml/data_extraction_rules.xml`); uninstall wipes it.
+- The only network use is streaming verse audio from `https://everyayah.com`
+  (Mishary Alafasy, 128 kbps) on demand. If the stream fails or times out
+  (12 s watchdog), the app falls back to a gentle offline tone and stays usable.
+
+## Production build & release
+
+Debug APK (installable directly):
+
+```bash
+./gradlew assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+Signed release bundle/APK (requires the env credentials above):
+
+```bash
+export KEYSTORE_PATH=/path/to/my-upload-key.jks
+export STORE_PASSWORD='***'
+export KEY_PASSWORD='***'
+./gradlew assembleRelease   # APK
+./gradlew bundleRelease     # AAB for Play publishing
+```
+
+If `KEYSTORE_PATH` is unset or the file is missing, the build logs a warning and
+signs with the local `debug.keystore` so `assembleRelease` still succeeds for
+verification. **Never publish a debug-signed build** — confirm the warning is
+absent in your CI log.
+
+Release notes:
+
+- `minSdk 24` (Android 7.0+), `target/compile SDK 36`.
+- R8 minification is off (`isMinifyEnabled = false`) — a deliberate choice to keep
+  the Compose/Room release stable without a per-rule shrink profile.
+- `versionCode`/`versionName` live in `app/build.gradle.kts` — bump both per release.
+- Exact-alarm scheduling degrades gracefully: if the user denies
+  `SCHEDULE_EXACT_ALARM`, alarms fall back to inexact delivery.
+- Notifications require the runtime `POST_NOTIFICATIONS` grant (Android 13+);
+  prayer times themselves always work without it.
+
+## Accessibility
+
+- **Reduced motion**: when the system animation scale is 0 (*Remove animations* /
+  developer setting), the living sky renders the same scene statically — the
+  twinkling starfield, drifting clouds, sun corona and ray rotation all stop
+  looping, and every screen transition collapses to an instant change. This
+  matters more here than in most apps, because large-area, slow, full-screen
+  movement is exactly the pattern that triggers vestibular symptoms. See
+  `SalahReduceMotion` in `ui/theme/Motion.kt`; every spec routes through
+  `ExpressiveMotion.duration(...)`.
+- **Adaptive text over the sky**: text drawn on the living sky picks black or
+  white per element by sampling the rendered background and computing the WCAG
+  contrast ratio, so the countdown stays legible at every hour
+  (`AdaptiveSkyText.kt`, unit-tested).
+- **Touch targets** are 48 dp minimum; layouts use wrapping rows and bounded
+  content widths so they survive large font scales and small screens.
+- **RTL** is supported across all 11 languages.
+
+## Known limitations
+
+- Verse audio needs connectivity; everything else is offline.
+- Robolectric and screenshot tests need an x86_64 host; they are skipped
+  automatically on ARM64 (see Tests above).
+- Time-zone offsets use a small built-in table for known countries
+  (Morocco, Saudi Arabia, Egypt, Turkey, UK, US) and the device zone otherwise;
+  travelers crossing zones should re-open the app so times recompute.
+- Custom coordinates are validated to -90…+90 / -180…+180. Above the Arctic
+  circle (or below the Antarctic circle) during polar day/night the sun never
+  reaches some twilight angles, so the engine applies the standard
+  nearest-latitude (`aqrab al-bilad`) fallback: times are computed at the
+  closest latitude where all angles resolve, keeping the day ordered and the
+  next-prayer countdown correct. Users there should still confirm with their
+  local mosque timetable.
+- Qibla accuracy depends on the device magnetometer; the app shows
+  interference diagnostics when the field looks unreliable.
+
+## License
+
+Copyright 2026 The SALAH Project Authors — Apache License 2.0. See [LICENSE](LICENSE).
+
+The bundled Quran text and metadata come from the Tanzil Project (CC BY 3.0) and the
+English translation from Saheeh International; attribution is preserved in
+`app/src/main/resources/quran/SOURCES.md`. Verse audio is streamed from
+everyayah.com at request time and is not redistributed in the APK.

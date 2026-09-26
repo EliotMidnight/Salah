@@ -47,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,7 +69,8 @@ fun SalahTopBar(
     isSyncing: Boolean = false,
     onRefreshClick: (() -> Unit)? = null,
     showBrand: Boolean = true,
-    showSettings: Boolean = true
+    showSettings: Boolean = true,
+    compact: Boolean = false
 ) {
     val successColors = LocalSuccessColors.current
 
@@ -77,7 +79,10 @@ fun SalahTopBar(
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.statusBars)
             .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top))
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(
+                horizontal = if (compact) 8.dp else 16.dp,
+                vertical = if (compact) 4.dp else 12.dp
+            ),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -113,7 +118,12 @@ fun SalahTopBar(
                         ),
                         CircleShape
                     )
-                    .clickable(enabled = onRefreshClick != null) { onRefreshClick?.invoke() }
+                    .clickable(
+                        enabled = onRefreshClick != null,
+                        role = Role.Button,
+                        onClickLabel = "Refresh prayer data",
+                        onClick = { onRefreshClick?.invoke() }
+                    )
                     .padding(horizontal = 12.dp, vertical = 4.dp)
                     .testTag("sync_status_badge"),
                 contentAlignment = Alignment.Center
@@ -134,7 +144,10 @@ fun SalahTopBar(
                                     initialValue = 0f,
                                     targetValue = 360f,
                                     animationSpec = infiniteRepeatable(
-                                        animation = tween(durationMillis = 1000, easing = LinearEasing),
+                                        animation = tween(
+                                            durationMillis = ExpressiveMotion.duration(1000),
+                                            easing = LinearEasing
+                                        ),
                                         repeatMode = RepeatMode.Restart
                                     ),
                                     label = "sync_spin"
@@ -208,7 +221,7 @@ fun SalahTopBar(
                         ),
                         Shapes.small
                     )
-                    .clickable(onClick = onLocationClick)
+                    .clickable(role = Role.Button, onClickLabel = "Change location", onClick = onLocationClick)
                     .padding(horizontal = 14.dp, vertical = 8.dp)
                     .testTag("location_chip"),
                 contentAlignment = Alignment.Center

@@ -11,7 +11,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -55,6 +54,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -73,9 +73,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
@@ -165,11 +169,39 @@ fun HomeScreen(
     val nextPt = state.nextPrayer
     val prevPt = state.previousPrayer
     val onSkyColor = activeSkyPeriod.contentOnSkyColor
+    var rootWidthPx by remember { mutableStateOf(0f) }
+    var rootHeightPx by remember { mutableStateOf(0f) }
+    var topBarBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
+    var dateBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
+    var heroBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
+    var periodBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
+    var sectionBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
+    var continueBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
+    val rawSkyPalette = remember(activeSunPosition?.altitude, activeSunPosition?.azimuth) {
+        AstronomicalSky.calculateContinuousSkyColors(
+            activeSunPosition?.altitude ?: 0f,
+            (activeSunPosition?.azimuth ?: 0f) > 180f
+        )
+    }
+    val skyTextResolver = remember(rawSkyPalette, activeSunPosition, rootWidthPx, rootHeightPx) {
+        SkyTextColorResolver(rawSkyPalette, activeSunPosition, rootWidthPx, rootHeightPx)
+    }
+    val topTextTarget = if (topBarBounds.width > 0f) skyTextResolver.colorForBounds(topBarBounds) else onSkyColor
+    val dateTextTarget = if (dateBounds.width > 0f) skyTextResolver.colorForBounds(dateBounds) else onSkyColor
+    val heroTextTarget = if (heroBounds.width > 0f) skyTextResolver.colorForBounds(heroBounds) else onSkyColor
+    val periodTextTarget = if (periodBounds.width > 0f) skyTextResolver.colorForBounds(periodBounds) else onSkyColor
+    val sectionTextTarget = if (sectionBounds.width > 0f) skyTextResolver.colorForBounds(sectionBounds) else onSkyColor
+    val continueTextTarget = if (continueBounds.width > 0f) skyTextResolver.colorForBounds(continueBounds) else onSkyColor
+    val topTextColor = rememberAdaptiveSkyTextColor(topTextTarget)
+    val dateTextColor = rememberAdaptiveSkyTextColor(dateTextTarget)
+    val heroTextColor = rememberAdaptiveSkyTextColor(heroTextTarget)
+    val periodTextColor = rememberAdaptiveSkyTextColor(periodTextTarget)
+    val sectionTextColor = rememberAdaptiveSkyTextColor(sectionTextTarget)
+    val continueTextColor = rememberAdaptiveSkyTextColor(continueTextTarget)
 
-    // Ambient contrast shadow to ensure crisp legibility over dynamic sky gradients
-    val textShadowColor = remember(activeSkyPeriod.isNight) {
-        if (activeSkyPeriod.isNight) Color.Black.copy(alpha = 0.75f)
-        else Color.White.copy(alpha = 0.65f)
+    val textShadowColor = remember(heroTextColor) {
+        if (heroTextColor.luminance() > 0.45f) Color.Black.copy(alpha = 0.55f)
+        else Color.White.copy(alpha = 0.60f)
     }
     val textShadow = remember(textShadowColor) {
         Shadow(
@@ -186,7 +218,14 @@ fun HomeScreen(
         )
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .onSizeChanged { size ->
+                rootWidthPx = size.width.toFloat()
+                rootHeightPx = size.height.toFloat()
+            }
+    ) {
         // Living Sky Canvas (Full screen background transitioning continuously with time & location)
         LivingSkyCanvas(
             skyPeriod = activeSkyPeriod,
@@ -198,24 +237,6 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("living_astronomical_sky_canvas")
-        )
-
-        // Cinematic legibility scrim: shields the camera-hole zone and the hero
-        // countdown from bright sky wash, and grounds the bottom above the nav bar.
-        // No click handling — touches pass straight through to content.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = 0.55f),
-                        0.22f to Color.Black.copy(alpha = 0.28f),
-                        0.42f to Color.Black.copy(alpha = 0.12f),
-                        0.62f to Color.Black.copy(alpha = 0.08f),
-                        0.82f to Color.Black.copy(alpha = 0.22f),
-                        1f to Color.Black.copy(alpha = 0.45f)
-                    )
-                )
         )
 
         Column(
@@ -232,409 +253,411 @@ fun HomeScreen(
             ) {
                 // Minimalist Top Bar on Sky without SALAH title or Settings icon on Today screen
                 SalahTopBar(
+                    modifier = Modifier.onGloballyPositioned { topBarBounds = it.boundsInRoot() },
                     location = state.location,
                     onLocationClick = onLocationClick,
                     onSettingsClick = onSettingsClick,
                     isTransparentOnSky = true,
-                    contentColor = onSkyColor,
+                    contentColor = topTextColor,
                     isOnline = state.isOnline,
                     isSyncing = state.isSyncing,
                     onRefreshClick = onRefreshClick,
                     showBrand = false,
-                    showSettings = false
+                    showSettings = false,
+                    compact = true
                 )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-            // Minimalist Date Sanctuary (Harmonizing Hijri & Gregorian, uncrowded and serene with enhanced contrast)
-            Column(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .testTag("date_sanctuary_card"),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(horizontal = 12.dp)
+                    .testTag("today_overview_card"),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.06f),
+                shape = MaterialTheme.shapes.large
             ) {
-                // Prominent Arabic Calligraphic Hijri Date
-                state.hijriDate?.let {
-                    Text(
-                        text = it.formatArabic(),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = onSkyColor,
-                        style = TextStyle(shadow = textShadow),
-                        fontFamily = FontFamily.Serif,
-                        letterSpacing = 0.5.sp,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                }
-
-                // Gregorian Date & Transliterated Hijri Subtitle
-                val formattedGregorian = today.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.getDefault()))
-                val hijriTransliterated = state.hijriDate?.let { "${it.day} ${it.monthNameEn} ${it.year} AH" }
-
-                Text(
-                    text = if (hijriTransliterated != null) "$formattedGregorian · $hijriTransliterated" else formattedGregorian,
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 0.3.sp,
-                    color = onSkyColor,
-                    style = TextStyle(shadow = textShadow),
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.testTag("hijri_date_label")
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Living Astronomical Sky Badge (High visibility affordance on sky background)
-                Row(
-                    modifier = Modifier
-                        .heightIn(min = 48.dp)
-                        .clip(CircleShape)
-                        .background(onSkyColor.copy(alpha = 0.30f))
-                        .border(
-                            BorderStroke(1.dp, onSkyColor.copy(alpha = 0.45f)),
-                            CircleShape
-                        )
-                        .clickable { showAstroSheet = true }
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                        .testTag("astronomical_sky_badge"),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    val altVal = activeSunPosition?.altitude ?: 0f
-                    val altFormatted = String.format(Locale.US, "%+.1f°", altVal)
-                    val moonInfo = AstronomicalSky.getMoonPhaseInfo(state.hijriDate?.day ?: 14)
-
-                    Icon(
-                        imageVector = if (altVal > -0.833f) Icons.Default.WbSunny else Icons.Default.NightsStay,
-                        contentDescription = null,
-                        tint = onSkyColor,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = if (altVal > -0.833f) "Sun $altFormatted" else moonInfo.nameEn.substringBefore(" ("),
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = onSkyColor
-                    )
-                    Text(
-                        text = "·",
-                        fontSize = 12.sp,
-                        color = onSkyColor.copy(alpha = 0.70f)
-                    )
-                    Text(
-                        text = if (simulatedMinutes != null) "Time Preview (${activeTime.format(DateTimeFormatter.ofPattern("HH:mm"))})" else "${activeSkyPeriod.title} Sky ✦",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = onSkyColor
-                    )
-                }
-            }
-
-            // Interactive simulation reset banner when user scrubbed time
-            AnimatedVisibility(
-                visible = simulatedMinutes != null,
-                enter = expressiveExpand(),
-                exit = expressiveCollapse()
-            ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                        .padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    AssistChip(
-                        onClick = { simulatedMinutes = null },
-                        label = { Text(strings.resetToRealtime, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.RestartAlt,
-                                contentDescription = "Reset time",
-                                modifier = Modifier.size(14.dp)
-                            )
-                        },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-                            labelColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
-                        ),
-                        modifier = Modifier.testTag("reset_realtime_chip")
-                    )
-                }
-            }
-
-            // Live Adhan / Alert Playing Banner
-            AnimatedVisibility(
-                visible = state.audioPreviewPlaying != null,
-                enter = expressiveExpand(),
-                exit = expressiveCollapse()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                        .padding(top = 8.dp)
-                        .clip(MaterialTheme.shapes.small)
-                        .background(MaterialTheme.colorScheme.errorContainer)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Adhan Playing · ${state.audioPreviewPlaying}",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                    FilledTonalButton(
-                        onClick = onSilenceActiveAlert,
-                        modifier = Modifier
-                            .height(48.dp)
-                            .testTag("home_silence_adhan_button"),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
-                    ) {
-                        Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Silence", style = MaterialTheme.typography.labelLarge)
-                    }
-                }
-            }
-
-            // Quick Alert / Silent Mode Status Strip
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val silentContainer by animateColorAsState(
-                    targetValue = if (state.isGlobalSilentMode) MaterialTheme.colorScheme.errorContainer
-                    else MaterialTheme.colorScheme.surface,
-                    label = "silent_chip_container"
-                )
-                AssistChip(
-                    onClick = onToggleGlobalSilent,
-                    label = {
-                        Text(
-                            text = if (state.isGlobalSilentMode) strings.silentModeOn else strings.alertsActive,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = if (state.isGlobalSilentMode) FontWeight.Bold else FontWeight.SemiBold
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = if (state.isGlobalSilentMode) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-                            contentDescription = null,
-                            tint = if (state.isGlobalSilentMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    },
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = silentContainer,
-                        labelColor = if (state.isGlobalSilentMode) MaterialTheme.colorScheme.onErrorContainer
-                                    else MaterialTheme.colorScheme.onSurface
-                    ),
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = if (state.isGlobalSilentMode) MaterialTheme.colorScheme.error
-                                else MaterialTheme.colorScheme.outlineVariant
-                    ),
-                    modifier = Modifier
-                        .semantics {
-                            stateDescription = if (state.isGlobalSilentMode) "Silent mode on" else "Alerts active"
-                        }
-                        .testTag("home_silent_mode_chip")
-                )
-
-                if (state.autoSilentDuringPrayer) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    AssistChip(
-                        onClick = onSettingsClick,
-                        label = { Text("${strings.masjidMode} (${state.autoSilentDurationMinutes}m)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.VolumeOff,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp)
-                            )
-                        },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            labelColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant
-                        ),
-                        modifier = Modifier.testTag("home_masjid_mode_chip")
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Dominant Next Prayer Hero Section (Deeply Immersive Architectural Countdown with enhanced contrast)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (nextPt != null) {
-                    // Next prayer sub-label
-                    Text(
-                        text = strings.nextPrayerLabel,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 3.sp,
-                        color = onSkyColor,
-                        style = TextStyle(shadow = textShadow)
-                    )
-
-                    Spacer(modifier = Modifier.height(3.dp))
-
-                    // Next prayer Arabic calligraphy + English Name
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = nextPt.prayer.arabicName,
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Serif,
-                            color = onSkyColor,
-                            style = TextStyle(shadow = prominentTextShadow)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "·",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = onSkyColor.copy(alpha = 0.70f),
-                            style = TextStyle(shadow = textShadow)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = strings.prayerName(nextPt.prayer).uppercase(),
-                            fontSize = 21.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 2.sp,
-                            color = onSkyColor,
-                            style = TextStyle(shadow = prominentTextShadow)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Typographic Countdown Timer with Enhanced Visibility & Legibility
-                    val countdownParts = state.countdownString.split(":")
-                    val hoursStr = countdownParts.getOrElse(0) { "00" }
-                    val minutesStr = countdownParts.getOrElse(1) { "00" }
-                    val secondsStr = countdownParts.getOrElse(2) { "00" }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
+                    // Minimalist Date Sanctuary (Harmonizing Hijri & Gregorian, uncrowded and serene with enhanced contrast)
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("countdown_timer")
+                            .onGloballyPositioned { dateBounds = it.boundsInRoot() }
+                            .testTag("date_sanctuary_card"),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        CountdownSegment(value = hoursStr, label = strings.hoursUnit, onSkyColor = onSkyColor, shadow = textShadow)
-                        CountdownDotsSeparator(onSkyColor = onSkyColor, shadowColor = textShadowColor)
-                        CountdownSegment(value = minutesStr, label = strings.minsUnit, onSkyColor = onSkyColor, shadow = textShadow)
-                        CountdownDotsSeparator(onSkyColor = onSkyColor, shadowColor = textShadowColor)
-                        CountdownSegment(value = secondsStr, label = strings.secsUnit, onSkyColor = onSkyColor, shadow = textShadow)
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Next Prayer Time Pill & Details Affordance (Enhanced contrast capsule)
-                    val timeFormatter = DateTimeFormatter.ofPattern(if (state.timeFormat24h) "HH:mm" else "h:mm a")
-                    Surface(
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .clip(MaterialTheme.shapes.medium)
-                            .clickable(onClick = onOpenPrayerDetails)
-                            .testTag("next_prayer_badge"),
-                        shape = MaterialTheme.shapes.medium,
-                        color = onSkyColor.copy(alpha = 0.30f),
-                        border = BorderStroke(1.dp, onSkyColor.copy(alpha = 0.45f))
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(onSkyColor)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
+                        // Prominent Arabic Calligraphic Hijri Date
+                        state.hijriDate?.let {
                             Text(
-                                text = "${strings.adhanAt} ${nextPt.time.format(timeFormatter)}",
-                                fontSize = 13.5.sp,
+                                text = it.formatArabic(),
+                                fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = onSkyColor
+                                color = dateTextColor,
+                                style = TextStyle(shadow = textShadow),
+                                fontFamily = FontFamily.Serif,
+                                letterSpacing = 0.5.sp,
+                                textAlign = TextAlign.Center
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.height(1.dp))
+                        }
+
+                        // Gregorian Date & Transliterated Hijri Subtitle
+                        val formattedGregorian = today.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.getDefault()))
+                        val hijriTransliterated = state.hijriDate?.let { "${it.day} ${it.monthNameEn} ${it.year} AH" }
+
+                        Text(
+                            text = if (hijriTransliterated != null) "$formattedGregorian · $hijriTransliterated" else formattedGregorian,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            letterSpacing = 0.3.sp,
+                            color = dateTextColor,
+                            style = TextStyle(shadow = textShadow),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.testTag("hijri_date_label")
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Living Astronomical Sky Badge (High visibility affordance on sky background)
+                        Row(
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .clip(MaterialTheme.shapes.small)
+                                .clickable { showAstroSheet = true }
+                                .padding(horizontal = 6.dp)
+                                .testTag("astronomical_sky_badge"),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            val altVal = activeSunPosition?.altitude ?: 0f
+                            val altFormatted = String.format(Locale.US, "%+.1f°", altVal)
+                            val moonInfo = AstronomicalSky.getMoonPhaseInfo(state.hijriDate?.day ?: 14)
+
+                            Icon(
+                                imageVector = if (altVal > -0.833f) Icons.Default.WbSunny else Icons.Default.NightsStay,
+                                contentDescription = null,
+                                tint = dateTextColor,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = if (altVal > -0.833f) "Sun $altFormatted" else moonInfo.nameEn.substringBefore(" ("),
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = dateTextColor
+                            )
                             Text(
                                 text = "·",
-                                fontSize = 13.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = onSkyColor.copy(alpha = 0.70f)
+                                fontSize = 12.sp,
+                                color = dateTextColor.copy(alpha = 0.70f)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = strings.viewDetails,
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = onSkyColor
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = null,
-                                tint = onSkyColor,
-                                modifier = Modifier.size(14.dp)
+                                text = if (simulatedMinutes != null) "Time Preview (${activeTime.format(DateTimeFormatter.ofPattern("HH:mm"))})" else "${activeSkyPeriod.title} Sky ✦",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = dateTextColor
                             )
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Atmospheric Sky Period & Solar Context
-                prevPt?.let {
-                    Text(
-                        text = "${strings.currentPeriod}: ${strings.prayerName(it.prayer)} · ${state.skyPeriod.title}",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = onSkyColor,
-                        style = TextStyle(shadow = textShadow),
-                        letterSpacing = 0.4.sp,
-                        textAlign = TextAlign.Center
+                    HorizontalDivider(
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                        color = dateTextColor.copy(alpha = 0.18f)
                     )
+
+                    // Interactive simulation reset banner when user scrubbed time
+                    AnimatedVisibility(
+                        visible = simulatedMinutes != null,
+                        enter = expressiveExpand(),
+                        exit = expressiveCollapse()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AssistChip(
+                                onClick = { simulatedMinutes = null },
+                                label = { Text(strings.resetToRealtime, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.RestartAlt,
+                                        contentDescription = "Reset time",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                                    labelColor = MaterialTheme.colorScheme.onSurface
+                                ),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
+                                ),
+                                modifier = Modifier.testTag("reset_realtime_chip")
+                            )
+                        }
+                    }
+
+                    // Live Adhan / Alert Playing Banner
+                    AnimatedVisibility(
+                        visible = state.audioPreviewPlaying != null,
+                        enter = expressiveExpand(),
+                        exit = expressiveCollapse()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp)
+                                .clip(MaterialTheme.shapes.small)
+                                .background(MaterialTheme.colorScheme.errorContainer)
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Adhan Playing · ${state.audioPreviewPlaying}",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                            FilledTonalButton(
+                                onClick = onSilenceActiveAlert,
+                                modifier = Modifier
+                                    .height(48.dp)
+                                    .testTag("home_silence_adhan_button"),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+                            ) {
+                                Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Silence", style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                    }
+
+                    // Quick Alert / Silent Mode Status Strip
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AssistChip(
+                            onClick = onToggleGlobalSilent,
+                            label = {
+                                Text(
+                                    text = if (state.isGlobalSilentMode) strings.silentModeOn else strings.alertsActive,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = if (state.isGlobalSilentMode) FontWeight.Bold else FontWeight.SemiBold
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = if (state.isGlobalSilentMode) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                                    contentDescription = null,
+                                    tint = if (state.isGlobalSilentMode) MaterialTheme.colorScheme.error else dateTextColor,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = Color.Transparent,
+                                labelColor = dateTextColor
+                            ),
+                            border = null,
+                            modifier = Modifier
+                                .semantics {
+                                    stateDescription = if (state.isGlobalSilentMode) "Silent mode on" else "Alerts active"
+                                }
+                                .testTag("home_silent_mode_chip")
+                        )
+
+                        if (state.autoSilentDuringPrayer) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AssistChip(
+                                onClick = onSettingsClick,
+                                label = { Text("${strings.masjidMode} (${state.autoSilentDurationMinutes}m)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.VolumeOff,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = Color.Transparent,
+                                    labelColor = dateTextColor
+                                ),
+                                border = null,
+                                modifier = Modifier.testTag("home_masjid_mode_chip")
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(top = 6.dp, bottom = 4.dp),
+                        color = heroTextColor.copy(alpha = 0.16f)
+                    )
+
+                    // Dominant Next Prayer Hero Section (Deeply Immersive Architectural Countdown with enhanced contrast)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onGloballyPositioned { heroBounds = it.boundsInRoot() },
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        if (nextPt != null) {
+                            // Next prayer sub-label
+                            Text(
+                                text = strings.nextPrayerLabel,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 3.sp,
+                                color = heroTextColor,
+                                style = TextStyle(shadow = textShadow)
+                            )
+
+                            // Next prayer Arabic calligraphy + English Name
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = nextPt.prayer.arabicName,
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Serif,
+                                    color = heroTextColor,
+                                    style = TextStyle(shadow = prominentTextShadow)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "·",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = heroTextColor.copy(alpha = 0.70f),
+                                    style = TextStyle(shadow = textShadow)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = strings.prayerName(nextPt.prayer).uppercase(),
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 2.sp,
+                                    color = heroTextColor,
+                                    style = TextStyle(shadow = prominentTextShadow)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            // Typographic Countdown Timer with Enhanced Visibility & Legibility
+                            val countdownParts = state.countdownString.split(":")
+                            val hoursStr = countdownParts.getOrElse(0) { "00" }
+                            val minutesStr = countdownParts.getOrElse(1) { "00" }
+                            val secondsStr = countdownParts.getOrElse(2) { "00" }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("countdown_timer")
+                            ) {
+                                CountdownSegment(value = hoursStr, label = strings.hoursUnit, onSkyColor = heroTextColor, shadow = textShadow)
+                                CountdownDotsSeparator(onSkyColor = heroTextColor, shadowColor = textShadowColor)
+                                CountdownSegment(value = minutesStr, label = strings.minsUnit, onSkyColor = heroTextColor, shadow = textShadow)
+                                CountdownDotsSeparator(onSkyColor = heroTextColor, shadowColor = textShadowColor)
+                                CountdownSegment(value = secondsStr, label = strings.secsUnit, onSkyColor = heroTextColor, shadow = textShadow)
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Next prayer time & details affordance (flat, typography-led)
+                            val timeFormatter = DateTimeFormatter.ofPattern(if (state.timeFormat24h) "HH:mm" else "h:mm a")
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .clip(MaterialTheme.shapes.small)
+                                    .clickable(onClick = onOpenPrayerDetails)
+                                    .padding(horizontal = 8.dp)
+                                    .testTag("next_prayer_badge"),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(heroTextColor)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "${strings.adhanAt} ${nextPt.time.format(timeFormatter)}",
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = heroTextColor
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "·",
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = heroTextColor.copy(alpha = 0.70f)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = strings.viewDetails,
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = heroTextColor
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = null,
+                                    tint = heroTextColor,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                        }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
+                            color = heroTextColor.copy(alpha = 0.14f)
+                        )
+
+                        // Atmospheric Sky Period & Solar Context
+                        prevPt?.let {
+                            Text(
+                                text = "${strings.currentPeriod}: ${strings.prayerName(it.prayer)} · ${state.skyPeriod.title}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = periodTextColor,
+                                style = TextStyle(shadow = textShadow),
+                                letterSpacing = 0.4.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.onGloballyPositioned { periodBounds = it.boundsInRoot() }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -644,7 +667,8 @@ fun HomeScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp)
+                    .onGloballyPositioned { sectionBounds = it.boundsInRoot() },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -652,13 +676,13 @@ fun HomeScreen(
                     text = strings.todaysPrayers,
                     style = MaterialTheme.typography.titleLarge.copy(shadow = textShadow),
                     fontWeight = FontWeight.Bold,
-                    color = onSkyColor
+                    color = sectionTextColor
                 )
                 Text(
                     text = strings.tapToMarkCompleted,
                     style = MaterialTheme.typography.labelMedium.copy(shadow = textShadow),
                     fontWeight = FontWeight.Medium,
-                    color = onSkyColor
+                    color = sectionTextColor
                 )
             }
 
@@ -824,8 +848,10 @@ fun HomeScreen(
                 text = strings.continueReading.uppercase(),
                 style = MaterialTheme.typography.labelLarge.copy(shadow = textShadow),
                 fontWeight = FontWeight.Bold,
-                color = onSkyColor,
-                modifier = Modifier.padding(horizontal = 16.dp)
+                color = continueTextColor,
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .onGloballyPositioned { continueBounds = it.boundsInRoot() }
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -1272,7 +1298,7 @@ private fun CountdownSegment(
     shadow: Shadow? = null
 ) {
     Column(
-        modifier = Modifier.padding(horizontal = 12.dp),
+        modifier = Modifier.padding(horizontal = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         AnimatedContent(
@@ -1291,20 +1317,22 @@ private fun CountdownSegment(
         ) { digit ->
             Text(
                 text = digit,
-                style = MaterialTheme.typography.displayMedium.copy(
-                    fontWeight = FontWeight.Normal,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = 28.sp,
+                    lineHeight = 32.sp,
+                    fontWeight = FontWeight.SemiBold,
                     letterSpacing = 1.sp,
                     shadow = shadow
                 ),
                 color = onSkyColor
             )
         }
-        Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(1.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall.copy(shadow = shadow),
             fontWeight = FontWeight.Bold,
-            letterSpacing = 2.sp,
+            letterSpacing = 1.sp,
             color = onSkyColor,
         )
     }
@@ -1316,8 +1344,8 @@ private fun CountdownDotsSeparator(
     shadowColor: Color = Color.Transparent
 ) {
     Column(
-        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(5.dp),
+        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(

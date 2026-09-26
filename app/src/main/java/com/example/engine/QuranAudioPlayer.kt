@@ -35,7 +35,9 @@ class QuranAudioPlayer(private val context: Context) {
     private var mediaPlayer: MediaPlayer? = null
     private var synthJob: Job? = null
     private var progressJob: Job? = null
+    private var prepareTimeoutJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Main)
+    private val appContext: Context get() = context.applicationContext
 
     fun playAyah(surahNumber: Int, ayahNumber: Int, onAyahCompleted: (() -> Unit)? = null) {
         stop()
@@ -54,6 +56,7 @@ class QuranAudioPlayer(private val context: Context) {
         val url = "https://everyayah.com/data/Alafasy_128kbps/${paddedSurah}${paddedAyah}.mp3"
 
         try {
+            var prepared = false
             val player = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
@@ -61,8 +64,10 @@ class QuranAudioPlayer(private val context: Context) {
                         .setUsage(AudioAttributes.USAGE_MEDIA)
                         .build()
                 )
-                setDataSource(context, Uri.parse(url))
+                setDataSource(appContext, Uri.parse(url))
                 setOnPreparedListener { mp ->
+                    prepared = true
+                    prepareTimeoutJob?.cancel()
                     mp.start()
                     _playbackState.value = _playbackState.value.copy(
                         isPlaying = true,
@@ -72,18 +77,37 @@ class QuranAudioPlayer(private val context: Context) {
                     startProgressTracker()
                 }
                 setOnCompletionListener {
+                    prepareTimeoutJob?.cancel()
                     _playbackState.value = _playbackState.value.copy(isPlaying = false, currentPositionMs = 0)
                     onAyahCompleted?.invoke()
                 }
                 setOnErrorListener { _, _, _ ->
                     // Fallback to offline synthetic tone chimes
+                    prepareTimeoutJob?.cancel()
                     playOfflineChime(surahNumber, ayahNumber, onAyahCompleted)
                     true
                 }
                 prepareAsync()
             }
             mediaPlayer = player
+            // Watchdog: if the stream cannot be prepared (offline / hanging
+            // network), fall back to the offline chime instead of spinning.
+            prepareTimeoutJob?.cancel()
+            prepareTimeoutJob = scope.launch {
+                delay(12_000)
+                if (!prepared) {
+                    try {
+                        player.reset()
+                        player.release()
+                    } catch (_: Exception) {}
+                    if (mediaPlayer === player) {
+                        mediaPlayer = null
+                        playOfflineChime(surahNumber, ayahNumber, onAyahCompleted)
+                    }
+                }
+            }
         } catch (e: Exception) {
+            prepareTimeoutJob?.cancel()
             playOfflineChime(surahNumber, ayahNumber, onAyahCompleted)
         }
     }
@@ -257,6 +281,7 @@ class QuranAudioPlayer(private val context: Context) {
     fun stop() {
         progressJob?.cancel()
         synthJob?.cancel()
+        prepareTimeoutJob?.cancel()
         try {
             mediaPlayer?.stop()
             mediaPlayer?.release()

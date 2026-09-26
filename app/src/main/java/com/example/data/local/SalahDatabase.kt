@@ -28,7 +28,13 @@ abstract class SalahDatabase : RoomDatabase() {
                     context.applicationContext,
                     SalahDatabase::class.java,
                     "salah_quiet.db"
-                ).fallbackToDestructiveMigration().build()
+                )
+                    // The only local state is the prayer checklist, so a schema
+                    // change that drops it is preferable to a crash on upgrade.
+                    // Pass `dropAllTables = false` when a migration is added so
+                    // existing rows survive.
+                    .fallbackToDestructiveMigration(dropAllTables = true)
+                    .build()
                 INSTANCE = instance
                 instance
             }

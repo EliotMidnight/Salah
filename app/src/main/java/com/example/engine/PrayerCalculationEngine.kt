@@ -67,25 +67,39 @@ object PrayerCalculationEngine {
         // Solar Angles
         val lat = location.latitude
 
-        // Sunrise & Sunset Angle (-0.833° accounting for refraction & solar disk)
-        val sunriseHourAngle = calculateHourAngle(-0.833, lat, declination)
-
         // Fajr angle
         val fajrAngle = -method.fajrAngle
-        val fajrHourAngle = calculateHourAngle(fajrAngle, lat, declination)
+        // Isha angle (null for Umm Al-Qura, which uses +90 min instead)
+        val ishaAngle: Double? = if (method.ishaAngle > 0.0) -method.ishaAngle else null
+
+        // Polar day/night: if any twilight angle is unreachable here, compute
+        // the day at the nearest latitude where all angles resolve so the
+        // returned times stay ordered and next-prayer logic stays correct.
+        val requiredAngles = listOfNotNull(fajrAngle, -0.833, ishaAngle)
+        val effectiveLat =
+            if (requiredAngles.any { cosHourAngle(it, lat, declination) !in -1.0..1.0 }) {
+                nearestResolvableLatitude(lat, declination, requiredAngles)
+            } else {
+                lat
+            }
+
+        // Sunrise & Sunset Angle (-0.833° accounting for refraction & solar disk)
+        val sunriseHourAngle = calculateHourAngle(-0.833, effectiveLat, declination)
+
+        val fajrHourAngle = calculateHourAngle(fajrAngle, effectiveLat, declination)
 
         // Isha angle / offset
-        val ishaHourAngle = if (method.ishaAngle > 0.0) {
-            calculateHourAngle(-method.ishaAngle, lat, declination)
+        val ishaHourAngle = if (ishaAngle != null) {
+            calculateHourAngle(ishaAngle, effectiveLat, declination)
         } else {
             0.0
         }
 
         // Asr Angle
         val asrAltitude = toDegrees(
-            atan(1.0 / (madhhab.shadowFactor + tan(toRadians(Math.abs(lat - declination)))))
+            atan(1.0 / (madhhab.shadowFactor + tan(toRadians(Math.abs(effectiveLat - declination)))))
         )
-        val asrHourAngle = calculateHourAngle(asrAltitude, lat, declination)
+        val asrHourAngle = calculateHourAngle(asrAltitude, effectiveLat, declination)
 
         // Raw decimal hours
         var fajrRaw = noon - (fajrHourAngle / 15.0)
@@ -111,12 +125,29 @@ object PrayerCalculationEngine {
         }
 
         // Convert decimal hours to LocalTime with adjustments
-        val fajrTime = decimalToTime(fajrRaw).plusMinutes(adjustments.fajr.toLong())
-        val sunriseTime = decimalToTime(sunriseRaw).plusMinutes(adjustments.sunrise.toLong())
-        val dhuhrTime = decimalToTime(dhuhrRaw).plusMinutes(adjustments.dhuhr.toLong())
-        val asrTime = decimalToTime(asrRaw).plusMinutes(adjustments.asr.toLong())
-        val maghribTime = decimalToTime(maghribRaw).plusMinutes(adjustments.maghrib.toLong())
-        val ishaTime = decimalToTime(ishaRaw).plusMinutes(adjustments.isha.toLong())
+        val fajrRawTime = decimalToTime(fajrRaw).plusMinutes(adjustments.fajr.toLong())
+        val sunriseRawTime = decimalToTime(sunriseRaw).plusMinutes(adjustments.sunrise.toLong())
+        val dhuhrRawTime = decimalToTime(dhuhrRaw).plusMinutes(adjustments.dhuhr.toLong())
+        val asrRawTime = decimalToTime(asrRaw).plusMinutes(adjustments.asr.toLong())
+        val maghribRawTime = decimalToTime(maghribRaw).plusMinutes(adjustments.maghrib.toLong())
+        val ishaRawTime = decimalToTime(ishaRaw).plusMinutes(adjustments.isha.toLong())
+
+        // Safety net: when the device zone differs greatly from solar time at
+        // the location (e.g. travel before the zone updates), or in extreme
+        // polar fallback geometry, raw times can wrap past civil midnight and
+        // come back unordered. Every consumer of this day (countdown,
+        // checklist, calendar, alarms, next/previous lookup) requires a
+        // strictly increasing day, so enforce monotonicity with 1-minute
+        // steps. Never triggers for normal in-zone days.
+        val orderedTimes = enforceOrderedDay(
+            listOf(fajrRawTime, sunriseRawTime, dhuhrRawTime, asrRawTime, maghribRawTime, ishaRawTime)
+        )
+        val fajrTime = orderedTimes[0]
+        val sunriseTime = orderedTimes[1]
+        val dhuhrTime = orderedTimes[2]
+        val asrTime = orderedTimes[3]
+        val maghribTime = orderedTimes[4]
+        val ishaTime = orderedTimes[5]
 
         val now = LocalDateTime.now()
         val isToday = date == now.toLocalDate()
@@ -247,10 +278,59 @@ object PrayerCalculationEngine {
     }
 
     private fun calculateHourAngle(alpha: Double, lat: Double, declination: Double): Double {
-        val cosHA = (sin(toRadians(alpha)) - sin(toRadians(lat)) * sin(toRadians(declination))) /
-                (cos(toRadians(lat)) * cos(toRadians(declination)))
-        val clamped = cosHA.coerceIn(-1.0, 1.0)
+        val clamped = cosHourAngle(alpha, lat, declination).coerceIn(-1.0, 1.0)
         return toDegrees(acos(clamped))
+    }
+
+    private fun cosHourAngle(alpha: Double, lat: Double, declination: Double): Double {
+        return (sin(toRadians(alpha)) - sin(toRadians(lat)) * sin(toRadians(declination))) /
+                (cos(toRadians(lat)) * cos(toRadians(declination)))
+    }
+
+    /**
+     * Nearest-latitude fallback (aqrab al-bilad) for polar day/night: when the
+     * sun never reaches a required twilight angle at [latitude], the clamped
+     * geometry would wrap times past midnight and misorder the day. Instead,
+     * step toward the equator until every required angle resolves, and compute
+     * the day there. Longitude (solar noon) is unaffected.
+     */
+    private fun nearestResolvableLatitude(
+        latitude: Double,
+        declination: Double,
+        angles: List<Double>
+    ): Double {
+        var candidate = latitude
+        val step = if (latitude >= 0) -0.5 else 0.5
+        repeat(120) {
+            if (angles.all { cosHourAngle(it, candidate, declination).let { c -> c in -1.0..1.0 } }) {
+                return candidate
+            }
+            candidate += step
+        }
+        return 45.0 * if (latitude >= 0) 1 else -1
+    }
+
+    /**
+     * Enforces a strictly increasing same-day sequence with 1-minute steps.
+     * Already-ordered days (the normal case) pass through untouched; only a
+     * wrapped-around time is pushed forward to restore monotonicity. If the
+     * day is degenerate past repair (push would cross midnight), the time is
+     * pinned to the end of day as a best effort that keeps every consumer
+     * crash-free and the list non-decreasing.
+     */
+    private fun enforceOrderedDay(times: List<LocalTime>): List<LocalTime> {
+        if (times.size < 2) return times
+        val out = times.toMutableList()
+        for (i in 1 until out.size) {
+            val minNext = out[i - 1].plusMinutes(1)
+            if (minNext.isBefore(out[i - 1])) {
+                // plusMinutes wrapped past midnight: pin to end of day.
+                out[i] = LocalTime.of(23, 59, 59)
+            } else if (out[i].isBefore(minNext)) {
+                out[i] = minNext
+            }
+        }
+        return out
     }
 
     private fun calculateJulianDay(date: LocalDate): Double {

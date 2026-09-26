@@ -33,6 +33,8 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -63,6 +65,8 @@ import com.example.ui.prayer.PrayerScreen
 import com.example.ui.qibla.QiblaScreen
 import com.example.ui.quran.QuranScreen
 import com.example.ui.settings.SettingsScreen
+import com.example.ui.theme.ExpressiveMotion
+import com.example.ui.theme.SalahReduceMotion
 import com.example.ui.theme.SalahTheme
 import com.example.ui.theme.expressiveEnterBack
 import com.example.ui.theme.expressiveEnterForward
@@ -102,9 +106,14 @@ class MainActivity : ComponentActivity() {
                 "Clean Light" -> false
                 else -> androidx.compose.foundation.isSystemInDarkTheme()
             }
-            SalahTheme(darkTheme = isDarkTheme) {
-                ProvideAppLanguage(language = uiState.language) {
-                    SalahApp(viewModel = viewModel)
+            val reduceMotion = SalahReduceMotion.remember()
+            // Mirror into ExpressiveMotion so its non-composable spec helpers honour it.
+            SideEffect { ExpressiveMotion.reduced = reduceMotion }
+            CompositionLocalProvider(SalahReduceMotion.Local provides reduceMotion) {
+                SalahTheme(darkTheme = isDarkTheme) {
+                    ProvideAppLanguage(language = uiState.language) {
+                        SalahApp(viewModel = viewModel)
+                    }
                 }
             }
         }

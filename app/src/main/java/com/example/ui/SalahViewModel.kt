@@ -879,6 +879,12 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
     }
 
     // SensorEventListener
+    // The TYPE_ORIENTATION branch below is a deliberate last-resort fallback for
+    // hardware that exposes neither a rotation vector nor a geomagnetic field
+    // sensor. Modern devices take the getRotationMatrix / getRotationMatrixFromVector
+    // paths above; removing this branch would leave the Qibla screen with no
+    // heading at all on older phones.
+    @Suppress("DEPRECATION")
     override fun onSensorChanged(event: SensorEvent?) {
         if (event == null) return
 

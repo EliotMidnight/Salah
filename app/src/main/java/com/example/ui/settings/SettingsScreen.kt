@@ -99,6 +99,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import com.example.data.model.CalculationMethod
 import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
@@ -1372,6 +1374,7 @@ fun SettingsScreen(
         var nameInput by remember { mutableStateOf("") }
         var latInput by remember { mutableStateOf("") }
         var lngInput by remember { mutableStateOf("") }
+        var locationError by remember { mutableStateOf<String?>(null) }
 
         AlertDialog(
             onDismissRequest = { showCustomLocationDialog = false },
@@ -1381,37 +1384,51 @@ fun SettingsScreen(
                     Text(text = "Enter coordinates to calculate prayer times anywhere on Earth, completely offline.", fontSize = 12.sp)
                     OutlinedTextField(
                         value = nameInput,
-                        onValueChange = { nameInput = it },
+                        onValueChange = { nameInput = it; locationError = null },
                         label = { Text("City or Place Name") },
                         singleLine = true,
+                        isError = locationError != null && nameInput.isBlank(),
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = latInput,
-                        onValueChange = { latInput = it },
+                        onValueChange = { latInput = it; locationError = null },
                         label = { Text("Latitude (-90 to +90)") },
                         singleLine = true,
+                        isError = locationError != null,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = lngInput,
-                        onValueChange = { lngInput = it },
+                        onValueChange = { lngInput = it; locationError = null },
                         label = { Text("Longitude (-180 to +180)") },
                         singleLine = true,
+                        isError = locationError != null,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    if (locationError != null) {
+                        Text(
+                            text = locationError!!,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    val lat = latInput.toDoubleOrNull()
-                    val lng = lngInput.toDoubleOrNull()
-                    if (nameInput.isNotBlank() && lat != null && lng != null) {
-                        onCustomLocationSave(nameInput.trim(), lat, lng, 0.0)
+                    val error = com.example.engine.LocationValidation.validateRaw(nameInput, latInput, lngInput)
+                    if (error == null) {
+                        val name = nameInput.trim()
+                        val lat = latInput.trim().toDouble()
+                        val lng = lngInput.trim().toDouble()
+                        onCustomLocationSave(name, lat, lng, 0.0)
                         showCustomLocationDialog = false
-                        Toast.makeText(context, "Location set to $nameInput", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Location set to $name", Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(context, "Please enter valid decimal coordinates", Toast.LENGTH_SHORT).show()
+                        locationError = error
                     }
                 }) {
                     Text(strings.save)

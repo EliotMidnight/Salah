@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Compose owns the palette; kept minimal for any XML theme references. -->
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
+    <!-- Compose owns the palette; the XML themes inherit from Theme.Material3
+         and need no app-specific colors. Add entries here only if a non-Compose
+         resource (theme, widget, remote views) needs one. -->
 </resources>

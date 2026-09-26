@@ -2,5 +2,5 @@
   "name": "SALAH",
   "description": "An offline-first Android companion for prayer, Quran, and Qibla with living astronomical sky and truthful prayer sources.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }
