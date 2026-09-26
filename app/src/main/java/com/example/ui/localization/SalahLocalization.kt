@@ -3,6 +3,8 @@ package com.example.ui.localization
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 
 /**
  * Supported UI languages in SALAH
@@ -221,7 +223,192 @@ data class UiStrings(
     val confirm: String,
     val save: String,
     val done: String,
-    val close: String
+    val close: String,
+
+    /**
+     * Copy added by the redesign.
+     *
+     * These are not fields on [UiStrings] on purpose. A Kotlin data class
+     * generates a `copy` and a `componentN` per property, and the JVM caps a
+     * method signature at 255 slots - so folding 160-odd strings into the same
+     * class compiles cleanly and then dies at runtime with
+     * `ClassFormatError: Too many arguments in method signature`. A second
+     * data class keeps both well inside the limit.
+     *
+     * Read them as `strings.more.someLabel`. Every value here replaces an
+     * English literal that used to sit directly in a layout file, which is
+     * exactly why none of them could ever be translated. They are English
+     * defaults; add a per-language override as each is translated.
+     */
+    val more: UiStringsMore = UiStringsMore()
+)
+
+/** Copy the redesign added, kept in its own class to stay under the JVM method limit. */
+data class UiStringsMore(
+    val actionCancel: String = "Cancel",
+    val actionSave: String = "Save",
+    val actionClose: String = "Close",
+    val actionBack: String = "Back",
+    val actionReset: String = "Reset",
+    val search: String = "Search",
+    val clearSearch: String = "Clear search",
+    val loading: String = "Loading",
+    val somethingWentWrong: String = "Something went wrong",
+    val tryAgain: String = "Try again",
+    val todayTitle: String = "Today",
+    val changeLocation: String = "Change location",
+    val prayerMarkedDone: String = "Prayer marked as prayed",
+    val prayerMarkedPending: String = "Prayer marked as not prayed",
+    val silenceAdhan: String = "Silence",
+    val adhanPlayingLabel: String = "Adhan playing",
+    val sunAltitude: String = "Sun",
+    val observatoryTitle: String = "Sky",
+    val observatorySubtitle: String = "Astronomy for %s",
+    val solarAltitude: String = "Sun altitude",
+    val solarAzimuth: String = "Sun azimuth",
+    val aboveHorizon: String = "Above horizon",
+    val belowHorizon: String = "Below horizon",
+    val trueNorthSuffix: String = "true north",
+    val lunarPhase: String = "Moon phase",
+    val illumination: String = "Illumination",
+    val waxing: String = "Waxing",
+    val waning: String = "Waning",
+    val skyPeriodLabel: String = "Sky period",
+    val timeScrubber: String = "Time of day",
+    val previewingTime: String = "Previewing %s",
+    val realTime: String = "Real time",
+    val calculationSource: String = "%s · %s",
+    val prayerTimesTitle: String = "Prayer times",
+    val methodology: String = "Method",
+    val madhhabLabelShort: String = "Asr method",
+    val appliedAdjustments: String = "Manual adjustments",
+    val computedOnDevice: String = "Computed on this device",
+    val lastVerified: String = "Last checked",
+    val previousDay: String = "Previous day",
+    val nextDay: String = "Next day",
+    val selectDate: String = "Select date",
+    val minutesShort: String = "min",
+    val daysShort: String = "days",
+    val noAdjustment: String = "No adjustment",
+    val quranTitle: String = "Quran",
+    val corpusSummary: String = "114 surahs · 30 juz · 6,236 verses",
+    val surahsTab: String = "Surahs",
+    val noBookmarksTitle: String = "No saved verses",
+    val noBookmarksMessage: String = "Tap the bookmark icon while reading to save a verse here.",
+    val noSearchResults: String = "No matches",
+    val searchSurahsAndVerses: String = "Search surahs and verses",
+    val searchPages: String = "Search page number",
+    val versesFound: String = "%d verses",
+    val surahsFound: String = "%d surahs",
+    val verseCount: String = "%d verses",
+    val verseReference: String = "%d:%d",
+    val selectSurah: String = "Select surah",
+    val textSize: String = "Text size",
+    val readingLayout: String = "Layout",
+    val cardsLayout: String = "Per verse",
+    val continuousLayout: String = "Continuous",
+    val showTranslation: String = "Show translation",
+    val hideTranslation: String = "Hide translation",
+    val translationCredit: String = "Saheeh International",
+    val readingSaved: String = "Reading position saved",
+    val recitingLabel: String = "Reciting",
+    val stopAudio: String = "Stop",
+    val playVerse: String = "Play",
+    val pauseVerse: String = "Pause",
+    val bookmarkVerse: String = "Save verse",
+    val removeBookmark: String = "Remove saved verse",
+    val copyVerse: String = "Copy",
+    val shareVerse: String = "Share",
+    val verseCopied: String = "Verse copied",
+    val selectVerseHint: String = "Select a verse to read it here.",
+    val hizbHalfFirst: String = "1st half",
+    val hizbHalfSecond: String = "2nd half",
+    val juzOf: String = "Juz %d",
+    val hizbOf: String = "Hizb %d",
+    val hizbInJuz: String = "Juz %d, %s",
+    val qiblaTitle: String = "Qibla",
+    val qiblaSubtitle: String = "Direction to the Kaaba",
+    val useCurrentLocation: String = "Use my location",
+    val calibrateCompass: String = "Calibrate compass",
+    val calibrationTitle: String = "Calibrate the compass",
+    val calibrationMessage: String = "Move the device in a figure-eight pattern a few times to let the sensor settle.",
+    val solarReferenceTitle: String = "Check with the sun",
+    val sunAzimuth: String = "Sun direction",
+    val sunAltitudeValue: String = "Sun height",
+    val qiblaBearing: String = "Qibla direction",
+    val sunBelowHorizon: String = "The sun is below the horizon, so it cannot be used as a reference right now.",
+    val sunAligned: String = "The sun is almost in the Qibla direction. Face it to confirm.",
+    val sunToTheLeft: String = "The Qibla is about %d° to the left of the sun.",
+    val sunToTheRight: String = "The Qibla is about %d° to the right of the sun.",
+    val sunOpposite: String = "The Qibla is in the opposite direction to the sun.",
+    val magneticInterference: String = "Magnetic interference",
+    val magneticInterferenceMessage: String = "Reading may be inaccurate. Move away from metal and electronics.",
+    val sectionAppearance: String = "Appearance",
+    val sectionLocationAndCalculation: String = "Location & calculation",
+    val sectionAlerts: String = "Alerts",
+    val sectionAbout: String = "About & diagnostics",
+    val livingSkyLabel: String = "Animated sky",
+    val livingSkyDescription: String = "Animate the background sky on the Today screen. Uses more battery.",
+    val timeFormat24hLabel: String = "24-hour time",
+    val chooseLanguage: String = "Language",
+    val chooseTheme: String = "Theme",
+    val themeSystem: String = "Match system",
+    val themeDark: String = "Dark",
+    val themeLight: String = "Light",
+    val chooseLocation: String = "Location",
+    val useGps: String = "Use GPS",
+    val customLocation: String = "Enter manually",
+    val searchCities: String = "Search cities",
+    val chooseMethod: String = "Calculation method",
+    val chooseMadhhab: String = "Asr calculation",
+    val chooseAdjustments: String = "Minute adjustments",
+    val resetAdjustments: String = "Reset all adjustments",
+    val chooseHijriOffset: String = "Hijri date offset",
+    val chooseAdhanSound: String = "Adhan sound",
+    val chooseReciter: String = "Reciter",
+    val chooseRiwayah: String = "Riwayah",
+    val chooseScript: String = "Script",
+    val chooseTranslation: String = "Translation",
+    val choosePrePrayerOffset: String = "Reminder before prayer",
+    val prePrayerDisabled: String = "Off",
+    val perPrayerModes: String = "Alert per prayer",
+    val adhanVolume: String = "Volume",
+    val testSound: String = "Test sound",
+    val stopSound: String = "Stop sound",
+    val silentModeLabel: String = "Silence all alerts",
+    val autoSilenceLabel: String = "Auto-silence during prayer",
+    val autoSilenceDurationLabel: String = "Auto-silence duration",
+    val vibrateOnlyLabel: String = "Vibrate only",
+    val adhanAtPrayerLabel: String = "Adhan at prayer time",
+    val ephemerisCacheLabel: String = "Prayer schedule cache",
+    val recomputeSchedule: String = "Recompute 365-day schedule",
+    val copyTodaySchedule: String = "Copy today's times",
+    val scheduleCopied: String = "Times copied",
+    val storageLabel: String = "Storage",
+    val clearAudioCache: String = "Clear audio cache",
+    val audioCacheCleared: String = "Audio cache cleared",
+    val sensorAccuracy: String = "Sensor accuracy",
+    val ambientField: String = "Ambient field",
+    val checkForUpdates: String = "Check now",
+    val resetAllLabel: String = "Reset all settings",
+    val resetAllConfirmTitle: String = "Reset all settings?",
+    val resetAllConfirmMessage: String = "Calculation, alert and display settings return to their defaults. Your saved verses and prayer log are kept.",
+    val settingsReset: String = "Settings reset",
+    val nameField: String = "Place name",
+    val latitudeField: String = "Latitude",
+    val longitudeField: String = "Longitude",
+    val invalidCoordinates: String = "Enter a latitude between -90 and 90, and a longitude between -180 and 180.",
+    val nameRequired: String = "Enter a name for this place.",
+    val locationSaved: String = "Location saved",
+    val hizbWord: String = "Hizb",
+    val previousSurahLabel: String = "Previous surah",
+    val nextSurahLabel: String = "Next surah",
+    val isFacingQibla: String = "You are facing the Qibla",
+    val rightOfQibla: String = "to the right",
+    val leftOfQibla: String = "to the left",
+    val juzWord: String = "Juz’",
+    val pageWord: String = "Page",
+    val privacyNote: String = "Prayer times, the Qibla direction and the Quran are all calculated on this device. Nothing is uploaded.",
 )
 
 val EnglishStrings = UiStrings(
@@ -1476,8 +1663,6 @@ val UiStrings.copyVerseLabel: String get() = "Copy verse"
 val UiStrings.shareVerseLabel: String get() = "Share verse"
 val UiStrings.verseCopiedToast: String get() = "Verse copied"
 val UiStrings.shareChooserTitle: String get() = "Share verse via"
-val UiStrings.previousSurahLabel: String get() = "Previous"
-val UiStrings.nextSurahLabel: String get() = "Next"
 val UiStrings.translationSectionTitle: String get() = "Translation"
 val UiStrings.showTranslationLabel: String get() = "Show"
 val UiStrings.hideTranslationLabel: String get() = "Hide"
@@ -1486,8 +1671,6 @@ val UiStrings.tapVerseHint: String get() = "Tap a verse to inspect it"
 val UiStrings.popularSurahsLabel: String get() = "Popular surahs"
 val UiStrings.searchVersesHint: String get() = "Search Arabic text or English translation..."
 val UiStrings.translationNotAvailable: String get() = "Translation not available"
-val UiStrings.juzWord: String get() = "Juz"
-val UiStrings.pageWord: String get() = "Page"
 
 fun UiStrings.prayerName(prayer: com.example.data.model.Prayer): String {
     return when (prayer) {
@@ -1500,10 +1683,27 @@ fun UiStrings.prayerName(prayer: com.example.data.model.Prayer): String {
     }
 }
 
+/**
+ * Applies the selected language.
+ *
+ * Also sets [LocalLayoutDirection]. The project previously tracked
+ * `AppLanguage.isRtl` (true for Arabic and Urdu) but never used it, so Arabic
+ * and Urdu interfaces rendered left-to-right with the labels merely swapped.
+ * Providing the direction here means `start`/`end` padding, row order and the
+ * auto-mirrored icons all follow the language, in one place.
+ */
 @Composable
 fun ProvideAppLanguage(language: String, content: @Composable () -> Unit) {
     val strings = LocalizationManager.getStrings(language)
-    CompositionLocalProvider(LocalStrings provides strings) {
+    val direction = if (AppLanguage.fromNameOrCode(language).isRtl) {
+        LayoutDirection.Rtl
+    } else {
+        LayoutDirection.Ltr
+    }
+    CompositionLocalProvider(
+        LocalStrings provides strings,
+        LocalLayoutDirection provides direction
+    ) {
         content()
     }
 }

@@ -2,101 +2,140 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Astronomical and Quiet Spiritual Palette
-val CelestialNavy = Color(0xFF0F172A)
-val TwilightIndigo = Color(0xFF1E293B)
-val MidnightDark = Color(0xFF0A0E17)
-val SkyAzure = Color(0xFF38BDF8)
-val SolarGold = Color(0xFFF59E0B)
-val DawnAmber = Color(0xFFFBBF24)
-val SandAlabaster = Color(0xFFF8FAFC)
-val CardSurfaceDark = Color(0xFF141C2E)
-val CardBorderDark = Color(0xFF22304C)
-val CardSurfaceLight = Color(0xFFFFFFFF)
-val TextMutedDark = Color(0xFF94A3B8)
-val TextMutedLight = Color(0xFF64748B)
-val SageGreen = Color(0xFF10B981)
-val CrimsonSunset = Color(0xFFF43F5E)
+/**
+ * SALAH colour system.
+ *
+ * Rules this palette is built to satisfy:
+ *
+ * 1. **One accent.** A single calm blue carries every interactive and "this is
+ *    selected" signal. Nothing else competes with it.
+ * 2. **A real elevation ladder.** The previous palette set `background` and
+ *    `surfaceContainerLow` to the same value in light mode, so every card was
+ *    invisible and only a hairline border separated it from the page. Here the
+ *    page is tinted and the cards are pure white, so a card reads as a card with
+ *    no border at all.
+ * 3. **Text contrast is checked, not guessed.** Every `on*` pairing below clears
+ *    WCAG AA (4.5:1 for body text, 3:1 for large text and UI boundaries). The
+ *    exact ratios are noted beside each token.
+ * 4. **Semantic colour only where meaning demands it** - completion (success),
+ *    silence and failure (error), magnetic interference (warning).
+ */
 
-// Material 3 Expressive (M3E) Color Schemes - Android 16 Precision
-val PrimaryDark = Color(0xFF7DD3FC)
-val OnPrimaryDark = Color(0xFF00354E)
-val PrimaryContainerDark = Color(0xFF0C4A6E)
-val OnPrimaryContainerDark = Color(0xFFBAE6FD)
+// ---------------------------------------------------------------------------
+// Accent - a single calm blue, used for primary actions, selection and focus.
+// ---------------------------------------------------------------------------
 
-val SecondaryDark = Color(0xFF38BDF8)
-val OnSecondaryDark = Color(0xFF082F49)
-val SecondaryContainerDark = Color(0xFF075985)
-val OnSecondaryContainerDark = Color(0xFFE0F2FE)
+/** Accent on light surfaces. 5.9:1 on white, 5.5:1 on the light page. */
+val AccentLight = Color(0xFF0369A1)
 
-val TertiaryDark = Color(0xFFFBBF24)
-val OnTertiaryDark = Color(0xFF451A03)
-val TertiaryContainerDark = Color(0xFF78350F)
-val OnTertiaryContainerDark = Color(0xFFFEF3C7)
+/** Text/icon colour for content sitting *on* [AccentLight]. 5.9:1. */
+val OnAccentLight = Color(0xFFFFFFFF)
 
-val BackgroundDark = Color(0xFF070B14)
-val SurfaceDark = Color(0xFF0F172A)
-val SurfaceVariantDark = Color(0xFF1E293B)
-val SurfaceContainerLowestDark = Color(0xFF05080F)
-val SurfaceContainerLowDark = Color(0xFF0A101D)
-val SurfaceContainerDark = Color(0xFF0F172A)
-val SurfaceContainerHighDark = Color(0xFF172036)
-val SurfaceContainerHighestDark = Color(0xFF1E293B)
+/** Tinted accent fill, for selected rows. [OnAccentContainerLight] clears 5.2:1. */
+val AccentContainerLight = Color(0xFFE0F2FE)
+val OnAccentContainerLight = Color(0xFF075985)
 
-val PrimaryLight = Color(0xFF0284C7)
-val OnPrimaryLight = Color(0xFFFFFFFF)
-val PrimaryContainerLight = Color(0xFFE0F2FE)
-val OnPrimaryContainerLight = Color(0xFF0369A1)
+/** Accent on dark surfaces. 11.5:1 on the dark page. */
+val AccentDark = Color(0xFF7DD3FC)
 
-val SecondaryLight = Color(0xFF0369A1)
-val OnSecondaryLight = Color(0xFFFFFFFF)
-val SecondaryContainerLight = Color(0xFFBAE6FD)
-val OnSecondaryContainerLight = Color(0xFF0C4A6E)
+/** Text/icon colour for content sitting *on* [AccentDark]. */
+val OnAccentDark = Color(0xFF00344C)
 
-val TertiaryLight = Color(0xFFD97706)
-val OnTertiaryLight = Color(0xFFFFFFFF)
-val TertiaryContainerLight = Color(0xFFFEF3C7)
-val OnTertiaryContainerLight = Color(0xFF78350F)
+/** Tinted accent fill for dark mode. */
+val AccentContainerDark = Color(0xFF0C4A6E)
+val OnAccentContainerDark = Color(0xFFBAE6FD)
 
-val BackgroundLight = Color(0xFFF8FAFC)
-val SurfaceLight = Color(0xFFFFFFFF)
-val SurfaceVariantLight = Color(0xFFF1F5F9)
-val SurfaceContainerLowestLight = Color(0xFFFFFFFF)
-val SurfaceContainerLowLight = Color(0xFFF8FAFC)
-val SurfaceContainerLight = Color(0xFFF1F5F9)
-val SurfaceContainerHighLight = Color(0xFFE2E8F0)
-val SurfaceContainerHighestLight = Color(0xFFCBD5E1)
+// ---------------------------------------------------------------------------
+// Neutrals - the page is tinted, content is white. This is the whole reason
+// cards are visible without borders.
+// ---------------------------------------------------------------------------
 
-// Error roles (symmetric light/dark, M3 baseline-derived)
-val ErrorLight = Color(0xFFBA1A1A)
-val OnErrorLight = Color(0xFFFFFFFF)
-val ErrorContainerLight = Color(0xFFFFDAD6)
-val OnErrorContainerLight = Color(0xFF410002)
+// Light. The page is tinted and content is white, which is the whole reason a
+// card is visible without a border. The container ladder runs from the page
+// colour upward, so `lowest` is the most recessed and `highest` the most raised.
+val PageLight = Color(0xFFF6F8FA)            // background, surfaceContainerLowest
+val SurfaceLight = Color(0xFFFFFFFF)         // surface, surfaceContainerLow (cards)
+val SurfaceContainerLight = Color(0xFFF1F4F7)
+val SurfaceContainerHighLight = Color(0xFFE9EEF3)
+val SurfaceContainerHighestLight = Color(0xFFE1E8EF)
+// 3.3:1 on the page. `outline` carries meaning - unselected control boundaries and
+// icons - so it is held to the 3:1 non-text minimum. Decorative separators use
+// `outlineVariant` instead, which is a hairline and carries no information.
+val OutlineLight = Color(0xFF7E8B99)
+val OutlineVariantLight = Color(0xFFE4E9EF) // hairline dividers
+val TextPrimaryLight = Color(0xFF0F1B26)     // 16.9:1 on page
+val TextSecondaryLight = Color(0xFF475569)   // 7.1:1 on page
 
-val ErrorDark = Color(0xFFFFB4AB)
-val OnErrorDark = Color(0xFF690005)
-val ErrorContainerDark = Color(0xFF93000A)
-val OnErrorContainerDark = Color(0xFFFFDAD6)
+// Dark
+val PageDark = Color(0xFF0A0E13)           // background
+val SurfaceDark = Color(0xFF121820)        // surface
+val SurfaceContainerLowestDark = Color(0xFF0A0E13)
+val SurfaceContainerLowDark = Color(0xFF151C25)
+val SurfaceContainerDark = Color(0xFF1A222C)
+val SurfaceContainerHighDark = Color(0xFF222C38)
+val SurfaceContainerHighestDark = Color(0xFF2C3745)
+val OutlineDark = Color(0xFF55636F)         // 3.1:1 on page - boundaries & icons
+val OutlineVariantDark = Color(0xFF232C37)  // hairline dividers
+val TextPrimaryDark = Color(0xFFEDF2F7)    // 16.4:1 on page
+val TextSecondaryDark = Color(0xFF9AA8B6)  // 7.5:1 on page
 
-// Success roles (tonal green, adaptive both modes)
-val SuccessLight = Color(0xFF1B7A3D)
+// ---------------------------------------------------------------------------
+// Semantic - used only where the meaning is real.
+// ---------------------------------------------------------------------------
+
+/** A prayer has been marked complete. */
+val SuccessLight = Color(0xFF15803D)       // 4.9:1 on white
 val OnSuccessLight = Color(0xFFFFFFFF)
-val SuccessContainerLight = Color(0xFFC6F0D2)
-val OnSuccessContainerLight = Color(0xFF0A3D1E)
+val SuccessContainerLight = Color(0xFFDCFCE7)
+val OnSuccessContainerLight = Color(0xFF14532D)
 
-val SuccessDark = Color(0xFF7ED99A)
-val OnSuccessDark = Color(0xFF0A3D1E)
+val SuccessDark = Color(0xFF6EE7A0)
+val OnSuccessDark = Color(0xFF052E16)
 val SuccessContainerDark = Color(0xFF14532D)
-val OnSuccessContainerDark = Color(0xFFC6F0D2)
+val OnSuccessContainerDark = Color(0xFFBBF7D0)
 
-// Dim/Bright anchors for expressive gradients and scrims
-val SurfaceDimLight = Color(0xFFDDE3EA)
-val SurfaceBrightLight = Color(0xFFF8FAFC)
-val SurfaceDimDark = Color(0xFF05080F)
-val SurfaceBrightDark = Color(0xFF2B3A55)
+/** Alerts are silenced, or something failed. */
+val DangerLight = Color(0xFFB42318)        // 6.4:1 on white
+val OnDangerLight = Color(0xFFFFFFFF)
+val DangerContainerLight = Color(0xFFFEE4E2)
+val OnDangerContainerLight = Color(0xFF7A271A)
 
-// Outline roles (tokenized so light/dark stay in sync with the palette)
-val OutlineLight = Color(0xFFCBD5E1)
-val OutlineVariantLight = Color(0xFFE2E8F0)
-val OutlineDark = CardBorderDark
-val OutlineVariantDark = TwilightIndigo
+val DangerDark = Color(0xFFFFB4AB)
+val OnDangerDark = Color(0xFF690005)
+val DangerContainerDark = Color(0xFF93000A)
+val OnDangerContainerDark = Color(0xFFFFDAD6)
+
+/** Magnetic interference, degraded sensor. */
+val WarningLight = Color(0xFFB54708)       // 4.6:1 on white
+val OnWarningLight = Color(0xFFFFFFFF)
+val WarningContainerLight = Color(0xFFFEF0C7)
+val OnWarningContainerLight = Color(0xFF7A2E0E)
+
+val WarningDark = Color(0xFFFDB022)
+val OnWarningDark = Color(0xFF412A00)
+val WarningContainerDark = Color(0xFF7A2E0E)
+val OnWarningContainerDark = Color(0xFFFEF0C7)
+
+/**
+ * Blends towards white by [amount].
+ *
+ * Used instead of a hand-picked pale constant per sky period so the static
+ * background stays in step with the live palette rather than drifting from it.
+ */
+internal fun Color.lighten(amount: Float): Color = Color(
+    red = red + (1f - red) * amount,
+    green = green + (1f - green) * amount,
+    blue = blue + (1f - blue) * amount,
+    alpha = alpha
+)
+
+/** Linear blend towards [other]. */
+internal fun Color.mix(other: Color, amount: Float): Color {
+    val t = amount.coerceIn(0f, 1f)
+    return Color(
+        red = red + (other.red - red) * t,
+        green = green + (other.green - green) * t,
+        blue = blue + (other.blue - blue) * t,
+        alpha = alpha + (other.alpha - alpha) * t
+    )
+}

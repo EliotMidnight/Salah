@@ -5,10 +5,16 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,61 +37,63 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.data.model.UserLocation
-import com.example.ui.SalahUiState
 import com.example.ui.SalahViewModel
 import com.example.ui.home.HomeScreen
+import com.example.ui.localization.LocalStrings
+import com.example.ui.localization.ProvideAppLanguage
 import com.example.ui.prayer.PrayerScreen
 import com.example.ui.qibla.QiblaScreen
 import com.example.ui.quran.QuranScreen
 import com.example.ui.settings.SettingsScreen
-import com.example.ui.theme.ExpressiveMotion
+import com.example.ui.theme.Motion
 import com.example.ui.theme.SalahReduceMotion
 import com.example.ui.theme.SalahTheme
-import com.example.ui.theme.expressiveEnterBack
-import com.example.ui.theme.expressiveEnterForward
-import com.example.ui.theme.expressiveExitBack
-import com.example.ui.theme.expressiveExitForward
-import com.example.ui.localization.LocalStrings
-import com.example.ui.localization.ProvideAppLanguage
+import com.example.ui.theme.screenEnterBack
+import com.example.ui.theme.screenEnterForward
+import com.example.ui.theme.screenExitBack
+import com.example.ui.theme.screenExitForward
 
+/**
+ * The five top-level destinations.
+ *
+ * The label is carried in the enum only as documentation; the rendered label
+ * always comes from the localisation dictionary, because hardcoding "Today" here
+ * meant the bottom bar stayed English in Arabic, Urdu and the other nine
+ * languages.
+ */
 enum class SalahDestination(
     val route: String,
-    val label: String,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector
 ) {
-    TODAY("today", "Today", Icons.Filled.WbSunny, Icons.Outlined.WbSunny),
-    PRAYER("prayer", "Prayer", Icons.Filled.Schedule, Icons.Outlined.Schedule),
-    QURAN("quran", "Quran", Icons.Filled.AutoStories, Icons.Outlined.AutoStories),
-    QIBLA("qibla", "Qibla", Icons.Filled.Explore, Icons.Outlined.Explore),
-    SETTINGS("settings", "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
+    TODAY("today", Icons.Filled.WbSunny, Icons.Outlined.WbSunny),
+    PRAYER("prayer", Icons.Filled.Schedule, Icons.Outlined.Schedule),
+    QURAN("quran", Icons.Filled.AutoStories, Icons.Outlined.AutoStories),
+    QIBLA("qibla", Icons.Filled.Explore, Icons.Outlined.Explore),
+    SETTINGS("settings", Icons.Filled.Settings, Icons.Outlined.Settings)
 }
 
 class MainActivity : ComponentActivity() {
@@ -93,24 +101,25 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        WindowCompat.getInsetsController(window, window.decorView).apply {
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
-            show(WindowInsetsCompat.Type.systemBars())
-        }
-
         setContent {
             val viewModel: SalahViewModel = viewModel()
             val uiState by viewModel.uiState.collectAsState()
-            val isDarkTheme = when (uiState.appTheme) {
+
+            // The app has three explicit theme choices plus "match system".
+            // Dynamic (wallpaper) colour is intentionally not offered: it cannot
+            // be contrast-checked, and this design fixes its accent on purpose.
+            val darkTheme = when (uiState.appTheme) {
                 "Dark Mode (OLED)" -> true
                 "Clean Light" -> false
                 else -> androidx.compose.foundation.isSystemInDarkTheme()
             }
+
             val reduceMotion = SalahReduceMotion.remember()
-            // Mirror into ExpressiveMotion so its non-composable spec helpers honour it.
-            SideEffect { ExpressiveMotion.reduced = reduceMotion }
+            // Mirror into Motion so its non-composable helpers honour the setting.
+            SideEffect { Motion.reduced = reduceMotion }
+
             CompositionLocalProvider(SalahReduceMotion.Local provides reduceMotion) {
-                SalahTheme(darkTheme = isDarkTheme) {
+                SalahTheme(darkTheme = darkTheme) {
                     ProvideAppLanguage(language = uiState.language) {
                         SalahApp(viewModel = viewModel)
                     }
@@ -121,241 +130,243 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun SalahApp(viewModel: SalahViewModel) {
+private fun SalahApp(viewModel: SalahViewModel) {
     val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route ?: SalahDestination.TODAY.route
-
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route ?: SalahDestination.TODAY.route
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val strings = LocalStrings.current
 
-    // Request Notification permission for Android 13+
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { _ -> }
-
-    // Request Location permission
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        if (permissions.values.any { it }) {
-            viewModel.fetchCurrentLocation()
-        }
+        if (permissions.values.any { it }) viewModel.fetchCurrentLocation()
     }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { }
 
     LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
-    val isTopLevelDestination = SalahDestination.values().any { it.route == currentRoute }
-    val strings = LocalStrings.current
+    // Tapping the current tab again returns to that tab's root. Without this,
+    // switching Today -> Settings -> Today leaves the Settings scroll position
+    // and any open sheet state behind, so the tab felt stuck.
+    BackHandler(enabled = currentRoute != SalahDestination.TODAY.route) {
+        navController.navigate(SalahDestination.TODAY.route) {
+            popUpTo(SalahDestination.TODAY.route) { inclusive = true }
+            launchSingleTop = true
+        }
+    }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0.dp),
-        bottomBar = {
-            if (isTopLevelDestination) {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    tonalElevation = 3.dp,
-                    windowInsets = WindowInsets.navigationBars
-                ) {
-                    SalahDestination.values().forEach { dest ->
-                        val isSelected = currentRoute == dest.route
-                        val localizedLabel = when (dest) {
-                            SalahDestination.TODAY -> strings.navToday
-                            SalahDestination.PRAYER -> strings.navPrayer
-                            SalahDestination.QURAN -> strings.navQuran
-                            SalahDestination.QIBLA -> strings.navQibla
-                            SalahDestination.SETTINGS -> strings.navSettings
+        bottomBar = { SalahNavigationBar(navController = navController, currentRoute = currentRoute) }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = innerPadding.calculateBottomPadding())
+        ) {
+            // Each destination owns its own top bar, so the title always answers
+            // "where am I?" on every screen instead of only on some of them.
+            NavHost(
+                navController = navController,
+                startDestination = SalahDestination.TODAY.route,
+                enterTransition = { screenEnterForward() },
+                exitTransition = { screenExitForward() },
+                popEnterTransition = { screenEnterBack() },
+                popExitTransition = { screenExitBack() },
+                modifier = Modifier.fillMaxSize()
+            ) {
+                composable(SalahDestination.TODAY.route) {
+                    HomeScreen(
+                        state = uiState,
+                        onTogglePrayer = viewModel::togglePrayerCompleted,
+                        onContinueReadingClick = {
+                            viewModel.jumpToContinueReading()
+                            navController.navigateTab(SalahDestination.QURAN)
+                        },
+                        onOpenPrayerTimes = { navController.navigateTab(SalahDestination.PRAYER) },
+                        onLocationClick = { navController.navigateTab(SalahDestination.SETTINGS) },
+                        onRefreshClick = viewModel::refreshData,
+                        onToggleGlobalSilent = viewModel::toggleGlobalSilentMode,
+                        onCyclePrayerAlertMode = viewModel::cyclePrayerAlertMode,
+                        onSilenceActiveAlert = viewModel::stopAudioPreview
+                    )
+                }
+
+                composable(SalahDestination.PRAYER.route) {
+                    PrayerScreen(
+                        state = uiState,
+                        onMethodChange = viewModel::setCalculationMethod,
+                        onMadhhabChange = viewModel::setMadhhab
+                    )
+                }
+
+                composable(SalahDestination.QURAN.route) {
+                    QuranScreen(
+                        state = uiState,
+                        onSurahSelected = viewModel::selectSurah,
+                        onAyahViewed = viewModel::onAyahViewed,
+                        onToggleBookmark = viewModel::toggleBookmark,
+                        onTogglePlayAyah = viewModel::togglePlayAyah,
+                        onStopAudio = viewModel::stopAudio,
+                        onFontScaleChange = viewModel::setQuranFontScale,
+                        onPageSelected = viewModel::selectPage,
+                        onJuzSelected = viewModel::selectJuz,
+                        onHizbSelected = viewModel::selectHizb
+                    )
+                }
+
+                composable(SalahDestination.QIBLA.route) {
+                    QiblaScreen(
+                        state = uiState,
+                        onToggleTrueNorth = viewModel::toggleTrueNorth,
+                        onFetchLocation = {
+                            if (hasLocationPermission(context)) {
+                                viewModel.fetchCurrentLocation()
+                            } else {
+                                locationPermissionLauncher.launch(LOCATION_PERMISSIONS)
+                            }
                         }
-                        NavigationBarItem(
-                            selected = isSelected,
-                            alwaysShowLabel = true,
-                            onClick = {
-                                if (currentRoute != dest.route) {
-                                    navController.navigate(dest.route) {
-                                        popUpTo(SalahDestination.TODAY.route) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector = if (isSelected) dest.selectedIcon else dest.unselectedIcon,
-                                    contentDescription = localizedLabel
-                                )
-                            },
-                            label = {
-                                Text(
-                                    text = localizedLabel,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
-                                )
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            ),
-                            modifier = Modifier.testTag("nav_item_${dest.route}")
-                        )
-                    }
+                    )
+                }
+
+                composable(SalahDestination.SETTINGS.route) {
+                    SettingsScreen(
+                        state = uiState,
+                        onLocationSelect = viewModel::setLocation,
+                        onFetchLocation = { locationPermissionLauncher.launch(LOCATION_PERMISSIONS) },
+                        onMethodSelect = viewModel::setCalculationMethod,
+                        onMadhhabSelect = viewModel::setMadhhab,
+                        onAdjustmentsChange = viewModel::setAdjustments,
+                        onAdhanToggle = viewModel::setAdhanNotification,
+                        onPrePrayerToggle = viewModel::setPrePrayerAlert,
+                        onVibrateOnlyToggle = viewModel::setVibrateOnly,
+                        onGlobalSilentToggle = viewModel::toggleGlobalSilentMode,
+                        onAutoSilentDuringPrayerToggle = viewModel::toggleAutoSilentDuringPrayer,
+                        onAutoSilentDurationChange = viewModel::setAutoSilentDuration,
+                        onLanguageSelect = viewModel::setLanguage,
+                        onRiwayahSelect = viewModel::setRiwayah,
+                        onThemeSelect = viewModel::setAppTheme,
+                        onQuranScriptSelect = viewModel::setQuranScript,
+                        onTimeFormatToggle = viewModel::setTimeFormat24h,
+                        onAdhanSoundSelect = viewModel::setAdhanSound,
+                        onHijriAdjustmentChange = viewModel::setHijriAdjustment,
+                        onReciterSelect = viewModel::setReciter,
+                        onFontScaleChange = viewModel::setQuranFontScale,
+                        onRefreshClick = viewModel::refreshData,
+                        onPrePrayerOffsetChange = viewModel::setPrePrayerOffsetMinutes,
+                        onAdhanVolumeChange = viewModel::setAdhanVolume,
+                        onPrayerAlertModeChange = viewModel::setPrayerAlertMode,
+                        onPlayAudioPreview = viewModel::playAudioPreview,
+                        onStopAudioPreview = viewModel::stopAudioPreview,
+                        onCustomLocationSave = viewModel::setCustomLocation,
+                        onTranslationSelect = viewModel::setTranslationEdition,
+                        onRecomputeEphemerisCache = viewModel::recomputeEphemerisCache,
+                        onClearAudioCache = viewModel::clearAudioCache,
+                        onResetAllSettings = viewModel::resetAllSettings,
+                        onLivingSkyChange = viewModel::setLivingSkyEnabled
+                    )
                 }
             }
         }
-    ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = SalahDestination.TODAY.route,
-            enterTransition = { expressiveEnterForward() },
-            exitTransition = { expressiveExitForward() },
-            popEnterTransition = { expressiveEnterBack() },
-            popExitTransition = { expressiveExitBack() },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = if (isTopLevelDestination) innerPadding.calculateBottomPadding() else 0.dp)
+    }
+}
+
+private val LOCATION_PERMISSIONS = arrayOf(
+    Manifest.permission.ACCESS_FINE_LOCATION,
+    Manifest.permission.ACCESS_COARSE_LOCATION
+)
+
+private fun hasLocationPermission(context: android.content.Context): Boolean =
+    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+        PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+        PackageManager.PERMISSION_GRANTED
+
+/** Tab switching that keeps one entry per tab and restores each tab's state. */
+private fun NavHostController.navigateTab(destination: SalahDestination) {
+    navigate(destination.route) {
+        popUpTo(graph.startDestinationId) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+}
+
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+@Composable
+private fun SalahNavigationBar(
+    navController: NavHostController,
+    currentRoute: String
+) {
+    val strings = LocalStrings.current
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp
+    ) {
+        NavigationBar(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            tonalElevation = 0.dp,
+            windowInsets = WindowInsets.navigationBars
         ) {
-            composable(SalahDestination.TODAY.route) {
-                HomeScreen(
-                    state = uiState,
-                    onTogglePrayer = { viewModel.togglePrayerCompleted(it) },
-                    onContinueReadingClick = {
-                        viewModel.jumpToContinueReading()
-                        navController.navigate(SalahDestination.QURAN.route)
-                    },
-                    onOpenPrayerDetails = {
-                        navController.navigate(SalahDestination.PRAYER.route)
-                    },
-                    onLocationClick = {
-                        navController.navigate(SalahDestination.SETTINGS.route)
-                    },
-                    onSettingsClick = {
-                        navController.navigate(SalahDestination.SETTINGS.route)
-                    },
-                    onRefreshClick = {
-                        viewModel.refreshData()
-                    },
-                    onToggleGlobalSilent = {
-                        viewModel.toggleGlobalSilentMode()
-                    },
-                    onCyclePrayerAlertMode = {
-                        viewModel.cyclePrayerAlertMode(it)
-                    },
-                    onSilenceActiveAlert = {
-                        viewModel.stopAudioPreview()
-                    }
-                )
-            }
+            SalahDestination.entries.forEach { destination ->
+                val selected = currentRoute == destination.route
+                val label = when (destination) {
+                    SalahDestination.TODAY -> strings.navToday
+                    SalahDestination.PRAYER -> strings.navPrayer
+                    SalahDestination.QURAN -> strings.navQuran
+                    SalahDestination.QIBLA -> strings.navQibla
+                    SalahDestination.SETTINGS -> strings.navSettings
+                }
 
-            composable(SalahDestination.PRAYER.route) {
-                PrayerScreen(
-                    state = uiState,
-                    onMethodChange = { viewModel.setCalculationMethod(it) },
-                    onMadhhabChange = { viewModel.setMadhhab(it) }
-                )
-            }
-
-            composable(SalahDestination.QURAN.route) {
-                QuranScreen(
-                    state = uiState,
-                    onSurahSelected = { viewModel.selectSurah(it) },
-                    onAyahViewed = { viewModel.onAyahViewed(it) },
-                    onToggleBookmark = { viewModel.toggleBookmark(it) },
-                    onTogglePlayAyah = { viewModel.togglePlayAyah(it) },
-                    onStopAudio = { viewModel.stopAudio() },
-                    onFontScaleChange = { viewModel.setQuranFontScale(it) },
-                    onPageSelected = { viewModel.selectPage(it) },
-                    onJuzSelected = { viewModel.selectJuz(it) },
-                    onHizbSelected = { viewModel.selectHizb(it) }
-                )
-            }
-
-            composable(SalahDestination.QIBLA.route) {
-                QiblaScreen(
-                    state = uiState,
-                    onToggleTrueNorth = { viewModel.toggleTrueNorth() },
-                    onFetchLocation = {
-                        val hasFine = ContextCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.ACCESS_FINE_LOCATION
-                        ) == PackageManager.PERMISSION_GRANTED
-                        val hasCoarse = ContextCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.ACCESS_COARSE_LOCATION
-                        ) == PackageManager.PERMISSION_GRANTED
-
-                        if (hasFine || hasCoarse) {
-                            viewModel.fetchCurrentLocation()
-                        } else {
-                            locationPermissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION
-                                )
-                            )
-                        }
-                    }
-                )
-            }
-
-            composable(SalahDestination.SETTINGS.route) {
-                SettingsScreen(
-                    state = uiState,
-                    onBack = null,
-                    onLocationSelect = { viewModel.setLocation(it) },
-                    onFetchLocation = {
-                        locationPermissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION
-                            )
+                NavigationBarItem(
+                    selected = selected,
+                    onClick = { if (!selected) navController.navigateTab(destination) },
+                    // The label is the accessible name; a second announcement from
+                    // the icon would just repeat it.
+                    icon = {
+                        Icon(
+                            imageVector = if (selected) destination.selectedIcon else destination.unselectedIcon,
+                            contentDescription = null
                         )
                     },
-                    onMethodSelect = { viewModel.setCalculationMethod(it) },
-                    onMadhhabSelect = { viewModel.setMadhhab(it) },
-                    onAdjustmentsChange = { viewModel.setAdjustments(it) },
-                    onAdhanToggle = { viewModel.setAdhanNotification(it) },
-                    onPrePrayerToggle = { viewModel.setPrePrayerAlert(it) },
-                    onVibrateOnlyToggle = { viewModel.setVibrateOnly(it) },
-                    onGlobalSilentToggle = { viewModel.toggleGlobalSilentMode() },
-                    onAutoSilentDuringPrayerToggle = { viewModel.toggleAutoSilentDuringPrayer() },
-                    onAutoSilentDurationChange = { viewModel.setAutoSilentDuration(it) },
-                    onLanguageSelect = { viewModel.setLanguage(it) },
-                    onRiwayahSelect = { viewModel.setRiwayah(it) },
-                    onThemeSelect = { viewModel.setAppTheme(it) },
-                    onQuranScriptSelect = { viewModel.setQuranScript(it) },
-                    onTimeFormatToggle = { viewModel.setTimeFormat24h(it) },
-                    onAdhanSoundSelect = { viewModel.setAdhanSound(it) },
-                    onHijriAdjustmentChange = { viewModel.setHijriAdjustment(it) },
-                    onReciterSelect = { viewModel.setReciter(it) },
-                    onFontScaleChange = { viewModel.setQuranFontScale(it) },
-                    onRefreshClick = { viewModel.refreshData() },
-                    onPrePrayerOffsetChange = { viewModel.setPrePrayerOffsetMinutes(it) },
-                    onAdhanVolumeChange = { viewModel.setAdhanVolume(it) },
-                    onPrayerAlertModeChange = { prayer, mode -> viewModel.setPrayerAlertMode(prayer, mode) },
-                    onPlayAudioPreview = { viewModel.playAudioPreview(it) },
-                    onStopAudioPreview = { viewModel.stopAudioPreview() },
-                    onCustomLocationSave = { name, lat, lng, alt -> viewModel.setCustomLocation(name, lat, lng, alt) },
-                    onTranslationSelect = { viewModel.setTranslationEdition(it) },
-                    onRecomputeEphemerisCache = { viewModel.recomputeEphemerisCache() },
-                    onClearAudioCache = { viewModel.clearAudioCache() },
-                    onResetAllSettings = { viewModel.resetAllSettings() }
+                    label = {
+                        AnimatedContent(
+                            targetState = label,
+                            transitionSpec = {
+                                fadeIn(tween(Motion.duration(Motion.MICRO))) togetherWith
+                                    fadeOut(tween(Motion.duration(Motion.MICRO)))
+                            },
+                            label = "nav_label"
+                        ) { text ->
+                            Text(
+                                text = text,
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    modifier = Modifier.semantics { testTagsAsResourceId = true }
                 )
             }
         }

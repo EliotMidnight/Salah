@@ -1,67 +1,83 @@
 package com.example.ui.theme
 
-import android.os.Build
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 
-/**
- * Semantic success roles (no M3 slot for these). Fixed tonal greens that stay
- * legible in both themes and alongside dynamic color.
- */
-data class SuccessColors(
-    val success: Color,
-    val onSuccess: Color,
-    val successContainer: Color,
-    val onSuccessContainer: Color
+// ---------------------------------------------------------------------------
+// Colour schemes
+//
+// Dynamic colour is deliberately OFF. The app already offers System / Dark /
+// Light as an explicit setting, and honouring the wallpaper palette on top of
+// that produced the real problem this redesign fixes: an unpredictable accent
+// that cannot be contrast-checked. One accent, always the same, is the point.
+// ---------------------------------------------------------------------------
+
+private val LightColors = lightColorScheme(
+    primary = AccentLight,
+    onPrimary = OnAccentLight,
+    primaryContainer = AccentContainerLight,
+    onPrimaryContainer = OnAccentContainerLight,
+    secondary = AccentLight,
+    onSecondary = OnAccentLight,
+    secondaryContainer = AccentContainerLight,
+    onSecondaryContainer = OnAccentContainerLight,
+    tertiary = AccentLight,
+    onTertiary = OnAccentLight,
+    tertiaryContainer = AccentContainerLight,
+    onTertiaryContainer = OnAccentContainerLight,
+    background = PageLight,
+    onBackground = TextPrimaryLight,
+    surface = SurfaceLight,
+    onSurface = TextPrimaryLight,
+    surfaceVariant = SurfaceContainerLight,
+    onSurfaceVariant = TextSecondaryLight,
+    surfaceContainerLowest = PageLight,
+    surfaceContainerLow = SurfaceLight,
+    surfaceContainer = SurfaceContainerLight,
+    surfaceContainerHigh = SurfaceContainerHighLight,
+    surfaceContainerHighest = SurfaceContainerHighestLight,
+    outline = OutlineLight,
+    outlineVariant = OutlineVariantLight,
+    error = DangerLight,
+    onError = OnDangerLight,
+    errorContainer = DangerContainerLight,
+    onErrorContainer = OnDangerContainerLight,
+    surfaceDim = SurfaceContainerHighestLight,
+    surfaceBright = SurfaceLight
 )
 
-private val SuccessColorsLight = SuccessColors(
-    success = SuccessLight,
-    onSuccess = OnSuccessLight,
-    successContainer = SuccessContainerLight,
-    onSuccessContainer = OnSuccessContainerLight
-)
-
-private val SuccessColorsDark = SuccessColors(
-    success = SuccessDark,
-    onSuccess = OnSuccessDark,
-    successContainer = SuccessContainerDark,
-    onSuccessContainer = OnSuccessContainerDark
-)
-
-val LocalSuccessColors = staticCompositionLocalOf { SuccessColorsLight }
-
-private val DarkColorScheme = darkColorScheme(
-    primary = PrimaryDark,
-    onPrimary = OnPrimaryDark,
-    primaryContainer = PrimaryContainerDark,
-    onPrimaryContainer = OnPrimaryContainerDark,
-    secondary = SecondaryDark,
-    onSecondary = OnSecondaryDark,
-    secondaryContainer = SecondaryContainerDark,
-    onSecondaryContainer = OnSecondaryContainerDark,
-    tertiary = TertiaryDark,
-    onTertiary = OnTertiaryDark,
-    tertiaryContainer = TertiaryContainerDark,
-    onTertiaryContainer = OnTertiaryContainerDark,
-    background = BackgroundDark,
-    onBackground = SandAlabaster,
+private val DarkColors = darkColorScheme(
+    primary = AccentDark,
+    onPrimary = OnAccentDark,
+    primaryContainer = AccentContainerDark,
+    onPrimaryContainer = OnAccentContainerDark,
+    secondary = AccentDark,
+    onSecondary = OnAccentDark,
+    secondaryContainer = AccentContainerDark,
+    onSecondaryContainer = OnAccentContainerDark,
+    tertiary = AccentDark,
+    onTertiary = OnAccentDark,
+    tertiaryContainer = AccentContainerDark,
+    onTertiaryContainer = OnAccentContainerDark,
+    background = PageDark,
+    onBackground = TextPrimaryDark,
     surface = SurfaceDark,
-    onSurface = SandAlabaster,
-    surfaceVariant = SurfaceVariantDark,
-    onSurfaceVariant = TextMutedDark,
+    onSurface = TextPrimaryDark,
+    surfaceVariant = SurfaceContainerDark,
+    onSurfaceVariant = TextSecondaryDark,
     surfaceContainerLowest = SurfaceContainerLowestDark,
     surfaceContainerLow = SurfaceContainerLowDark,
     surfaceContainer = SurfaceContainerDark,
@@ -69,113 +85,124 @@ private val DarkColorScheme = darkColorScheme(
     surfaceContainerHighest = SurfaceContainerHighestDark,
     outline = OutlineDark,
     outlineVariant = OutlineVariantDark,
-    error = ErrorDark,
-    onError = OnErrorDark,
-    errorContainer = ErrorContainerDark,
-    onErrorContainer = OnErrorContainerDark,
-    surfaceDim = SurfaceDimDark,
-    surfaceBright = SurfaceBrightDark
+    error = DangerDark,
+    onError = OnDangerDark,
+    errorContainer = DangerContainerDark,
+    onErrorContainer = OnDangerContainerDark,
+    surfaceDim = SurfaceDark,
+    surfaceBright = SurfaceContainerHighDark
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = PrimaryLight,
-    onPrimary = OnPrimaryLight,
-    primaryContainer = PrimaryContainerLight,
-    onPrimaryContainer = OnPrimaryContainerLight,
-    secondary = SecondaryLight,
-    onSecondary = OnSecondaryLight,
-    secondaryContainer = SecondaryContainerLight,
-    onSecondaryContainer = OnSecondaryContainerLight,
-    tertiary = TertiaryLight,
-    onTertiary = OnTertiaryLight,
-    tertiaryContainer = TertiaryContainerLight,
-    onTertiaryContainer = OnTertiaryContainerLight,
-    background = BackgroundLight,
-    onBackground = CelestialNavy,
-    surface = SurfaceLight,
-    onSurface = CelestialNavy,
-    surfaceVariant = SurfaceVariantLight,
-    onSurfaceVariant = TextMutedLight,
-    surfaceContainerLowest = SurfaceContainerLowestLight,
-    surfaceContainerLow = SurfaceContainerLowLight,
-    surfaceContainer = SurfaceContainerLight,
-    surfaceContainerHigh = SurfaceContainerHighLight,
-    surfaceContainerHighest = SurfaceContainerHighestLight,
-    outline = OutlineLight,
-    outlineVariant = OutlineVariantLight,
-    error = ErrorLight,
-    onError = OnErrorLight,
-    errorContainer = ErrorContainerLight,
-    onErrorContainer = OnErrorContainerLight,
-    surfaceDim = SurfaceDimLight,
-    surfaceBright = SurfaceBrightLight
+/**
+ * Semantic colours that Material 3 has no slot for.
+ *
+ * Kept as one small object rather than four loose composition locals so a
+ * screen can only ever reach for a colour that has a defined meaning.
+ */
+@Immutable
+data class SemanticColors(
+    val success: Color,
+    val onSuccess: Color,
+    val successContainer: Color,
+    val onSuccessContainer: Color,
+    val warning: Color,
+    val onWarning: Color,
+    val warningContainer: Color,
+    val onWarningContainer: Color
 )
 
-@Composable
-private fun ColorScheme.animated(): ColorScheme {
-    val animSpec = tween<Color>(durationMillis = ExpressiveMotion.MEDIUM, easing = ExpressiveEmphasized)
-    return this.copy(
-        primary = animateColorAsState(primary, animSpec, label = "primary").value,
-        onPrimary = animateColorAsState(onPrimary, animSpec, label = "onPrimary").value,
-        primaryContainer = animateColorAsState(primaryContainer, animSpec, label = "primaryContainer").value,
-        onPrimaryContainer = animateColorAsState(onPrimaryContainer, animSpec, label = "onPrimaryContainer").value,
-        secondary = animateColorAsState(secondary, animSpec, label = "secondary").value,
-        onSecondary = animateColorAsState(onSecondary, animSpec, label = "onSecondary").value,
-        secondaryContainer = animateColorAsState(secondaryContainer, animSpec, label = "secondaryContainer").value,
-        onSecondaryContainer = animateColorAsState(onSecondaryContainer, animSpec, label = "onSecondaryContainer").value,
-        tertiary = animateColorAsState(tertiary, animSpec, label = "tertiary").value,
-        onTertiary = animateColorAsState(onTertiary, animSpec, label = "onTertiary").value,
-        tertiaryContainer = animateColorAsState(tertiaryContainer, animSpec, label = "tertiaryContainer").value,
-        onTertiaryContainer = animateColorAsState(onTertiaryContainer, animSpec, label = "onTertiaryContainer").value,
-        background = animateColorAsState(background, animSpec, label = "background").value,
-        onBackground = animateColorAsState(onBackground, animSpec, label = "onBackground").value,
-        surface = animateColorAsState(surface, animSpec, label = "surface").value,
-        onSurface = animateColorAsState(onSurface, animSpec, label = "onSurface").value,
-        surfaceVariant = animateColorAsState(surfaceVariant, animSpec, label = "surfaceVariant").value,
-        onSurfaceVariant = animateColorAsState(onSurfaceVariant, animSpec, label = "onSurfaceVariant").value,
-        surfaceContainerLowest = animateColorAsState(surfaceContainerLowest, animSpec, label = "surfaceContainerLowest").value,
-        surfaceContainerLow = animateColorAsState(surfaceContainerLow, animSpec, label = "surfaceContainerLow").value,
-        surfaceContainer = animateColorAsState(surfaceContainer, animSpec, label = "surfaceContainer").value,
-        surfaceContainerHigh = animateColorAsState(surfaceContainerHigh, animSpec, label = "surfaceContainerHigh").value,
-        surfaceContainerHighest = animateColorAsState(surfaceContainerHighest, animSpec, label = "surfaceContainerHighest").value,
-        outline = animateColorAsState(outline, animSpec, label = "outline").value,
-        outlineVariant = animateColorAsState(outlineVariant, animSpec, label = "outlineVariant").value,
-        error = animateColorAsState(error, animSpec, label = "error").value,
-        onError = animateColorAsState(onError, animSpec, label = "onError").value,
-        errorContainer = animateColorAsState(errorContainer, animSpec, label = "errorContainer").value,
-        onErrorContainer = animateColorAsState(onErrorContainer, animSpec, label = "onErrorContainer").value,
-        surfaceDim = animateColorAsState(surfaceDim, animSpec, label = "surfaceDim").value,
-        surfaceBright = animateColorAsState(surfaceBright, animSpec, label = "surfaceBright").value
-    )
+private val LightSemantics = SemanticColors(
+    success = SuccessLight,
+    onSuccess = OnSuccessLight,
+    successContainer = SuccessContainerLight,
+    onSuccessContainer = OnSuccessContainerLight,
+    warning = WarningLight,
+    onWarning = OnWarningLight,
+    warningContainer = WarningContainerLight,
+    onWarningContainer = OnWarningContainerLight
+)
+
+private val DarkSemantics = SemanticColors(
+    success = SuccessDark,
+    onSuccess = OnSuccessDark,
+    successContainer = SuccessContainerDark,
+    onSuccessContainer = OnSuccessContainerDark,
+    warning = WarningDark,
+    onWarning = OnWarningDark,
+    warningContainer = WarningContainerDark,
+    onWarningContainer = OnWarningContainerDark
+)
+
+val LocalSemanticColors = staticCompositionLocalOf { LightSemantics }
+
+// ---------------------------------------------------------------------------
+// Spacing - a 4dp grid. Screens compose these instead of inventing dp values.
+// ---------------------------------------------------------------------------
+
+@Immutable
+data class Spacing(
+    val xxs: Dp = 2.dp,
+    val xs: Dp = 4.dp,
+    val sm: Dp = 8.dp,
+    val md: Dp = 12.dp,
+    val lg: Dp = 16.dp,
+    val xl: Dp = 20.dp,
+    val xxl: Dp = 24.dp,
+    val xxxl: Dp = 32.dp,
+    val huge: Dp = 40.dp,
+    val giant: Dp = 48.dp
+)
+
+val LocalSpacing = staticCompositionLocalOf { Spacing() }
+
+object Space {
+    val current: Spacing
+        @Composable @ReadOnlyComposable get() = LocalSpacing.current
 }
+
+/** Reads the semantic palette without threading a parameter through every call. */
+object Tonal {
+    val colors: SemanticColors
+        @Composable @ReadOnlyComposable get() = LocalSemanticColors.current
+}
+
+// ---------------------------------------------------------------------------
+// Layout - one content measure, reused by every screen so nothing drifts.
+// ---------------------------------------------------------------------------
+
+@Immutable
+data class LayoutMetrics(
+    /** Reading measure. Comfortable for a phone, still readable on a monitor. */
+    val contentMaxWidth: Dp = 560.dp,
+    /** Slightly wider for dense grids (the prayer month table). */
+    val wideMaxWidth: Dp = 720.dp,
+    /** Minimum touch target, per the Material accessibility guidance. */
+    val minTouchTarget: Dp = 48.dp
+)
+
+val LocalLayoutMetrics = staticCompositionLocalOf { LayoutMetrics() }
+
+/** Layout metrics, reachable the same way as colours and type. */
+val MaterialTheme.layoutMetrics: LayoutMetrics
+    @Composable @ReadOnlyComposable get() = LocalLayoutMetrics.current
+
+// ---------------------------------------------------------------------------
+// Theme
+// ---------------------------------------------------------------------------
 
 @Composable
 fun SalahTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val targetScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+    CompositionLocalProvider(
+        LocalSemanticColors provides if (darkTheme) DarkSemantics else LightSemantics
+    ) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkColors else LightColors,
+            typography = Typography,
+            shapes = Shapes,
+            content = content
+        )
     }
-
-    val animatedScheme = targetScheme.animated()
-
-    MaterialTheme(
-        colorScheme = animatedScheme,
-        typography = Typography,
-        shapes = Shapes,
-        content = {
-            CompositionLocalProvider(
-                LocalSuccessColors provides if (darkTheme) SuccessColorsDark else SuccessColorsLight
-            ) {
-                content()
-            }
-        }
-    )
 }

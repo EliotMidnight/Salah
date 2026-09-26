@@ -37,7 +37,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.example.data.model.UserLocation
-import com.example.ui.theme.ExpressiveMotion
+import com.example.ui.theme.Motion
 import com.example.engine.AstronomicalSky
 import com.example.engine.MoonPhaseInfo
 import com.example.engine.QiblaEngine
@@ -106,7 +106,7 @@ fun LivingSkyCanvas(
     }
 
     // Smooth color transitions across sky changes
-    val colorAnimSpec = tween<Color>(durationMillis = ExpressiveMotion.duration(1600), easing = FastOutSlowInEasing)
+    val colorAnimSpec = tween<Color>(durationMillis = Motion.duration(1600), easing = FastOutSlowInEasing)
     val animatedZenith by animateColorAsState(targetValue = rawPalette.zenithColor, animationSpec = colorAnimSpec, label = "zenith")
     val animatedMidSky by animateColorAsState(targetValue = rawPalette.midSkyColor, animationSpec = colorAnimSpec, label = "midSky")
     val animatedHorizon by animateColorAsState(targetValue = rawPalette.horizonColor, animationSpec = colorAnimSpec, label = "horizon")
@@ -127,7 +127,7 @@ fun LivingSkyCanvas(
     // classic vestibular trigger, so this matters more here than almost anywhere).
     val needStars = rawPalette.starAlpha > 0.03f || rawPalette.isNight || sunAltitude < 6f
     val needSunFx = sunAltitude > -8f
-    val reducedMotion = !ExpressiveMotion.allowContinuous
+    val reducedMotion = !Motion.allowContinuous
     val atmosphere = rememberInfiniteTransition(label = "livingAtmosphere")
 
     val twinkleTime by atmosphere.animateFloat(

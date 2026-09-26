@@ -102,6 +102,8 @@ data class SalahUiState(
         Prayer.SUNRISE to "Silent Reminder"
     ),
     val translationEdition: String = "English (Saheeh International)",
+    /** Opt-in animated background sky on the Today screen. Off by default. */
+    val livingSkyEnabled: Boolean = false,
     // Qibla state & magnetic sensor diagnostics
     val compassAzimuth: Float = 0f,
     val qiblaBearing: Float = 0f,
@@ -340,6 +342,12 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         viewModelScope.launch {
             repository.reciterFlow.collectLatest { rec ->
                 _uiState.value = _uiState.value.copy(reciter = rec)
+            }
+        }
+
+        viewModelScope.launch {
+            repository.livingSkyFlow.collectLatest { enabled ->
+                _uiState.value = _uiState.value.copy(livingSkyEnabled = enabled)
             }
         }
 
@@ -628,6 +636,10 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     fun setReciter(reciter: String) {
         repository.setReciter(reciter)
+    }
+
+    fun setLivingSkyEnabled(enabled: Boolean) {
+        repository.setLivingSkyEnabled(enabled)
     }
 
     fun setPrePrayerOffsetMinutes(minutes: Int) {

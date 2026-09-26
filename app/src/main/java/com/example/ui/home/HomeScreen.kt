@@ -1,156 +1,148 @@
 package com.example.ui.home
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.AutoStories
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.material.icons.filled.NotificationsNone
-import androidx.compose.material.icons.filled.Vibration
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.data.model.Prayer
 import com.example.engine.AstronomicalSky
 import com.example.engine.QiblaEngine
 import com.example.ui.SalahUiState
+import com.example.ui.components.ContentColumn
 import com.example.ui.components.LivingSkyCanvas
-import com.example.ui.components.SalahTopBar
+import com.example.ui.components.OptionSheet
+import com.example.ui.components.SectionGroup
+import com.example.ui.components.SectionHeader
+import com.example.ui.components.StaticSkyBackground
+import com.example.ui.components.StatusBanner
+import com.example.ui.components.StatusDot
+import com.example.ui.components.BannerTone
 import com.example.ui.localization.LocalStrings
 import com.example.ui.localization.prayerName
-import com.example.ui.theme.ExpressiveMotion
-import com.example.ui.theme.expressiveCollapse
-import com.example.ui.theme.expressiveExpand
+import com.example.ui.theme.ArabicFamily
+import com.example.ui.theme.Space
+import com.example.ui.theme.mix
+import com.example.ui.theme.Tonal
+import com.example.ui.theme.layoutMetrics
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Today.
+ *
+ * Reads top to bottom as: where you are, what the next prayer is and how long
+ * until it, what today's prayers were, and one way back into what you were
+ * reading. Nothing else competes for that order.
+ *
+ * The previous version wrapped all of this in eight translucent and bordered
+ * surfaces over a moving sky, and carried six layout probes so its type could
+ * change colour as the sun moved. The type is now fixed and the hierarchy comes
+ * from size and space.
+ */
 @Composable
 fun HomeScreen(
     state: SalahUiState,
     onTogglePrayer: (Prayer) -> Unit,
     onContinueReadingClick: () -> Unit,
-    onOpenPrayerDetails: () -> Unit,
+    onOpenPrayerTimes: () -> Unit,
     onLocationClick: () -> Unit,
-    onSettingsClick: () -> Unit,
     onRefreshClick: () -> Unit = {},
     onToggleGlobalSilent: () -> Unit = {},
     onCyclePrayerAlertMode: (Prayer) -> Unit = {},
     onSilenceActiveAlert: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val scrollState = rememberScrollState()
+    val space = Space.current
     val strings = LocalStrings.current
-    val today = LocalDate.now()
-    val dayOfWeek = today.format(DateTimeFormatter.ofPattern("EEEE", Locale.getDefault()))
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
 
-    // Interactive astronomical sky exploration states
-    var simulatedMinutes by remember { mutableStateOf<Float?>(null) }
-    var showAstroSheet by remember { mutableStateOf(false) }
+    val today = remember { LocalDate.now() }
+    val timeFormatter = remember(state.timeFormat24h) {
+        DateTimeFormatter.ofPattern(if (state.timeFormat24h) "HH:mm" else "h:mm a")
+    }
+
+    // The observatory is the one place the live sky is still explored. It is
+    // reachable from the date line, not from a permanent chip in the toolbar.
+    var showObservatory by rememberSaveable { mutableStateOf(false) }
+    var simulatedMinutes by rememberSaveable { mutableStateOf<Float?>(null) }
 
     val activeTime: LocalTime = remember(simulatedMinutes) {
-        simulatedMinutes?.let { mins ->
-            val totalSecs = (mins * 60).toInt().coerceIn(0, 86399)
-            LocalTime.ofSecondOfDay(totalSecs.toLong())
+        simulatedMinutes?.let {
+            LocalTime.ofSecondOfDay((it * 60).toInt().coerceIn(0, 86_399).toLong())
         } ?: LocalTime.now()
     }
 
-    val activeSunPosition = remember(activeTime, state.location, state.sunPosition, simulatedMinutes) {
+    val sunPosition = remember(activeTime, state.location, state.sunPosition, simulatedMinutes) {
         if (simulatedMinutes != null) {
-            val ldt = LocalDateTime.of(today, activeTime)
-            QiblaEngine.calculateSunPosition(state.location, ldt)
+            QiblaEngine.calculateSunPosition(state.location, LocalDateTime.of(today, activeTime))
         } else {
-            state.sunPosition ?: run {
-                val ldt = LocalDateTime.of(today, LocalTime.now())
-                QiblaEngine.calculateSunPosition(state.location, ldt)
-            }
+            state.sunPosition
+                ?: QiblaEngine.calculateSunPosition(state.location, LocalDateTime.of(today, LocalTime.now()))
         }
     }
 
-    val activeSkyPeriod = remember(activeTime, state.todayPrayerTimes, simulatedMinutes) {
+    val skyPeriod = remember(activeTime, state.todayPrayerTimes, simulatedMinutes) {
         if (simulatedMinutes != null) {
             AstronomicalSky.determineSkyPeriod(activeTime, state.todayPrayerTimes)
         } else {
@@ -158,7 +150,7 @@ fun HomeScreen(
         }
     }
 
-    val activeCelestialProgress = remember(activeTime, state.todayPrayerTimes, simulatedMinutes) {
+    val celestialProgress = remember(activeTime, state.todayPrayerTimes, simulatedMinutes) {
         if (simulatedMinutes != null) {
             AstronomicalSky.getCelestialBodyProgress(activeTime, state.todayPrayerTimes)
         } else {
@@ -166,1046 +158,816 @@ fun HomeScreen(
         }
     }
 
-    val nextPt = state.nextPrayer
-    val prevPt = state.previousPrayer
-    val onSkyColor = activeSkyPeriod.contentOnSkyColor
-    var rootWidthPx by remember { mutableStateOf(0f) }
-    var rootHeightPx by remember { mutableStateOf(0f) }
-    var topBarBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
-    var dateBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
-    var heroBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
-    var periodBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
-    var sectionBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
-    var continueBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
-    val rawSkyPalette = remember(activeSunPosition?.altitude, activeSunPosition?.azimuth) {
+    val palette = remember(sunPosition?.altitude, sunPosition?.azimuth) {
         AstronomicalSky.calculateContinuousSkyColors(
-            activeSunPosition?.altitude ?: 0f,
-            (activeSunPosition?.azimuth ?: 0f) > 180f
-        )
-    }
-    val skyTextResolver = remember(rawSkyPalette, activeSunPosition, rootWidthPx, rootHeightPx) {
-        SkyTextColorResolver(rawSkyPalette, activeSunPosition, rootWidthPx, rootHeightPx)
-    }
-    val topTextTarget = if (topBarBounds.width > 0f) skyTextResolver.colorForBounds(topBarBounds) else onSkyColor
-    val dateTextTarget = if (dateBounds.width > 0f) skyTextResolver.colorForBounds(dateBounds) else onSkyColor
-    val heroTextTarget = if (heroBounds.width > 0f) skyTextResolver.colorForBounds(heroBounds) else onSkyColor
-    val periodTextTarget = if (periodBounds.width > 0f) skyTextResolver.colorForBounds(periodBounds) else onSkyColor
-    val sectionTextTarget = if (sectionBounds.width > 0f) skyTextResolver.colorForBounds(sectionBounds) else onSkyColor
-    val continueTextTarget = if (continueBounds.width > 0f) skyTextResolver.colorForBounds(continueBounds) else onSkyColor
-    val topTextColor = rememberAdaptiveSkyTextColor(topTextTarget)
-    val dateTextColor = rememberAdaptiveSkyTextColor(dateTextTarget)
-    val heroTextColor = rememberAdaptiveSkyTextColor(heroTextTarget)
-    val periodTextColor = rememberAdaptiveSkyTextColor(periodTextTarget)
-    val sectionTextColor = rememberAdaptiveSkyTextColor(sectionTextTarget)
-    val continueTextColor = rememberAdaptiveSkyTextColor(continueTextTarget)
-
-    val textShadowColor = remember(heroTextColor) {
-        if (heroTextColor.luminance() > 0.45f) Color.Black.copy(alpha = 0.55f)
-        else Color.White.copy(alpha = 0.60f)
-    }
-    val textShadow = remember(textShadowColor) {
-        Shadow(
-            color = textShadowColor,
-            offset = Offset(0f, 1.5f),
-            blurRadius = 4f
-        )
-    }
-    val prominentTextShadow = remember(textShadowColor) {
-        Shadow(
-            color = textShadowColor,
-            offset = Offset(0f, 2f),
-            blurRadius = 8f
+            sunPosition?.altitude ?: 0f,
+            (sunPosition?.azimuth ?: 0f) > 180f
         )
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .onSizeChanged { size ->
-                rootWidthPx = size.width.toFloat()
-                rootHeightPx = size.height.toFloat()
-            }
-    ) {
-        // Living Sky Canvas (Full screen background transitioning continuously with time & location)
-        LivingSkyCanvas(
-            skyPeriod = activeSkyPeriod,
-            celestialProgress = activeCelestialProgress,
-            sunPosition = activeSunPosition,
-            location = state.location,
-            currentTime = activeTime,
-            hijriDay = state.hijriDate?.day ?: 14,
-            modifier = Modifier
-                .fillMaxSize()
-                .testTag("living_astronomical_sky_canvas")
-        )
+    // When the animated sky is on, the hero sits directly on it and needs a colour
+    // chosen against it. When it is off - the default - the same code reads the
+    // ordinary surface colours and no measurement is taken at all.
+    val heroOnSky = state.livingSkyEnabled
+    val heroText = if (heroOnSky) {
+        onSkyColorFor(palette, sunPosition?.altitude ?: 0f, isDark)
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val heroMuted = if (heroOnSky) heroText.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant
+
+    Box(modifier = modifier.fillMaxSize()) {
+        if (state.livingSkyEnabled) {
+            LivingSkyCanvas(
+                skyPeriod = skyPeriod,
+                celestialProgress = celestialProgress,
+                sunPosition = sunPosition,
+                location = state.location,
+                currentTime = activeTime,
+                hijriDay = state.hijriDate?.day ?: 14,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("living_sky")
+            )
+        } else {
+            StaticSkyBackground(
+                palette = palette,
+                isDark = isDark,
+                modifier = Modifier.testTag("static_sky")
+            )
+        }
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(scrollState),
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 680.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Minimalist Top Bar on Sky without SALAH title or Settings icon on Today screen
-                SalahTopBar(
-                    modifier = Modifier.onGloballyPositioned { topBarBounds = it.boundsInRoot() },
-                    location = state.location,
-                    onLocationClick = onLocationClick,
-                    onSettingsClick = onSettingsClick,
-                    isTransparentOnSky = true,
-                    contentColor = topTextColor,
-                    isOnline = state.isOnline,
-                    isSyncing = state.isSyncing,
-                    onRefreshClick = onRefreshClick,
-                    showBrand = false,
-                    showSettings = false,
-                    compact = true
-                )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-                    .testTag("today_overview_card"),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.06f),
-                shape = MaterialTheme.shapes.large
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // Minimalist Date Sanctuary (Harmonizing Hijri & Gregorian, uncrowded and serene with enhanced contrast)
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .onGloballyPositioned { dateBounds = it.boundsInRoot() }
-                            .testTag("date_sanctuary_card"),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        // Prominent Arabic Calligraphic Hijri Date
-                        state.hijriDate?.let {
-                            Text(
-                                text = it.formatArabic(),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = dateTextColor,
-                                style = TextStyle(shadow = textShadow),
-                                fontFamily = FontFamily.Serif,
-                                letterSpacing = 0.5.sp,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(1.dp))
-                        }
-
-                        // Gregorian Date & Transliterated Hijri Subtitle
-                        val formattedGregorian = today.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.getDefault()))
-                        val hijriTransliterated = state.hijriDate?.let { "${it.day} ${it.monthNameEn} ${it.year} AH" }
-
-                        Text(
-                            text = if (hijriTransliterated != null) "$formattedGregorian · $hijriTransliterated" else formattedGregorian,
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Medium,
-                            letterSpacing = 0.3.sp,
-                            color = dateTextColor,
-                            style = TextStyle(shadow = textShadow),
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.testTag("hijri_date_label")
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        // Living Astronomical Sky Badge (High visibility affordance on sky background)
-                        Row(
-                            modifier = Modifier
-                                .heightIn(min = 48.dp)
-                                .clip(MaterialTheme.shapes.small)
-                                .clickable { showAstroSheet = true }
-                                .padding(horizontal = 6.dp)
-                                .testTag("astronomical_sky_badge"),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            val altVal = activeSunPosition?.altitude ?: 0f
-                            val altFormatted = String.format(Locale.US, "%+.1f°", altVal)
-                            val moonInfo = AstronomicalSky.getMoonPhaseInfo(state.hijriDate?.day ?: 14)
-
-                            Icon(
-                                imageVector = if (altVal > -0.833f) Icons.Default.WbSunny else Icons.Default.NightsStay,
-                                contentDescription = null,
-                                tint = dateTextColor,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text(
-                                text = if (altVal > -0.833f) "Sun $altFormatted" else moonInfo.nameEn.substringBefore(" ("),
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = dateTextColor
-                            )
-                            Text(
-                                text = "·",
-                                fontSize = 12.sp,
-                                color = dateTextColor.copy(alpha = 0.70f)
-                            )
-                            Text(
-                                text = if (simulatedMinutes != null) "Time Preview (${activeTime.format(DateTimeFormatter.ofPattern("HH:mm"))})" else "${activeSkyPeriod.title} Sky ✦",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = dateTextColor
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
-                        color = dateTextColor.copy(alpha = 0.18f)
-                    )
-
-                    // Interactive simulation reset banner when user scrubbed time
-                    AnimatedVisibility(
-                        visible = simulatedMinutes != null,
-                        enter = expressiveExpand(),
-                        exit = expressiveCollapse()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 4.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AssistChip(
-                                onClick = { simulatedMinutes = null },
-                                label = { Text(strings.resetToRealtime, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.RestartAlt,
-                                        contentDescription = "Reset time",
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                },
-                                colors = AssistChipDefaults.assistChipColors(
-                                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-                                    labelColor = MaterialTheme.colorScheme.onSurface
-                                ),
-                                border = BorderStroke(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
-                                ),
-                                modifier = Modifier.testTag("reset_realtime_chip")
-                            )
-                        }
-                    }
-
-                    // Live Adhan / Alert Playing Banner
-                    AnimatedVisibility(
-                        visible = state.audioPreviewPlaying != null,
-                        enter = expressiveExpand(),
-                        exit = expressiveCollapse()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 4.dp)
-                                .clip(MaterialTheme.shapes.small)
-                                .background(MaterialTheme.colorScheme.errorContainer)
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onErrorContainer,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Adhan Playing · ${state.audioPreviewPlaying}",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                )
-                            }
-                            FilledTonalButton(
-                                onClick = onSilenceActiveAlert,
-                                modifier = Modifier
-                                    .height(48.dp)
-                                    .testTag("home_silence_adhan_button"),
-                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
-                            ) {
-                                Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Silence", style = MaterialTheme.typography.labelLarge)
-                            }
-                        }
-                    }
-
-                    // Quick Alert / Silent Mode Status Strip
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AssistChip(
-                            onClick = onToggleGlobalSilent,
-                            label = {
-                                Text(
-                                    text = if (state.isGlobalSilentMode) strings.silentModeOn else strings.alertsActive,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = if (state.isGlobalSilentMode) FontWeight.Bold else FontWeight.SemiBold
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = if (state.isGlobalSilentMode) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-                                    contentDescription = null,
-                                    tint = if (state.isGlobalSilentMode) MaterialTheme.colorScheme.error else dateTextColor,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = Color.Transparent,
-                                labelColor = dateTextColor
-                            ),
-                            border = null,
-                            modifier = Modifier
-                                .semantics {
-                                    stateDescription = if (state.isGlobalSilentMode) "Silent mode on" else "Alerts active"
-                                }
-                                .testTag("home_silent_mode_chip")
-                        )
-
-                        if (state.autoSilentDuringPrayer) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            AssistChip(
-                                onClick = onSettingsClick,
-                                label = { Text("${strings.masjidMode} (${state.autoSilentDurationMinutes}m)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.VolumeOff,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                },
-                                colors = AssistChipDefaults.assistChipColors(
-                                    containerColor = Color.Transparent,
-                                    labelColor = dateTextColor
-                                ),
-                                border = null,
-                                modifier = Modifier.testTag("home_masjid_mode_chip")
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(top = 6.dp, bottom = 4.dp),
-                        color = heroTextColor.copy(alpha = 0.16f)
-                    )
-
-                    // Dominant Next Prayer Hero Section (Deeply Immersive Architectural Countdown with enhanced contrast)
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .onGloballyPositioned { heroBounds = it.boundsInRoot() },
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        if (nextPt != null) {
-                            // Next prayer sub-label
-                            Text(
-                                text = strings.nextPrayerLabel,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 3.sp,
-                                color = heroTextColor,
-                                style = TextStyle(shadow = textShadow)
-                            )
-
-                            // Next prayer Arabic calligraphy + English Name
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Text(
-                                    text = nextPt.prayer.arabicName,
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Serif,
-                                    color = heroTextColor,
-                                    style = TextStyle(shadow = prominentTextShadow)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = "·",
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = heroTextColor.copy(alpha = 0.70f),
-                                    style = TextStyle(shadow = textShadow)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = strings.prayerName(nextPt.prayer).uppercase(),
-                                    fontSize = 17.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 2.sp,
-                                    color = heroTextColor,
-                                    style = TextStyle(shadow = prominentTextShadow)
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            // Typographic Countdown Timer with Enhanced Visibility & Legibility
-                            val countdownParts = state.countdownString.split(":")
-                            val hoursStr = countdownParts.getOrElse(0) { "00" }
-                            val minutesStr = countdownParts.getOrElse(1) { "00" }
-                            val secondsStr = countdownParts.getOrElse(2) { "00" }
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("countdown_timer")
-                            ) {
-                                CountdownSegment(value = hoursStr, label = strings.hoursUnit, onSkyColor = heroTextColor, shadow = textShadow)
-                                CountdownDotsSeparator(onSkyColor = heroTextColor, shadowColor = textShadowColor)
-                                CountdownSegment(value = minutesStr, label = strings.minsUnit, onSkyColor = heroTextColor, shadow = textShadow)
-                                CountdownDotsSeparator(onSkyColor = heroTextColor, shadowColor = textShadowColor)
-                                CountdownSegment(value = secondsStr, label = strings.secsUnit, onSkyColor = heroTextColor, shadow = textShadow)
-                            }
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            // Next prayer time & details affordance (flat, typography-led)
-                            val timeFormatter = DateTimeFormatter.ofPattern(if (state.timeFormat24h) "HH:mm" else "h:mm a")
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 48.dp)
-                                    .clip(MaterialTheme.shapes.small)
-                                    .clickable(onClick = onOpenPrayerDetails)
-                                    .padding(horizontal = 8.dp)
-                                    .testTag("next_prayer_badge"),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(heroTextColor)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "${strings.adhanAt} ${nextPt.time.format(timeFormatter)}",
-                                    fontSize = 13.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = heroTextColor
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "·",
-                                    fontSize = 13.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = heroTextColor.copy(alpha = 0.70f)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = strings.viewDetails,
-                                    fontSize = 12.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = heroTextColor
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = null,
-                                    tint = heroTextColor,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                        }
-                        }
-
-                        HorizontalDivider(
-                            modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
-                            color = heroTextColor.copy(alpha = 0.14f)
-                        )
-
-                        // Atmospheric Sky Period & Solar Context
-                        prevPt?.let {
-                            Text(
-                                text = "${strings.currentPeriod}: ${strings.prayerName(it.prayer)} · ${state.skyPeriod.title}",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = periodTextColor,
-                                style = TextStyle(shadow = textShadow),
-                                letterSpacing = 0.4.sp,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.onGloballyPositioned { periodBounds = it.boundsInRoot() }
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            // Section 1: Daily Prayer Flow & Completion Checklist directly on background
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .onGloballyPositioned { sectionBounds = it.boundsInRoot() },
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = strings.todaysPrayers,
-                    style = MaterialTheme.typography.titleLarge.copy(shadow = textShadow),
-                    fontWeight = FontWeight.Bold,
-                    color = sectionTextColor
-                )
-                Text(
-                    text = strings.tapToMarkCompleted,
-                    style = MaterialTheme.typography.labelMedium.copy(shadow = textShadow),
-                    fontWeight = FontWeight.Medium,
-                    color = sectionTextColor
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            val fardPrayers = listOf(
-                Prayer.FAJR to state.prayerLog.fajrDone,
-                Prayer.DHUHR to state.prayerLog.dhuhrDone,
-                Prayer.ASR to state.prayerLog.asrDone,
-                Prayer.MAGHRIB to state.prayerLog.maghribDone,
-                Prayer.ISHA to state.prayerLog.ishaDone
+            HomeTopBar(
+                locationName = state.location.name,
+                onLocationClick = onLocationClick,
+                isSyncing = state.isSyncing,
+                isOnline = state.isOnline
             )
 
-            val times = state.todayPrayerTimes?.prayers?.associateBy { it.prayer } ?: emptyMap()
+            ContentColumn {
+                DateBlock(
+                    hijriArabic = state.hijriDate?.formatArabic(),
+                    gregorian = today.format(
+                        DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault())
+                    ),
+                    skyLabel = skyPeriod.title,
+                    onClick = { showObservatory = true },
+                    contentColor = heroText,
+                    mutedColor = heroMuted
+                )
 
-            fardPrayers.forEach { (prayer, isDone) ->
-                val pt = times[prayer]
-                val isNext = pt?.isNext == true
-                val timePattern = if (state.timeFormat24h) "HH:mm" else "h:mm a"
-                val timeFormatted = pt?.time?.format(DateTimeFormatter.ofPattern(timePattern)) ?: "--:--"
-
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                        .clip(MaterialTheme.shapes.medium)
-                        .clickable { onTogglePrayer(prayer) }
-                        .testTag("prayer_row_${prayer.name}"),
-                    color = if (isNext) MaterialTheme.colorScheme.primaryContainer
-                    else MaterialTheme.colorScheme.surfaceContainerLow,
-                    shape = MaterialTheme.shapes.medium,
-                    border = if (isNext) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-                    else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                    shadowElevation = if (isNext) 2.dp else 0.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 11.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = prayer.icon,
-                                contentDescription = strings.prayerName(prayer),
-                                tint = if (isNext) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = strings.prayerName(prayer),
-                                        fontSize = 14.5.sp,
-                                        fontWeight = if (isNext) FontWeight.Bold else FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    if (isNext) {
-                                        Spacer(modifier = Modifier.width(7.dp))
-                                        Box(
-                                            modifier = Modifier
-                                                .size(7.dp)
-                                                .clip(CircleShape)
-                                                .background(MaterialTheme.colorScheme.primary)
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = prayer.arabicName,
-                                    fontSize = 11.5.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontFamily = FontFamily.Serif
-                                )
+                if (state.audioPreviewPlaying != null) {
+                    Spacer(Modifier.height(space.md))
+                    StatusBanner(
+                        message = "${strings.more.adhanPlayingLabel} · ${state.audioPreviewPlaying}",
+                        tone = BannerTone.Danger,
+                        icon = Icons.AutoMirrored.Filled.VolumeUp,
+                        action = {
+                            TextButton(onClick = onSilenceActiveAlert) {
+                                Text(strings.more.silenceAdhan, style = MaterialTheme.typography.labelLarge)
                             }
                         }
+                    )
+                }
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = timeFormatted,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
+                Spacer(Modifier.height(space.xxl))
 
-                            // Interactive Prayer Alert Mode Pill (Tap to cycle modes: Adhan -> Takbeer -> Chime -> Vibrate -> Silent)
-                            val alertMode = state.prayerAlertModes[prayer] ?: "Full Adhan"
-                            val isSilenced = state.isGlobalSilentMode || alertMode == "Silent" || alertMode == "Silent Reminder"
-                            val alertContainer by animateColorAsState(
-                                targetValue = if (isSilenced) MaterialTheme.colorScheme.surfaceContainerHighest
-                                else MaterialTheme.colorScheme.primaryContainer,
-                                label = "alert_pill_container"
-                            )
-                            Surface(
-                                modifier = Modifier
-                                    .heightIn(min = 48.dp)
-                                    .clip(MaterialTheme.shapes.extraSmall)
-                                    .clickable { onCyclePrayerAlertMode(prayer) }
-                                    .semantics { stateDescription = "Alert mode: $alertMode" }
-                                    .testTag("prayer_alert_toggle_${prayer.name}"),
-                                color = alertContainer
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = when {
-                                            state.isGlobalSilentMode || alertMode == "Silent" || alertMode == "Silent Reminder" -> Icons.AutoMirrored.Filled.VolumeOff
-                                            alertMode == "Vibrate Only" -> Icons.Default.Vibration
-                                            alertMode == "Gentle Chime" -> Icons.Default.NotificationsNone
-                                            else -> Icons.AutoMirrored.Filled.VolumeUp
-                                        },
-                                        contentDescription = "Alert mode: $alertMode",
-                                        tint = if (isSilenced) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = when (alertMode) {
-                                            "Full Adhan" -> "Adhan"
-                                            "Takbeer Only" -> "Takbeer"
-                                            "Gentle Chime" -> "Chime"
-                                            "Vibrate Only" -> "Vibrate"
-                                            else -> "Silent"
-                                        },
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = if (isSilenced) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
-                            }
+                NextPrayerBlock(
+                    state = state,
+                    timeFormatter = timeFormatter,
+                    onOpenPrayerTimes = onOpenPrayerTimes,
+                    contentColor = heroText,
+                    mutedColor = heroMuted
+                )
 
-                            Spacer(modifier = Modifier.width(6.dp))
-                            // Completion Toggle (minimum 48dp touch target standard)
-                            IconButton(
-                                onClick = { onTogglePrayer(prayer) },
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .testTag("prayer_done_toggle_${prayer.name}")
-                            ) {
-                                Icon(
-                                    imageVector = if (isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                                    contentDescription = if (isDone) "Marked done" else "Mark incomplete",
-                                    tint = if (isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
+                Spacer(Modifier.height(space.xl))
+
+                AlertStatusRow(
+                    isSilent = state.isGlobalSilentMode,
+                    autoSilenceMinutes = state.autoSilentDurationMinutes
+                        .takeIf { state.autoSilentDuringPrayer },
+                    onToggleSilent = onToggleGlobalSilent,
+                    contentColor = heroText
+                )
+
+                SectionHeader(strings.todaysPrayers)
+
+                val fard = listOf(
+                    Prayer.FAJR to state.prayerLog.fajrDone,
+                    Prayer.DHUHR to state.prayerLog.dhuhrDone,
+                    Prayer.ASR to state.prayerLog.asrDone,
+                    Prayer.MAGHRIB to state.prayerLog.maghribDone,
+                    Prayer.ISHA to state.prayerLog.ishaDone
+                )
+                val times = state.todayPrayerTimes?.prayers?.associateBy { it.prayer } ?: emptyMap()
+
+                SectionGroup {
+                    fard.forEachIndexed { index, (prayer, isDone) ->
+                        if (index > 0) {
+                            Spacer(Modifier.height(space.xxs))
+                            androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            Spacer(Modifier.height(space.xxs))
                         }
+                        PrayerRow(
+                            prayer = prayer,
+                            time = times[prayer]?.time?.format(timeFormatter) ?: "--:--",
+                            isNext = times[prayer]?.isNext == true,
+                            isDone = isDone,
+                            alertMode = state.prayerAlertModes[prayer] ?: DEFAULT_ALERT_MODE,
+                            alertsSilenced = state.isGlobalSilentMode,
+                            onToggleDone = { onTogglePrayer(prayer) },
+                            onCycleAlert = { onCyclePrayerAlertMode(prayer) }
+                        )
                     }
                 }
+
+                SectionHeader(strings.continueReading)
+
+                ContinueReadingRow(
+                    surahName = state.continueReading.surahName,
+                    reference = "${state.continueReading.surahNumber}:${state.continueReading.ayahNumber}",
+                    snippet = state.continueReading.snippetAr,
+                    onClick = onContinueReadingClick
+                )
+
+                Spacer(Modifier.height(space.xl))
+
+                SourceFootnote(method = state.method.title, location = state.location.name)
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Section 2: First-Class "Continue Reading" Card directly on background
-            Text(
-                text = strings.continueReading.uppercase(),
-                style = MaterialTheme.typography.labelLarge.copy(shadow = textShadow),
-                fontWeight = FontWeight.Bold,
-                color = continueTextColor,
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .onGloballyPositioned { continueBounds = it.boundsInRoot() }
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .clip(MaterialTheme.shapes.large)
-                    .clickable(onClick = onContinueReadingClick)
-                    .testTag("continue_reading_card"),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                shape = MaterialTheme.shapes.large,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                shadowElevation = 2.dp
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AutoStories,
-                                contentDescription = "Quran reading",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = state.continueReading.surahName,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "${state.continueReading.surahNumber}:${state.continueReading.ayahNumber} · ${strings.pageTab} ${state.continueReading.pageNumber}",
-                                    fontSize = 11.5.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Button(
-                            onClick = onContinueReadingClick,
-                            shape = MaterialTheme.shapes.small,
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            ),
-                            modifier = Modifier.testTag("continue_reading_button")
-                        ) {
-                            Text(strings.continueButton, style = MaterialTheme.typography.labelLarge)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Arabic snippet ﴿ ... ﴾
-                    Text(
-                        text = "﴿ ${state.continueReading.snippetAr} ﴾",
-                        fontSize = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontFamily = FontFamily.Serif,
-                        textAlign = TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Section 3: App Trust Status Pill directly on background
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                shape = MaterialTheme.shapes.medium,
-                shadowElevation = 0.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 9.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = "Trust status",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "${strings.sourceLabel}: ${state.method.title} · ${state.location.name}",
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(30.dp))
-            }
+            Spacer(Modifier.height(space.xxxl))
         }
+    }
 
-        // Astronomical Observatory Bottom Sheet
-        if (showAstroSheet) {
-            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-            ModalBottomSheet(
-                onDismissRequest = { showAstroSheet = false },
-                sheetState = sheetState,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.testTag("astronomical_observatory_sheet")
-            ) {
-                AstronomicalObservatoryContent(
-                    location = state.location,
-                    currentTime = activeTime,
-                    isRealTime = (simulatedMinutes == null),
-                    sunPosition = activeSunPosition,
-                    skyPeriod = activeSkyPeriod,
-                    hijriDay = state.hijriDate?.day ?: 14,
-                    hijriMonthEn = state.hijriDate?.monthNameEn ?: "Rabi' al-Awwal",
-                    simulatedMinutes = simulatedMinutes ?: (activeTime.toSecondOfDay() / 60f),
-                    onMinutesChanged = { newMins ->
-                        simulatedMinutes = newMins
-                    },
-                    onResetToRealTime = {
-                        simulatedMinutes = null
-                    },
-                    onClose = { showAstroSheet = false }
+    if (showObservatory) {
+        ObservatorySheet(
+            locationName = state.location.name,
+            currentTime = activeTime,
+            isRealTime = simulatedMinutes == null,
+            sunAltitude = sunPosition?.altitude ?: 0f,
+            sunAzimuth = sunPosition?.azimuth ?: 0f,
+            skyPeriodTitle = skyPeriod.title,
+            skyPeriodArabic = skyPeriod.arabicTitle,
+            hijriDay = state.hijriDate?.day ?: 14,
+            hijriMonthEn = state.hijriDate?.monthNameEn ?: "",
+            simulatedMinutes = simulatedMinutes ?: (activeTime.toSecondOfDay() / 60f),
+            onMinutesChanged = { simulatedMinutes = it },
+            onResetToRealTime = { simulatedMinutes = null },
+            onDismiss = { showObservatory = false }
+        )
+    }
+}
+
+private const val DEFAULT_ALERT_MODE = "Full Adhan"
+
+/** Status bar height plus any display cutout, as a Dp. */
+@Composable
+private fun statusBarTop(): androidx.compose.ui.unit.Dp {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val px = maxOf(
+        WindowInsets.statusBars.getTop(density),
+        WindowInsets.displayCutout.getTop(density)
+    )
+    return with(density) { px.toDp() }
+}
+
+/**
+ * Location and connection state, and nothing else.
+ *
+ * Replaces a top bar that also carried a wordmark nobody needed, a settings gear
+ * that was unreachable, and a three-state animated sync badge. Connection is now
+ * a dot that only appears when there is something to say.
+ */
+@Composable
+private fun HomeTopBar(
+    locationName: String,
+    onLocationClick: () -> Unit,
+    isSyncing: Boolean,
+    isOnline: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val space = Space.current
+    val semantic = Tonal.colors
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = statusBarTop() + space.sm, start = space.lg, end = space.lg, bottom = space.sm),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+                .clip(MaterialTheme.shapes.small)
+                .clickable(onClick = onLocationClick)
+                .padding(horizontal = space.sm, vertical = space.xs),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = locationName,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            if (isSyncing) {
+                Spacer(Modifier.width(space.sm))
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .size(14.dp)
+                        .clearAndSetSemantics { },
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else if (!isOnline) {
+                Spacer(Modifier.width(space.sm))
+                StatusDot(
+                    color = semantic.warning,
+                    description = "Offline"
                 )
             }
         }
     }
 }
 
+/** Date, with the sky period as the tap target for the observatory. */
 @Composable
-private fun AstronomicalObservatoryContent(
-    location: com.example.data.model.UserLocation,
+private fun DateBlock(
+    hijriArabic: String?,
+    gregorian: String,
+    skyLabel: String,
+    onClick: () -> Unit,
+    contentColor: Color,
+    mutedColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val space = Space.current
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(space.xxs)
+    ) {
+        Text(
+            text = gregorian,
+            style = MaterialTheme.typography.titleMedium,
+            color = contentColor
+        )
+        if (hijriArabic != null) {
+            Text(
+                text = hijriArabic,
+                style = MaterialTheme.typography.bodyMedium,
+                fontFamily = ArabicFamily,
+                color = mutedColor
+            )
+        }
+        Spacer(Modifier.height(space.xs))
+        Text(
+            text = skyLabel,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+                .clip(MaterialTheme.shapes.extraSmall)
+                .clickable(onClick = onClick)
+                .padding(vertical = space.sm, horizontal = space.xs)
+        )
+    }
+}
+
+/**
+ * The one number that matters right now.
+ *
+ * The countdown is the only place in the app that uses [Typography.displayLarge].
+ * Everything around it is deliberately smaller so this reads first.
+ */
+@Composable
+private fun NextPrayerBlock(
+    state: SalahUiState,
+    timeFormatter: DateTimeFormatter,
+    onOpenPrayerTimes: () -> Unit,
+    contentColor: Color,
+    mutedColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val space = Space.current
+    val strings = LocalStrings.current
+    val next = state.nextPrayer
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(space.xs)
+    ) {
+        Text(
+            text = strings.nextPrayerLabel,
+            style = MaterialTheme.typography.labelLarge,
+            color = mutedColor
+        )
+
+        if (next == null) {
+            Text(
+                text = "--:--",
+                style = MaterialTheme.typography.displayLarge,
+                color = contentColor
+            )
+            return@Column
+        }
+
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = next.prayer.arabicName,
+                style = MaterialTheme.typography.headlineSmall,
+                fontFamily = ArabicFamily,
+                color = contentColor
+            )
+            Spacer(Modifier.width(space.sm))
+            Text(
+                text = strings.prayerName(next.prayer),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = contentColor,
+                modifier = Modifier.padding(bottom = 2.dp)
+            )
+        }
+
+        Countdown(
+            value = state.countdownString,
+            contentColor = contentColor,
+            mutedColor = mutedColor
+        )
+
+        Spacer(Modifier.height(space.xs))
+
+        Row(
+            modifier = Modifier
+                .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+                .clip(MaterialTheme.shapes.small)
+                .clickable(onClick = onOpenPrayerTimes)
+                .padding(end = space.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = next.time.format(timeFormatter),
+                style = MaterialTheme.typography.titleMedium,
+                color = contentColor
+            )
+            Spacer(Modifier.width(space.sm))
+            Text(
+                text = strings.viewDetails,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(space.xs))
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .size(16.dp)
+                    .clearAndSetSemantics { }
+            )
+        }
+    }
+}
+
+/**
+ * Hours, minutes, seconds.
+ *
+ * Announced as a single phrase once a minute rather than as three numbers every
+ * second, which is what animating this on a per-second basis did to a screen
+ * reader before.
+ */
+@Composable
+private fun Countdown(
+    value: String,
+    contentColor: Color,
+    mutedColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val strings = LocalStrings.current
+    val parts = remember(value) { value.split(":") }
+    val hours = parts.getOrElse(0) { "00" }
+    val minutes = parts.getOrElse(1) { "00" }
+    val seconds = parts.getOrElse(2) { "00" }
+
+    var spoken by remember { mutableStateOf("") }
+    LaunchedEffect(minutes, hours) {
+        spoken = "$hours ${strings.hoursUnit} $minutes ${strings.minsUnit}"
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("countdown")
+            .semantics {
+                liveRegion = LiveRegionMode.Polite
+                contentDescription = spoken
+            },
+        verticalAlignment = Alignment.Bottom
+    ) {
+        Text(
+            text = "$hours:$minutes:$seconds",
+            style = MaterialTheme.typography.displayLarge,
+            color = contentColor,
+            maxLines = 1
+        )
+    }
+}
+
+/** Silent-mode state, and the way into it. */
+@Composable
+private fun AlertStatusRow(
+    isSilent: Boolean,
+    autoSilenceMinutes: Int?,
+    onToggleSilent: () -> Unit,
+    contentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val space = Space.current
+    val strings = LocalStrings.current
+    val semantic = Tonal.colors
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+                .clip(MaterialTheme.shapes.small)
+                .clickable(onClick = onToggleSilent)
+                .padding(horizontal = space.xs, vertical = space.xs)
+                .semantics {
+                    stateDescription = if (isSilent) {
+                        strings.silentModeOn
+                    } else {
+                        strings.alertsActive
+                    }
+                },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (isSilent) {
+                    Icons.AutoMirrored.Filled.VolumeOff
+                } else {
+                    Icons.AutoMirrored.Filled.VolumeUp
+                },
+                contentDescription = null,
+                tint = if (isSilent) semantic.warning else contentColor,
+                modifier = Modifier
+                    .size(18.dp)
+                    .clearAndSetSemantics { }
+            )
+            Spacer(Modifier.width(space.sm))
+            Text(
+                text = if (isSilent) strings.silentModeOn else strings.alertsActive,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (isSilent) semantic.warning else contentColor
+            )
+        }
+
+        if (autoSilenceMinutes != null) {
+            Text(
+                text = "${strings.masjidMode} · ${autoSilenceMinutes}${strings.more.minutesShort}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+/**
+ * One prayer: when it is, whether it is done, and how it will alert.
+ *
+ * The row is one flat list item with a hairline between rows rather than five
+ * separate bordered cards, so the eye reads it as a schedule instead of a stack
+ * of panels. The alert mode is text, not a coloured pill - colour was carrying
+ * that meaning before and it was the loudest thing in the row.
+ */
+@Composable
+private fun PrayerRow(
+    prayer: Prayer,
+    time: String,
+    isNext: Boolean,
+    isDone: Boolean,
+    alertMode: String,
+    alertsSilenced: Boolean,
+    onToggleDone: () -> Unit,
+    onCycleAlert: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val space = Space.current
+    val strings = LocalStrings.current
+    val semantic = Tonal.colors
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+                .padding(vertical = space.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = strings.prayerName(prayer),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (isDone) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        }
+                    )
+                    if (isNext) {
+                        Spacer(Modifier.width(space.sm))
+                        Text(
+                            text = strings.nextPrayerLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                Text(
+                    text = prayer.arabicName,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = ArabicFamily,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Text(
+                text = alertMode.shortLabel(),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (alertsSilenced) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    semantic.onSuccessContainer
+                },
+                modifier = Modifier
+                    .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+                    .clip(MaterialTheme.shapes.extraSmall)
+                    .clickable(onClick = onCycleAlert)
+                    .padding(horizontal = space.sm, vertical = space.sm)
+                    .semantics { stateDescription = alertMode }
+            )
+
+            Spacer(Modifier.width(space.sm))
+
+            Text(
+                text = time,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.width(64.dp),
+                textAlign = TextAlign.End
+            )
+
+            Spacer(Modifier.width(space.xs))
+
+            IconButton(
+                onClick = onToggleDone,
+                modifier = Modifier
+                    .size(MaterialTheme.layoutMetrics.minTouchTarget)
+                    .testTag("prayer_done_${prayer.name}")
+            ) {
+                Icon(
+                    imageVector = if (isDone) {
+                        Icons.Default.CheckCircle
+                    } else {
+                        Icons.Default.RadioButtonUnchecked
+                    },
+                    contentDescription = if (isDone) {
+                        strings.more.prayerMarkedDone
+                    } else {
+                        strings.more.prayerMarkedPending
+                    },
+                    tint = if (isDone) {
+                        semantic.success
+                    } else {
+                        MaterialTheme.colorScheme.outline
+                    }
+                )
+            }
+        }
+    }
+}
+
+/** Short label for an alert mode, used in the prayer row. */
+private fun String.shortLabel(): String = when (this) {
+    "Full Adhan" -> "Adhan"
+    "Takbeer Only" -> "Takbeer"
+    "Gentle Chime" -> "Chime"
+    "Vibrate Only" -> "Vibrate"
+    else -> "Silent"
+}
+
+/** One row that returns the user to where they left off reading. */
+@Composable
+private fun ContinueReadingRow(
+    surahName: String,
+    reference: String,
+    snippet: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val space = Space.current
+    val strings = LocalStrings.current
+
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.medium,
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("continue_reading")
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+                .clickable(onClick = onClick)
+                .padding(space.lg),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = surahName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = reference,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (snippet.isNotBlank()) {
+                    Spacer(Modifier.height(space.sm))
+                    Text(
+                        text = snippet,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = ArabicFamily,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Spacer(Modifier.width(space.sm))
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = strings.continueButton,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+/** Where the numbers came from. One line, muted, at the bottom. */
+@Composable
+private fun SourceFootnote(method: String, location: String, modifier: Modifier = Modifier) {
+    val strings = LocalStrings.current
+    Text(
+        text = "${strings.sourceLabel}: $method · $location",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.fillMaxWidth()
+    )
+}
+
+/**
+ * The sky observatory.
+ *
+ * Still the app's astronomy panel, reached from the sky-period line. The scrubber
+ * lets you move through the day and watch the sky respond - that is the feature
+ * worth keeping, and it no longer requires the whole Home screen to be rebuilt
+ * around a moving background.
+ */
+@Composable
+private fun ObservatorySheet(
+    locationName: String,
     currentTime: LocalTime,
     isRealTime: Boolean,
-    sunPosition: com.example.engine.SunPosition?,
-    skyPeriod: com.example.engine.SkyPeriod,
+    sunAltitude: Float,
+    sunAzimuth: Float,
+    skyPeriodTitle: String,
+    skyPeriodArabic: String,
     hijriDay: Int,
     hijriMonthEn: String,
     simulatedMinutes: Float,
     onMinutesChanged: (Float) -> Unit,
     onResetToRealTime: () -> Unit,
-    onClose: () -> Unit
+    onDismiss: () -> Unit
 ) {
-    val alt = sunPosition?.altitude ?: 0f
-    val az = sunPosition?.azimuth ?: 0f
-    val moonInfo = AstronomicalSky.getMoonPhaseInfo(hijriDay)
-    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+    val space = Space.current
+    val strings = LocalStrings.current
+    val moon = remember(hijriDay) { AstronomicalSky.getMoonPhaseInfo(hijriDay) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .padding(bottom = 32.dp)
+    OptionSheet(
+        title = strings.more.observatoryTitle,
+        subtitle = strings.more.observatorySubtitle.format(locationName),
+        onDismiss = onDismiss
     ) {
-        // Title Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = "Astronomical Observatory",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "Living sky telemetry for ${location.name}",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            IconButton(onClick = onClose) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Telemetry Grid Card
-        Card(
-            shape = MaterialTheme.shapes.medium,
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            ),
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = MaterialTheme.shapes.small,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Solar Elevation & Azimuth
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
+            Column(modifier = Modifier.padding(space.lg)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(space.lg)) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "SOLAR ALTITUDE",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            letterSpacing = 1.sp
+                            text = strings.more.solarAltitude,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = String.format(Locale.US, "%+.1f° (%s)", alt, if (alt > -0.833f) "Above Horizon" else "Below Horizon"),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (alt > 0f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            text = String.format(
+                                Locale.getDefault(), "%+.1f°", sunAltitude
+                            ),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
-                    Column(horizontalAlignment = Alignment.End) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "SOLAR AZIMUTH",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            letterSpacing = 1.sp
+                            text = strings.more.solarAzimuth,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = String.format(Locale.US, "%.1f° True North", az),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            text = String.format(
+                                Locale.getDefault(), "%.1f°", sunAzimuth
+                            ),
+                            style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
-
-                // Lunar Phase & Hijri Calendar
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
+                Spacer(Modifier.height(space.lg))
+                Row(horizontalArrangement = Arrangement.spacedBy(space.lg)) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "LUNAR PHASE (HIJRI)",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            letterSpacing = 1.sp
+                            text = strings.more.lunarPhase,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "${moonInfo.nameEn} · Day $hijriDay $hijriMonthEn",
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Medium,
+                            text = moon.nameEn.substringBefore(" ("),
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
-                    Column(horizontalAlignment = Alignment.End) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "ILLUMINATION",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            letterSpacing = 1.sp
+                            text = strings.more.illumination,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "${(moonInfo.illumination * 100).toInt()}% (${if (moonInfo.isWaxing) "Waxing" else "Waning"})",
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Medium,
+                            text = "${(moon.illumination * 100).toInt()}%",
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
-
-                // Current Sky Horizon
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                if (hijriMonthEn.isNotBlank()) {
+                    Spacer(Modifier.height(space.lg))
                     Text(
-                        text = "ATMOSPHERIC HORIZON",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        letterSpacing = 1.sp
-                    )
-                    Text(
-                        text = "${skyPeriod.title} (${skyPeriod.arabicTitle})",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
+                        text = "${strings.more.skyPeriodLabel}: $skyPeriodTitle · $skyPeriodArabic",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(Modifier.height(space.xl))
 
-        // 24-Hour Sky Time Scrubber
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.AccessTime,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "24-Hour Solar Scrubber",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
             Text(
-                text = currentTime.format(timeFormatter),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
+                text = strings.more.timeScrubber,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = currentTime.format(DateTimeFormatter.ofPattern("HH:mm")),
+                style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary
             )
         }
@@ -1214,152 +976,38 @@ private fun AstronomicalObservatoryContent(
             value = simulatedMinutes,
             onValueChange = onMinutesChanged,
             valueRange = 0f..1439f,
-            colors = SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.primary,
-                activeTrackColor = MaterialTheme.colorScheme.primary
-            ),
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("astronomical_time_slider")
+                .testTag("observatory_scrubber")
         )
 
-        // Quick Pick Horizons
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            AssistChip(
-                onClick = { onMinutesChanged(5f * 60 + 15) },
-                label = { Text("Dawn (05:15)", fontSize = 11.sp) }
-            )
-            AssistChip(
-                onClick = { onMinutesChanged(6f * 60 + 45) },
-                label = { Text("Sunrise (06:45)", fontSize = 11.sp) }
-            )
-            AssistChip(
-                onClick = { onMinutesChanged(12f * 60 + 30) },
-                label = { Text("Zenith (12:30)", fontSize = 11.sp) }
-            )
-            AssistChip(
-                onClick = { onMinutesChanged(16f * 60 + 15) },
-                label = { Text("Golden Hour (16:15)", fontSize = 11.sp) }
-            )
-            AssistChip(
-                onClick = { onMinutesChanged(18f * 60 + 50) },
-                label = { Text("Sunset (18:50)", fontSize = 11.sp) }
-            )
-            AssistChip(
-                onClick = { onMinutesChanged(20f * 60 + 30) },
-                label = { Text("Twilight (20:30)", fontSize = 11.sp) }
-            )
-            AssistChip(
-                onClick = { onMinutesChanged(1f * 60 + 30) },
-                label = { Text("Starry Night (01:30)", fontSize = 11.sp) }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Reset to Real-time or Done Buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            FilledTonalButton(
-                onClick = onResetToRealTime,
-                enabled = !isRealTime,
-                modifier = Modifier.weight(1f)
-            ) {
+        if (!isRealTime) {
+            Spacer(Modifier.height(space.sm))
+            TextButton(onClick = onResetToRealTime) {
                 Icon(
                     imageVector = Icons.Default.RestartAlt,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Real-Time", fontSize = 12.5.sp)
-            }
-            Button(
-                onClick = onClose,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Done", fontSize = 12.5.sp)
+                Spacer(Modifier.width(space.xs))
+                Text(strings.resetToRealtime)
             }
         }
     }
 }
 
-@Composable
-private fun CountdownSegment(
-    value: String,
-    label: String,
-    onSkyColor: Color,
-    shadow: Shadow? = null
-) {
-    Column(
-        modifier = Modifier.padding(horizontal = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        AnimatedContent(
-            targetState = value,
-            transitionSpec = {
-                (slideInVertically(
-                    animationSpec = tween(durationMillis = ExpressiveMotion.SHORT),
-                    initialOffsetY = { it / 3 }
-                ) + fadeIn()) togetherWith
-                    (slideOutVertically(
-                        animationSpec = tween(durationMillis = ExpressiveMotion.SHORT),
-                        targetOffsetY = { -it / 3 }
-                    ) + fadeOut())
-            },
-            label = "countdown_digit"
-        ) { digit ->
-            Text(
-                text = digit,
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontSize = 28.sp,
-                    lineHeight = 32.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 1.sp,
-                    shadow = shadow
-                ),
-                color = onSkyColor
-            )
-        }
-        Spacer(modifier = Modifier.height(1.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall.copy(shadow = shadow),
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp,
-            color = onSkyColor,
-        )
+/** Picks black or white for text sitting directly on the animated sky. */
+private fun onSkyColorFor(
+    palette: com.example.engine.SkyColorPalette,
+    sunAltitude: Float,
+    isDark: Boolean
+): Color {
+    val mid = palette.midSkyColor.mix(palette.horizonColor, 0.3f)
+    return if (mid.luminance() > 0.45f && sunAltitude > -6f) {
+        Color(0xFF0A1018)
+    } else if (isDark) {
+        Color(0xFFF2F7FC)
+    } else {
+        Color(0xFF0A1018)
     }
 }
-
-@Composable
-private fun CountdownDotsSeparator(
-    onSkyColor: Color,
-    shadowColor: Color = Color.Transparent
-) {
-    Column(
-        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .size(4.dp)
-                .clip(CircleShape)
-                .background(onSkyColor)
-        )
-        Box(
-            modifier = Modifier
-                .size(4.dp)
-                .clip(CircleShape)
-                .background(onSkyColor)
-        )
-    }
-}
-

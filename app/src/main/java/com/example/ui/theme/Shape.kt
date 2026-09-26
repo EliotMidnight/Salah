@@ -6,26 +6,30 @@ import androidx.compose.material3.Shapes
 import androidx.compose.ui.unit.dp
 
 /**
- * Material 3 Expressive (M3E) Shapes for SALAH - Android 16 specification.
- * Emphasizes organic, expressive curved geometry with distinctive, fluid curvature
- * for pills, chips, cards, modals, and interactive surfaces.
+ * Three radii, and nothing else.
+ *
+ * The app previously mixed 10, 14, 16, 20, 24, 28, 32 and 36dp corners plus
+ * `CircleShape` - often between sibling rows in the *same* list (the Quran
+ * library drew surah rows at 20dp and page/juz/hizb rows at 28dp side by side).
+ * A contained element now has exactly one shape, scaled only by size:
+ *
+ * - [Shapes.small]  chips, badges, text fields, small buttons
+ * - [Shapes.medium] rows, cards, list items - the default for anything a user
+ *                    can press
+ * - [Shapes.large]  dialogs and large panels
+ *
+ * Sheets keep a larger top radius purely so they read as a separate layer.
  */
 val Shapes = Shapes(
-    extraSmall = RoundedCornerShape(10.dp),
-    small = RoundedCornerShape(14.dp),
-    medium = RoundedCornerShape(20.dp),
-    large = RoundedCornerShape(28.dp),
-    extraLarge = RoundedCornerShape(36.dp)
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(8.dp),
+    medium = RoundedCornerShape(12.dp),
+    large = RoundedCornerShape(16.dp),
+    extraLarge = RoundedCornerShape(20.dp)
 )
 
-val PillShape = CircleShape
-val HeroSurfaceShape = RoundedCornerShape(32.dp)
-val CardSurfaceShape = RoundedCornerShape(24.dp)
-val ChipSurfaceShape = RoundedCornerShape(16.dp)
-val SheetSurfaceShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
+/** Bottom sheets: only the top two corners are rounded. */
+val SheetShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
 
-/** Canonical section-card shape used across Settings, Prayer, Qibla, and lists. */
-val SectionCardShape = Shapes.large
-
-/** Canonical row/list-item shape used for prayer rows, day lists, and pills. */
-val RowCardShape = Shapes.medium
+/** Circular status dots, avatars and count badges. */
+val DotShape = CircleShape

@@ -5,17 +5,21 @@ import android.provider.Settings
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
@@ -23,19 +27,20 @@ import androidx.compose.ui.platform.LocalContext
 /**
  * Reduced-motion support.
  *
- * Compose has no first-class "the user asked for less motion" flag, but Android
- * does: the accessibility setting *Remove animations* (and the developer
- * "Animator duration scale = 0" option) is exposed as
- * `Settings.Global.ANIMATOR_DURATION_SCALE`, which is 0 when animations are off.
+ * Compose has no first-class "the user wants less motion" flag, but Android does:
+ * the accessibility setting *Remove animations* (and the developer option
+ * *Animator duration scale = 0*) is exposed as
+ * [Settings.Global.ANIMATOR_DURATION_SCALE], which is 0 when animations are off.
  *
- * We read that once per composition, publish it through [Local], and mirror it
- * into [ExpressiveMotion.reduced] so the spec helpers here - which have no
- * composable context - can collapse to an instant change.
+ * Read once per composition, published through [SalahReduceMotion.Local], and
+ * mirrored into [Motion.reduced] so the non-composable helpers below can collapse
+ * to an instant change.
  *
- * This matters most for the living sky: the twinkling starfield, drifting clouds
- * and sun corona run continuously, which is exactly the kind of large-area,
- * slow-moving pattern that triggers vestibular symptoms. With motion reduced the
- * sky renders the same scene, statically.
+ * Continuous motion - the living sky, the syncing spinner - is the part that
+ * actually matters here. Large-area, slow-moving patterns are exactly what
+ * triggers vestibular symptoms, so [continuousPhase] is what the sky and the
+ * spinner should drive: when motion is reduced it returns a fixed value and the
+ * animation never starts at all.
  */
 object SalahReduceMotion {
 
@@ -48,7 +53,6 @@ object SalahReduceMotion {
         ) == 0f
     }.getOrDefault(false)
 
-    /** Read once and remembered for the current composition. */
     @Composable
     fun remember(): Boolean {
         val context = LocalContext.current
@@ -59,50 +63,62 @@ object SalahReduceMotion {
 }
 
 /**
- * Shared Material 3 Expressive motion language for SALAH.
+ * The motion language: short, calm, and communicative.
  *
- * - Emphasized easing for screen-level and container motion.
- * - Springs for playful but subtle interactive feedback.
- * - One place to keep durations consistent across screens.
- * - Honours the system reduced-motion setting (see [NourReduceMotion]-equivalent
- *   [SalahReduceMotion] below).
+ * Durations dropped from 200/350/500ms to 120/200/280ms. Motion here exists to
+ * show where a thing came from and to confirm an action landed - nothing more.
  */
-val ExpressiveEmphasized = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
-val ExpressiveDecelerate = CubicBezierEasing(0f, 0f, 0f, 1f)
-val ExpressiveAccelerate = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
+object Motion {
 
-object ExpressiveMotion {
+    const val MICRO = 120
     const val SHORT = 200
-    const val MEDIUM = 350
-    const val LONG = 500
+    const val MEDIUM = 280
+    const val LONG = 400
 
-    /**
-     * Mirrors [SalahReduceMotion.Local] so these non-composable helpers can still
-     * honour the user's reduced-motion preference. Set once per composition from
-     * the app root.
-     */
+    /** Mirrors [SalahReduceMotion.Local]; set once per composition from the root. */
     internal var reduced: Boolean = false
 
     /** Duration in ms, collapsed to 0 when motion is reduced. */
     fun duration(millis: Int): Int = if (reduced) 0 else millis
 
-    /** False when decorative, endlessly-repeating motion must not start. */
+    /**
+     * A 0..1 phase for decorative continuous motion.
+     *
+     * Returns a permanently fixed value when motion is reduced, so callers can
+     * keep reading a phase unconditionally and the underlying infinite animation
+     * is never even created.
+     */
+    @Composable
+    fun continuousPhase(
+        durationMillis: Int = 8_000,
+        initialPhase: Float = 0f
+    ): State<Float> {
+        if (reduced) return remember(initialPhase) { mutableFloatStateOf(initialPhase) }
+        val transition = rememberInfiniteTransition(label = "continuous")
+        return transition.animateFloat(
+            initialValue = initialPhase,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "phase"
+        )
+    }
+
+    /** Whether decorative, endlessly-repeating motion may start at all. */
     val allowContinuous: Boolean get() = !reduced
 
-    fun <T> tweenFast(): androidx.compose.animation.core.AnimationSpec<T> =
-        tween(durationMillis = duration(SHORT), easing = ExpressiveDecelerate)
+    fun <T> quick(): androidx.compose.animation.core.AnimationSpec<T> =
+        tween(durationMillis = duration(MICRO), easing = Decelerate)
 
-    fun <T> tweenEmphasized(duration: Int = MEDIUM): androidx.compose.animation.core.AnimationSpec<T> =
-        tween(durationMillis = duration(duration), easing = ExpressiveEmphasized)
+    fun <T> standard(): androidx.compose.animation.core.AnimationSpec<T> =
+        tween(durationMillis = duration(SHORT), easing = Decelerate)
 
-    fun <T> springBouncy(): androidx.compose.animation.core.AnimationSpec<T> =
-        if (reduced) {
-            tween(durationMillis = 0)
-        } else {
-            spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
-        }
+    fun <T> emphasized(): androidx.compose.animation.core.AnimationSpec<T> =
+        tween(durationMillis = duration(MEDIUM), easing = Decelerate)
 
-    fun <T> springSnappy(): androidx.compose.animation.core.AnimationSpec<T> =
+    fun <T> settle(): androidx.compose.animation.core.AnimationSpec<T> =
         if (reduced) {
             tween(durationMillis = 0)
         } else {
@@ -110,44 +126,36 @@ object ExpressiveMotion {
         }
 }
 
-/** Standard expand/collapse for conditional rows, banners and inline panels. */
-fun expressiveExpand(): EnterTransition =
-    fadeIn(animationSpec = tween(durationMillis = ExpressiveMotion.duration(ExpressiveMotion.SHORT))) +
-        expandVertically(animationSpec = tween(durationMillis = ExpressiveMotion.duration(ExpressiveMotion.MEDIUM), easing = ExpressiveEmphasized))
+private fun mutableFloatStateOf(value: Float): androidx.compose.runtime.MutableFloatState =
+    androidx.compose.runtime.mutableFloatStateOf(value)
 
-fun expressiveCollapse(): ExitTransition =
-    fadeOut(animationSpec = tween(durationMillis = ExpressiveMotion.duration(ExpressiveMotion.SHORT))) +
-        shrinkVertically(animationSpec = tween(durationMillis = ExpressiveMotion.duration(ExpressiveMotion.MEDIUM), easing = ExpressiveEmphasized))
+/** Decelerate: quick to start, gentle to land. The default for everything. */
+val Decelerate = CubicBezierEasing(0f, 0f, 0f, 1f)
 
-/** Sheet/dialog content entrance used by settings and trust sheets. */
-fun expressiveFadeIn(): EnterTransition =
-    fadeIn(animationSpec = tween(durationMillis = ExpressiveMotion.duration(ExpressiveMotion.SHORT), easing = ExpressiveDecelerate))
+/** Accelerate: used only for exits, where leaving should feel immediate. */
+val Accelerate = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
 
-/** Screen-to-screen transitions for the top-level NavHost. */
-fun expressiveEnterForward(): EnterTransition =
-    fadeIn(animationSpec = tween(durationMillis = ExpressiveMotion.duration(ExpressiveMotion.MEDIUM), easing = ExpressiveDecelerate)) +
+/** Top-level screen change. A short cross-fade with a small lateral offset. */
+fun screenEnterForward(): EnterTransition =
+    fadeIn(tween(durationMillis = Motion.duration(Motion.SHORT), easing = Decelerate)) +
         slideInHorizontally(
-            initialOffsetX = { (it * 0.12f).toInt() },
-            animationSpec = tween(durationMillis = ExpressiveMotion.duration(ExpressiveMotion.MEDIUM), easing = ExpressiveEmphasized)
+            initialOffsetX = { (it * 0.06f).toInt() },
+            animationSpec = tween(durationMillis = Motion.duration(Motion.SHORT), easing = Decelerate)
         )
 
-fun expressiveExitForward(): ExitTransition =
-    fadeOut(animationSpec = tween(durationMillis = ExpressiveMotion.duration(ExpressiveMotion.SHORT), easing = ExpressiveAccelerate)) +
-        slideOutHorizontally(
-            targetOffsetX = { -(it * 0.08f).toInt() },
-            animationSpec = tween(durationMillis = ExpressiveMotion.duration(ExpressiveMotion.MEDIUM), easing = ExpressiveEmphasized)
-        )
+fun screenExitForward(): ExitTransition =
+    fadeOut(tween(durationMillis = Motion.duration(Motion.MICRO), easing = Accelerate))
 
-fun expressiveEnterBack(): EnterTransition =
-    fadeIn(animationSpec = tween(durationMillis = ExpressiveMotion.duration(ExpressiveMotion.MEDIUM), easing = ExpressiveDecelerate)) +
+fun screenEnterBack(): EnterTransition =
+    fadeIn(tween(durationMillis = Motion.duration(Motion.SHORT), easing = Decelerate)) +
         slideInHorizontally(
-            initialOffsetX = { -(it * 0.12f).toInt() },
-            animationSpec = tween(durationMillis = ExpressiveMotion.duration(ExpressiveMotion.MEDIUM), easing = ExpressiveEmphasized)
+            initialOffsetX = { -(it * 0.06f).toInt() },
+            animationSpec = tween(durationMillis = Motion.duration(Motion.SHORT), easing = Decelerate)
         )
 
-fun expressiveExitBack(): ExitTransition =
-    fadeOut(animationSpec = tween(durationMillis = ExpressiveMotion.duration(ExpressiveMotion.SHORT), easing = ExpressiveAccelerate)) +
+fun screenExitBack(): ExitTransition =
+    fadeOut(tween(durationMillis = Motion.duration(Motion.MICRO), easing = Accelerate)) +
         slideOutHorizontally(
-            targetOffsetX = { (it * 0.08f).toInt() },
-            animationSpec = tween(durationMillis = ExpressiveMotion.duration(ExpressiveMotion.MEDIUM), easing = ExpressiveEmphasized)
+            targetOffsetX = { (it * 0.06f).toInt() },
+            animationSpec = tween(durationMillis = Motion.duration(Motion.MICRO), easing = Decelerate)
         )

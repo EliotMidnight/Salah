@@ -7,7 +7,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -71,9 +73,7 @@ import androidx.compose.ui.unit.sp
 import com.example.engine.MagneticFieldStatus
 import com.example.ui.SalahUiState
 import com.example.ui.localization.LocalStrings
-import com.example.ui.theme.LocalSuccessColors
-import com.example.ui.theme.expressiveCollapse
-import com.example.ui.theme.expressiveExpand
+import com.example.ui.theme.Tonal
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.cos
@@ -95,7 +95,7 @@ fun QiblaDirectionFinder(
 ) {
     val isFacing = state.isFacingQibla
     val strings = LocalStrings.current
-    val successColors = LocalSuccessColors.current
+    val successColors = Tonal.colors
     val colorScheme = MaterialTheme.colorScheme
     val primaryColor = colorScheme.primary
     val tertiaryColor = colorScheme.tertiary
@@ -447,8 +447,8 @@ fun QiblaDirectionFinder(
         // Tilt Alert Reminder if device is not held flat
         AnimatedVisibility(
             visible = !state.isDeviceLevel,
-            enter = expressiveExpand(),
-            exit = expressiveCollapse()
+            enter = fadeIn(tween(150)),
+            exit = fadeOut(tween(150))
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -481,7 +481,6 @@ fun QiblaDirectionFinder(
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                 shape = MaterialTheme.shapes.medium,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.weight(1f)
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
@@ -508,7 +507,6 @@ fun QiblaDirectionFinder(
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                 shape = MaterialTheme.shapes.medium,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier
                     .weight(1f)
                     .clickable { onToggleTrueNorth() }
@@ -567,7 +565,6 @@ fun QiblaDirectionFinder(
             Surface(
                 shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = 48.dp)
@@ -600,7 +597,6 @@ fun QiblaDirectionFinder(
             Surface(
                 shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = 48.dp)
@@ -643,7 +639,7 @@ private fun QiblaGuidanceBanner(
 ) {
     val relativeAngle = state.relativeQiblaAngle
     val isFacing = state.isFacingQibla
-    val successColors = LocalSuccessColors.current
+    val successColors = Tonal.colors
     val colorScheme = MaterialTheme.colorScheme
 
     val (bannerColor, contentColor, guidanceText) = when {
@@ -706,12 +702,11 @@ private fun LocationStatusCard(
     onFetchLocation: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val successColors = LocalSuccessColors.current
+    val successColors = Tonal.colors
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shape = MaterialTheme.shapes.medium,
         modifier = modifier.testTag("location_status_card")
     ) {

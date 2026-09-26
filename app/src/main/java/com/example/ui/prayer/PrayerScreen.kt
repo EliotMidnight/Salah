@@ -1,63 +1,46 @@
 package com.example.ui.prayer
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.data.model.CalculationMethod
 import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
@@ -65,13 +48,32 @@ import com.example.data.model.PrayerTime
 import com.example.engine.HijriCalendarEngine
 import com.example.engine.PrayerCalculationEngine
 import com.example.ui.SalahUiState
+import com.example.ui.components.ActionRow
+import com.example.ui.components.DetailRow
+import com.example.ui.components.OptionSheet
+import com.example.ui.components.RowDivider
+import com.example.ui.components.ScreenScaffold
+import com.example.ui.components.SectionGroup
+import com.example.ui.components.SectionHeader
 import com.example.ui.localization.LocalStrings
 import com.example.ui.localization.prayerName
+import com.example.ui.theme.ArabicFamily
+import com.example.ui.theme.Space
+import com.example.ui.theme.layoutMetrics
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Prayer times for a chosen day, the night periods around them, and the month at
+ * a glance.
+ *
+ * Order is deliberate: pick a day, read today's times, read the night periods,
+ * then scan the month. The calculation method and madhhab are reachable but not
+ * hoisted to the top - they are consulted occasionally, not on every visit, and
+ * the previous layout led with a full-width "transparent calculation source"
+ * banner that pushed the actual times below the fold.
+ */
 @Composable
 fun PrayerScreen(
     state: SalahUiState,
@@ -79,15 +81,19 @@ fun PrayerScreen(
     onMadhhabChange: (Madhhab) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val space = Space.current
     val strings = LocalStrings.current
-    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
-    var showTrustLayerSheet by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState()
+
+    var selectedDateText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+    val selectedDate = remember(selectedDateText) { LocalDate.parse(selectedDateText) }
+    var showMethodSheet by rememberSaveable { mutableStateOf(false) }
+    var showTrustSheet by rememberSaveable { mutableStateOf(false) }
 
     val isToday = selectedDate == LocalDate.now()
+    val timePattern = if (state.timeFormat24h) "HH:mm" else "h:mm a"
+    val timeFormatter = remember(timePattern) { DateTimeFormatter.ofPattern(timePattern) }
 
-    // Calculate prayer times for selected date
-    val dayPrayerTimes = remember(selectedDate, state.location, state.method, state.madhhab, state.adjustments) {
+    val dayTimes = remember(selectedDate, state.location, state.method, state.madhhab, state.adjustments) {
         if (isToday && state.todayPrayerTimes != null) {
             state.todayPrayerTimes
         } else {
@@ -100,554 +106,441 @@ fun PrayerScreen(
             )
         }
     }
+    val prayers = dayTimes?.prayers ?: emptyList()
 
-    val prayers = dayPrayerTimes?.prayers ?: emptyList()
+    val hijri = remember(selectedDate) { HijriCalendarEngine.getHijriDate(selectedDate) }
 
-    // Monthly calendar computation
-    val currentMonth = selectedDate.month
-    val daysInMonth = currentMonth.length(selectedDate.isLeapYear)
-
-    Box(
+    ScreenScaffold(
+        title = strings.more.prayerTimesTitle,
+        subtitle = "${strings.more.methodology}: ${state.method.title}",
+        onBack = null,
         modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentAlignment = Alignment.TopCenter
-    ) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .widthIn(max = 680.dp)
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(horizontal = 16.dp)
-        ) {
-            item {
-                Spacer(modifier = Modifier.height(12.dp))
+    ) { _ ->
+        Column {
+            DaySelector(
+                selectedDate = selectedDate,
+                isToday = isToday,
+                hijriLabel = "${hijri.day} ${hijri.monthNameEn} ${hijri.year} AH",
+                gregorianLabel = selectedDate.format(
+                    DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault())
+                ),
+                todayLabel = strings.todayBtn,
+                onPrevious = { selectedDateText = selectedDate.minusDays(1).toString() },
+                onNext = { selectedDateText = selectedDate.plusDays(1).toString() },
+                onToday = { selectedDateText = LocalDate.now().toString() }
+            )
 
-                // Day Switcher: < 2nd Rabi II 1448 > / Monday 15 Sep
-                DaySwitcher(
-                    selectedDate = selectedDate,
-                    onPreviousDay = { selectedDate = selectedDate.minusDays(1) },
-                    onNextDay = { selectedDate = selectedDate.plusDays(1) },
-                    onTodayClick = { selectedDate = LocalDate.now() },
-                    todayLabel = strings.todayBtn
-                )
+            SectionHeader(if (isToday) strings.todaysTimes else strings.prayerTimesHeader)
 
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Trust Layer Banner
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(MaterialTheme.shapes.medium)
-                        .clickable { showTrustLayerSheet = true }
-                        .testTag("trust_layer_card"),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = MaterialTheme.shapes.medium,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Verified,
-                        contentDescription = "Trust verification",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
+            SectionGroup {
+                prayers.forEachIndexed { index, prayerTime ->
+                    if (index > 0) RowDivider()
+                    PrayerTimeRow(
+                        prayerTime = prayerTime,
+                        isNext = isToday && prayerTime.isNext,
+                        time = prayerTime.time.format(timeFormatter)
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = strings.transparentCalculationSource,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "${state.method.title} · ${state.location.name}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                }
+            }
+
+            SectionHeader(strings.vigilsAndNightPeriods)
+
+            SectionGroup {
+                listOf(
+                    strings.imsakTitle to "الإمساك",
+                    strings.midnightTitle to "منتصف الليل",
+                    strings.lastThirdTitle to "الثلث الأخير"
+                ).forEachIndexed { index, (label, arabic) ->
+                    if (index > 0) RowDivider()
+                    val time = when (index) {
+                        0 -> dayTimes?.imsak
+                        1 -> dayTimes?.midnight
+                        else -> dayTimes?.lastThirdOfNight
                     }
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = "Inspect source details",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(19.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Section 1 Header: Today's Times (or Selected Day's Times)
-            Text(
-                text = if (isToday) strings.todaysTimes else strings.prayerTimesHeader,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                letterSpacing = 0.5.sp,
-                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-            )
-        }
-
-        val timePattern = if (state.timeFormat24h) "HH:mm" else "h:mm a"
-
-        // Daily Prayers List with Soft Highlight (No 'NEXT' text)
-        items(prayers) { pt ->
-            PrayerRowCard(
-                pt = pt,
-                isNext = isToday && pt.isNext,
-                timePattern = timePattern,
-                localizedName = strings.prayerName(pt.prayer)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        // Night Periods (Imsak, Midnight, Last Third)
-        item {
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = strings.vigilsAndNightPeriods,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-            )
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    NightPeriodRow(
-                        title = strings.imsakTitle,
-                        arabic = "الإمساك",
-                        time = dayPrayerTimes?.imsak?.format(DateTimeFormatter.ofPattern(timePattern)) ?: "--:--"
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 12.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant
-                    )
-                    NightPeriodRow(
-                        title = strings.midnightTitle,
-                        arabic = "منتصف الليل",
-                        time = dayPrayerTimes?.midnight?.format(DateTimeFormatter.ofPattern(timePattern)) ?: "--:--"
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 12.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant
-                    )
-                    NightPeriodRow(
-                        title = strings.lastThirdTitle,
-                        arabic = "الثلث الأخير",
-                        time = dayPrayerTimes?.lastThirdOfNight?.format(DateTimeFormatter.ofPattern(timePattern)) ?: "--:--"
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Section 2 Header: Monthly Calendar merged underneath
-            Text(
-                text = strings.monthlyCalendarHeader,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 4.dp, bottom = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "${currentMonth.name.lowercase().replaceFirstChar { it.uppercase() }} ${selectedDate.year}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    text = "Tap a day to view times",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        // Monthly Days List
-        items((1..daysInMonth).toList()) { day ->
-            val date = LocalDate.of(selectedDate.year, currentMonth, day)
-            val isSelectedDay = day == selectedDate.dayOfMonth
-            val isCurrentDay = day == LocalDate.now().dayOfMonth && currentMonth == LocalDate.now().month
-            val times = remember(date, state.location, state.method, state.madhhab, state.adjustments) {
-                PrayerCalculationEngine.calculatePrayerTimes(
-                    date = date,
-                    location = state.location,
-                    method = state.method,
-                    madhhab = state.madhhab,
-                    adjustments = state.adjustments
-                )
-            }
-
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-                    .clip(MaterialTheme.shapes.small)
-                    .semantics { selected = isSelectedDay }
-                    .clickable { selectedDate = date },
-                shape = MaterialTheme.shapes.small,
-                color = if (isSelectedDay) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surface,
-                border = if (isSelectedDay) BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-                else if (isCurrentDay) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                else null
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.width(36.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = space.md),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = String.format("%02d", day),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = if (isSelectedDay || isCurrentDay) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelectedDay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        )
-                        if (isCurrentDay) {
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(5.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary)
-                            )
-                        }
-                    }
-
-                    times.prayers.filter { it.prayer != Prayer.SUNRISE }.forEach { pt ->
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column {
                             Text(
-                                text = pt.prayer.englishName.take(3),
-                                style = MaterialTheme.typography.labelSmall,
+                                text = label,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = arabic,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = ArabicFamily,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Text(
-                                text = pt.time.format(DateTimeFormatter.ofPattern("HH:mm")),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = if (isSelectedDay) FontWeight.Bold else FontWeight.Normal
-                            )
                         }
-                    }
-                }
-            }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(28.dp))
-        }
-    }
-    }
-
-    // Trust Layer Modal Bottom Sheet
-    if (showTrustLayerSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showTrustLayerSheet = false },
-            sheetState = sheetState
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Verified,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Prayer Times Trust Layer",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                TrustItem(label = "Source", value = state.method.title)
-                TrustItem(label = "Location", value = "${state.location.name}, ${state.location.country} (${String.format(Locale.US, "%.3f", state.location.latitude)}°, ${String.format(Locale.US, "%.3f", state.location.longitude)}°)")
-                TrustItem(label = "Methodology", value = if (state.method.isMoroccoNationalTable) "Kingdom of Morocco National Habous Table calibration with astronomical solar fallback" else "Sun zenith angle equations: Fajr ${state.method.fajrAngle}°, Isha ${if (state.method.ishaAngle > 0) "${state.method.ishaAngle}°" else "90 min"}")
-                TrustItem(label = "Madhhab (Asr Shadow)", value = "${state.madhhab.title} (Factor: ${state.madhhab.shadowFactor}x)")
-                TrustItem(
-                    label = "Applied Adjustments",
-                    value = "Fajr ${offsetSign(state.adjustments.fajr)}, Dhuhr ${offsetSign(state.adjustments.dhuhr)}, Asr ${offsetSign(state.adjustments.asr)}, Maghrib ${offsetSign(state.adjustments.maghrib)}, Isha ${offsetSign(state.adjustments.isha)}"
-                )
-                TrustItem(label = "Offline Status", value = "100% computed on-device. No internet required.")
-                TrustItem(label = "Last Sync / Verified", value = state.lastChecked)
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                OutlinedButton(
-                    onClick = { showTrustLayerSheet = false },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Close")
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun DaySwitcher(
-    selectedDate: LocalDate,
-    onPreviousDay: () -> Unit,
-    onNextDay: () -> Unit,
-    onTodayClick: () -> Unit,
-    todayLabel: String = "Today",
-    modifier: Modifier = Modifier
-) {
-    val hijri = remember(selectedDate) { HijriCalendarEngine.getHijriDate(selectedDate) }
-    val isToday = selectedDate == LocalDate.now()
-
-    val ordinalDay = when {
-        hijri.day in 11..13 -> "${hijri.day}th"
-        hijri.day % 10 == 1 -> "${hijri.day}st"
-        hijri.day % 10 == 2 -> "${hijri.day}nd"
-        hijri.day % 10 == 3 -> "${hijri.day}rd"
-        else -> "${hijri.day}th"
-    }
-
-    val hijriMonth = when (hijri.monthNumber) {
-        1 -> "Muharram"
-        2 -> "Safar"
-        3 -> "Rabi I"
-        4 -> "Rabi II"
-        5 -> "Jumada I"
-        6 -> "Jumada II"
-        7 -> "Rajab"
-        8 -> "Sha'ban"
-        9 -> "Ramadan"
-        10 -> "Shawwal"
-        11 -> "Dhu al-Qi'dah"
-        12 -> "Dhu al-Hijjah"
-        else -> hijri.monthNameEn
-    }
-
-    val hijriText = "$ordinalDay $hijriMonth ${hijri.year}"
-    val gregorianText = selectedDate.format(DateTimeFormatter.ofPattern("EEEE d MMM", Locale.ENGLISH))
-
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = MaterialTheme.shapes.medium,
-        shadowElevation = 1.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 6.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = onPreviousDay,
-                modifier = Modifier.testTag("day_switcher_prev")
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                    contentDescription = "Previous Day",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable(enabled = !isToday, onClick = onTodayClick)
-            ) {
-                Text(
-                    text = hijriText,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = gregorianText,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-                    if (!isToday) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer
-                        ) {
-                            Text(
-                                text = todayLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            IconButton(
-                onClick = onNextDay,
-                modifier = Modifier.testTag("day_switcher_next")
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "Next Day",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PrayerRowCard(
-    pt: PrayerTime,
-    isNext: Boolean,
-    timePattern: String = "HH:mm",
-    localizedName: String = pt.prayer.englishName
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(
-            containerColor = if (isNext) MaterialTheme.colorScheme.primaryContainer
-            else MaterialTheme.colorScheme.surfaceContainerLow
-        ),
-        border = if (isNext) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-        else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isNext) 2.dp else 0.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isNext) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.surfaceContainerHighest
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = pt.prayer.icon,
-                        contentDescription = localizedName,
-                        tint = if (isNext) MaterialTheme.colorScheme.onPrimary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(14.dp))
-
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = localizedName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = if (isNext) FontWeight.Bold else FontWeight.Medium,
+                            text = time?.format(timeFormatter) ?: "--:--",
+                            style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        // Soft highlight dot replacing "NEXT" text
-                        if (isNext) {
-                            Spacer(modifier = Modifier.width(7.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary)
-                            )
-                        }
                     }
-                    Text(
-                        text = pt.prayer.arabicName,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontFamily = FontFamily.Serif
-                    )
                 }
             }
 
+            SectionHeader(strings.sectionPrayerCalc)
+
+            SectionGroup {
+                ActionRow(
+                    title = strings.methodLabel,
+                    subtitle = state.method.description,
+                    value = state.method.title,
+                    onClick = { showMethodSheet = true },
+                    testTag = "setting_method"
+                )
+                RowDivider()
+                ActionRow(
+                    title = strings.madhhabLabel,
+                    value = state.madhhab.title,
+                    onClick = { onMadhhabChange(if (state.madhhab == Madhhab.STANDARD) Madhhab.HANAFI else Madhhab.STANDARD) },
+                    testTag = "setting_madhhab"
+                )
+            }
+
+            SectionHeader(strings.sectionSystemDiagnostics)
+
+            SectionGroup {
+                ActionRow(
+                    title = strings.transparentCalculationSource,
+                    subtitle = "${state.location.name}, ${state.location.country}",
+                    onClick = { showTrustSheet = true },
+                    testTag = "trust_details"
+                )
+            }
+
+            Spacer(Modifier.height(space.lg))
+            MonthTable(
+                selectedDate = selectedDate,
+                location = state.location,
+                method = state.method,
+                madhhab = state.madhhab,
+                adjustments = state.adjustments,
+                onSelectDate = { selectedDateText = it.toString() }
+            )
+        }
+    }
+
+    if (showMethodSheet) {
+        OptionSheet(
+            title = strings.more.chooseMethod,
+            onDismiss = { showMethodSheet = false }
+        ) {
+            CalculationMethod.entries.forEach { method ->
+                androidx.compose.material3.HorizontalDivider()
+                ActionRow(
+                    title = method.title,
+                    subtitle = method.description,
+                    showChevron = false,
+                    isSelected = method == state.method,
+                    onClick = {
+                        onMethodChange(method)
+                        showMethodSheet = false
+                    }
+                )
+            }
+        }
+    }
+
+    if (showTrustSheet) {
+        OptionSheet(
+            title = strings.transparentCalculationSource,
+            subtitle = "${state.method.title} · ${state.location.name}",
+            onDismiss = { showTrustSheet = false }
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(space.lg)) {
+                    DetailRow(
+                        strings.more.methodology,
+                        if (state.method.isMoroccoNationalTable) {
+                            "Kingdom of Morocco National Habous table"
+                        } else {
+                            "Fajr ${state.method.fajrAngle}° · Isha ${
+                                if (state.method.ishaAngle > 0) "${state.method.ishaAngle}°" else "90 min"
+                            }"
+                        }
+                    )
+                    RowDivider()
+                    DetailRow(
+                        strings.more.madhhabLabelShort,
+                        "${state.madhhab.title} (${state.madhhab.shadowFactor}x)"
+                    )
+                    RowDivider()
+                    DetailRow(
+                        strings.more.appliedAdjustments,
+                        listOf(
+                            Prayer.FAJR to state.adjustments.fajr,
+                            Prayer.DHUHR to state.adjustments.dhuhr,
+                            Prayer.ASR to state.adjustments.asr,
+                            Prayer.MAGHRIB to state.adjustments.maghrib,
+                            Prayer.ISHA to state.adjustments.isha
+                        ).joinToString(", ") { (prayer, minutes) ->
+                            "${prayer.englishName} ${signed(minutes)}"
+                        }
+                    )
+                    RowDivider()
+                    DetailRow(strings.offlineStatus, strings.more.computedOnDevice)
+                    RowDivider()
+                    DetailRow(strings.more.lastVerified, state.lastChecked)
+                }
+            }
+        }
+    }
+}
+
+private fun signed(minutes: Int): String = if (minutes >= 0) "+$minutes" else "$minutes"
+
+/** Previous / next day, with the current day always one tap away. */
+@Composable
+private fun DaySelector(
+    selectedDate: LocalDate,
+    isToday: Boolean,
+    hijriLabel: String,
+    gregorianLabel: String,
+    todayLabel: String,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onToday: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val space = Space.current
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onPrevious, modifier = Modifier.testTag("day_prev")) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clip(MaterialTheme.shapes.small)
+                .clickable(enabled = !isToday, onClick = onToday)
+                .padding(vertical = space.xs)
+                .semantics { contentDescription = "$gregorianLabel, $hijriLabel" },
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             Text(
-                text = pt.time.format(DateTimeFormatter.ofPattern(timePattern)),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = if (isNext) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                text = gregorianLabel,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = if (isToday) "$hijriLabel · ${todayLabel.lowercase()}" else hijriLabel,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        IconButton(onClick = onNext, modifier = Modifier.testTag("day_next")) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
 }
 
+/** One prayer time. The next prayer is marked by weight and a dot, not a badge. */
 @Composable
-private fun NightPeriodRow(title: String, arabic: String, time: String) {
+private fun PrayerTimeRow(
+    prayerTime: PrayerTime,
+    isNext: Boolean,
+    time: String,
+    modifier: Modifier = Modifier
+) {
+    val space = Space.current
+    val strings = LocalStrings.current
+
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+            .padding(vertical = space.md)
+            .testTag("prayer_time_${prayerTime.prayer.name}"),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column {
-            Text(text = title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-            Text(text = arabic, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Serif)
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = strings.prayerName(prayerTime.prayer),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = if (isNext) FontWeight.Bold else FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (isNext) {
+                    Spacer(Modifier.width(space.sm))
+                    com.example.ui.components.StatusDot(color = MaterialTheme.colorScheme.primary)
+                }
+            }
+            Text(
+                text = prayerTime.prayer.arabicName,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = ArabicFamily,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
-        Text(text = time, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+        Text(
+            text = time,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = if (isNext) FontWeight.Bold else FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
+/**
+ * The month as a table.
+ *
+ * Uses the wider reading measure because a five-column time grid genuinely needs
+ * the room, and drops the per-day card for a plain row: thirty bordered surfaces
+ * with a coloured fill on the selected day was the loudest thing on a screen whose
+ * job is to be scannable.
+ */
 @Composable
-private fun TrustItem(label: String, value: String) {
-    Column(modifier = Modifier.padding(vertical = 6.dp)) {
-        Text(text = label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-        Text(text = value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-    }
-}
+private fun MonthTable(
+    selectedDate: LocalDate,
+    location: com.example.data.model.UserLocation,
+    method: CalculationMethod,
+    madhhab: Madhhab,
+    adjustments: com.example.data.model.PrayerAdjustments,
+    onSelectDate: (LocalDate) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val space = Space.current
+    val strings = LocalStrings.current
+    val month = selectedDate.month
+    val daysInMonth = month.length(selectedDate.isLeapYear)
+    val today = LocalDate.now()
 
-private fun offsetSign(minutes: Int): String {
-    return if (minutes >= 0) "+$minutes" else "$minutes"
+    val fard = listOf(Prayer.FAJR, Prayer.DHUHR, Prayer.ASR, Prayer.MAGHRIB, Prayer.ISHA)
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = "${month.name.lowercase().replaceFirstChar { it.uppercase() }} ${selectedDate.year}",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(Modifier.height(space.sm))
+
+        // Column headings, so the five numbers per row are not unlabelled.
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Spacer(Modifier.width(40.dp))
+            fard.forEach { prayer ->
+                Text(
+                    text = prayer.englishName.take(3),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clearAndSetSemantics { }
+                )
+            }
+        }
+        Spacer(Modifier.height(space.xs))
+
+        (1..daysInMonth).forEach { day ->
+            val date = LocalDate.of(selectedDate.year, month, day)
+            val isSelected = day == selectedDate.dayOfMonth
+            val isToday = date == today
+
+            val times = remember(date, location, method, madhhab, adjustments) {
+                PrayerCalculationEngine.calculatePrayerTimes(
+                    date = date,
+                    location = location,
+                    method = method,
+                    madhhab = madhhab,
+                    adjustments = adjustments
+                )
+            }
+            val byPrayer = times.prayers.associateBy { it.prayer }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+                    .clip(MaterialTheme.shapes.extraSmall)
+                    .clickable { onSelectDate(date) }
+                    .background(
+                        if (isSelected) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            androidx.compose.ui.graphics.Color.Transparent
+                        }
+                    )
+                    .padding(vertical = space.xs, horizontal = space.xs)
+                    .semantics { selected = isSelected },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = day.toString().padStart(2, '0'),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (isSelected || isToday) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                    modifier = Modifier.width(40.dp)
+                )
+                fard.forEach { prayer ->
+                    Text(
+                        text = byPrayer[prayer]?.time?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "--:--",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            if (day < daysInMonth) {
+                HorizontalDivider(
+                    thickness = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+            }
+        }
+
+        Spacer(Modifier.height(space.md))
+        Text(
+            text = strings.madhhabLabel,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
 }
