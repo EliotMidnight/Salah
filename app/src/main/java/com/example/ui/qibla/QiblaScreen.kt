@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,6 +18,7 @@ import com.example.ui.SalahUiState
 import com.example.ui.components.BannerTone
 import com.example.ui.components.ConfirmDialog
 import com.example.ui.components.OptionSheet
+import com.example.ui.components.ScreenScaffold
 import com.example.ui.components.StatusBanner
 import com.example.ui.localization.LocalStrings
 import com.example.ui.theme.Space
@@ -31,6 +31,11 @@ import kotlin.math.abs
  * supporting text. The previous version put a 22dp "verified" icon and a title
  * above the compass, then a bordered warning card, then the compass, then more
  * bordered cards - four competing frames around one instrument.
+ *
+ * It also rendered outside any scaffold, which on a phone meant two real bugs:
+ * the first row sat under the status bar and clock, and because nothing scrolled,
+ * the location and calibration rows at the bottom were simply unreachable. It now
+ * uses the same frame as every other screen.
  */
 @Composable
 fun QiblaScreen(
@@ -45,33 +50,41 @@ fun QiblaScreen(
     var showSunSheet by rememberSaveable { mutableStateOf(false) }
     var showCalibration by rememberSaveable { mutableStateOf(false) }
 
-    Column(modifier = modifier.fillMaxWidth()) {
-        QiblaHeader(
-            bearing = state.qiblaBearing,
-            delta = state.qiblaDelta,
-            isFacing = state.isFacingQibla,
-            isTrueNorth = state.useTrueNorth
-        )
-
-        Spacer(Modifier.height(space.md))
-
-        if (state.magneticStatus == MagneticFieldStatus.INTERFERENCE) {
-            StatusBanner(
-                message = "${strings.more.magneticInterference}: ${strings.more.magneticInterferenceMessage}",
-                tone = BannerTone.Warning,
-                modifier = Modifier.testTag("magnetic_warning")
+    ScreenScaffold(
+        title = null,
+        onBack = null,
+        modifier = modifier
+    ) { _ ->
+        Column {
+            QiblaHeader(
+                bearing = state.qiblaBearing,
+                isFacing = state.isFacingQibla,
+                isTrueNorth = state.useTrueNorth
             )
-            Spacer(Modifier.height(space.md))
-        }
 
-        QiblaDirectionFinder(
-            state = state,
-            onToggleTrueNorth = onToggleTrueNorth,
-            onFetchLocation = onFetchLocation,
-            onShowCalibrationTip = { showCalibration = true },
-            onShowSunVerification = { showSunSheet = true },
-            modifier = Modifier.fillMaxWidth()
-        )
+            Spacer(Modifier.height(space.md))
+
+            if (state.magneticStatus == MagneticFieldStatus.INTERFERENCE) {
+                StatusBanner(
+                    // The message alone. It used to be prefixed with its own
+                    // category ("Magnetic interference: ..."), which labelled a
+                    // sentence with its own first noun.
+                    message = strings.more.magneticInterferenceMessage,
+                    tone = BannerTone.Warning,
+                    modifier = Modifier.testTag("magnetic_warning")
+                )
+                Spacer(Modifier.height(space.md))
+            }
+
+            QiblaDirectionFinder(
+                state = state,
+                onToggleTrueNorth = onToggleTrueNorth,
+                onFetchLocation = onFetchLocation,
+                onShowCalibrationTip = { showCalibration = true },
+                onShowSunVerification = { showSunSheet = true },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 
     if (showSunSheet) {
@@ -82,11 +95,12 @@ fun QiblaScreen(
     }
 
     if (showCalibration) {
+        // One instruction, with the diagnostics left where they belong: this used
+        // to append the raw magnetometer numbers and the sensor accuracy, which
+        // are English enum names and are already listed in Settings > Compass.
         ConfirmDialog(
             title = strings.more.calibrationTitle,
-            message = "${strings.more.calibrationMessage}\n\n" +
-                "${strings.more.ambientField}: ${state.magneticFieldMagnitude} µT (${state.magneticStatus.label}) · " +
-                "${strings.more.sensorAccuracy}: ${state.compassAccuracy}",
+            message = strings.more.calibrationMessage,
             confirmLabel = strings.done,
             onConfirm = { showCalibration = false },
             onDismiss = { showCalibration = false }
@@ -95,19 +109,22 @@ fun QiblaScreen(
 }
 
 /**
- * The bearing to the Kaaba, and whether you are facing it.
+ * Which way the Kaaba is from here.
  *
- * The big number is the *destination* bearing, not a live compass heading: it
- * depends only on where you are, so it holds still while you turn. It used to be
- * rendered with no label at all, sitting directly above the dial, where it read
- * as a heading that had frozen - which is precisely the question it cannot
- * answer. The label now sits above it, and the true/magnetic north reference
- * reads as a caption instead of a second value.
+ * This is the *destination* bearing, not a live compass heading: it depends only
+ * on where you are, so it holds still while you turn. It used to be rendered with
+ * no label at all, sitting directly above the dial, where it read as a heading
+ * that had frozen - which is precisely the question it cannot answer. The label
+ * now sits above it, and the true/magnetic north reference reads as a caption
+ * instead of a second value.
+ *
+ * The turn instruction is not repeated here: it belongs on the banner beside the
+ * dial, which is where the user is actually turning. Two identical "Turn 12° to
+ * the right" lines used to be on screen at once.
  */
 @Composable
 private fun QiblaHeader(
     bearing: Float,
-    delta: Float,
     isFacing: Boolean,
     isTrueNorth: Boolean,
     modifier: Modifier = Modifier
@@ -129,21 +146,6 @@ private fun QiblaHeader(
             color = if (isFacing) semantic.success else MaterialTheme.colorScheme.onSurface
         )
         Spacer(Modifier.height(space.xs))
-        Text(
-            text = if (isFacing) {
-                strings.more.isFacingQibla
-            } else {
-                // Localized direction words. This used to be built inline in
-                // English, which is how an Arabic or Urdu user ended up reading
-                // English guidance on an otherwise localized screen.
-                strings.more.turnBy.format(
-                    String.format(java.util.Locale.getDefault(), "%.0f°", abs(delta)),
-                    if (delta >= 0) strings.more.rightOfQibla else strings.more.leftOfQibla
-                )
-            },
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
         Text(
             text = if (isTrueNorth) strings.trueNorth else strings.magneticNorth,
             style = MaterialTheme.typography.bodySmall,

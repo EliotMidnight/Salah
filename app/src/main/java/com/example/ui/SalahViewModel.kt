@@ -146,6 +146,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
     val uiState: StateFlow<SalahUiState> = _uiState.asStateFlow()
 
     private var tickerJob: Job? = null
+    private var prayerLogJob: Job? = null
     private val sensorManager: SensorManager? =
         application.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
     private val rotationSensor: Sensor? =
@@ -363,14 +364,12 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             }
         }
 
-        // Room observers
-        viewModelScope.launch {
-            repository.getPrayerLog(LocalDate.now()).collectLatest { log ->
-                if (log != null) {
-                    _uiState.value = _uiState.value.copy(prayerLog = log)
-                }
-            }
-        }
+        // Room observers.
+        //
+        // The prayer log is a row keyed by date, so this cannot be a one-off
+        // collection: at midnight the date changes and the observer has to follow
+        // it. Re-armed by [observePrayerLog] from the ticker below.
+        observePrayerLog(LocalDate.now())
 
         viewModelScope.launch {
             repository.getContinueReading().collectLatest { cont ->
@@ -451,15 +450,58 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         }
     }
 
+    /**
+     * Keeps Today's checklist pointed at the current day's row.
+     *
+     * Cancelled and re-subscribed by [updateLiveTiming] when the calendar day
+     * changes, because the checklist is stored one row per date.
+     */
+    private fun observePrayerLog(date: LocalDate) {
+        prayerLogJob?.cancel()
+        prayerLogJob = viewModelScope.launch {
+            repository.getPrayerLog(date).collectLatest { log ->
+                if (log != null) {
+                    _uiState.value = _uiState.value.copy(prayerLog = log)
+                }
+            }
+        }
+    }
+
     private fun updateLiveTiming() {
         val state = _uiState.value
-        val todayTimes = state.todayPrayerTimes ?: return
+        val today = LocalDate.now()
+
+        // Midnight.
+        //
+        // Everything date-bearing here is computed once and then countdown-ticks,
+        // so nothing used to roll over: leaving the app open across midnight kept
+        // yesterday's date, yesterday's times and yesterday's "next prayer", and
+        // ticking the checklist wrote into yesterday's row.
+        //
+        // The first branch also covers the state before the schedule has loaded at
+        // all, so a cold start can never show an empty day.
+        val day = state.todayPrayerTimes
+        if (day == null || day.date != today) {
+            if (day != null) {
+                // A real rollover: clear the checklist to a fresh, empty row for
+                // the new day and follow it. Without this the state would keep
+                // yesterday's ticks, because the new row does not exist yet and the
+                // observer only ever copies non-null rows in.
+                _uiState.value = state.copy(
+                    prayerLog = PrayerLogEntity(dateString = today.toString())
+                )
+                observePrayerLog(today)
+            }
+            recalculateAll()
+            return
+        }
+
         val now = LocalDateTime.now()
-        val nextPt = PrayerCalculationEngine.getNextPrayer(todayTimes, now.toLocalTime())
-        val prevPt = PrayerCalculationEngine.getPreviousPrayer(todayTimes, now.toLocalTime())
+        val nextPt = PrayerCalculationEngine.getNextPrayer(day, now.toLocalTime())
+        val prevPt = PrayerCalculationEngine.getPreviousPrayer(day, now.toLocalTime())
         val countdown = PrayerCalculationEngine.formatRemainingCountdown(nextPt.dateTime, now)
-        val sky = AstronomicalSky.determineSkyPeriod(now.toLocalTime(), todayTimes)
-        val celestialProgress = AstronomicalSky.getCelestialBodyProgress(now.toLocalTime(), todayTimes)
+        val sky = AstronomicalSky.determineSkyPeriod(now.toLocalTime(), day)
+        val celestialProgress = AstronomicalSky.getCelestialBodyProgress(now.toLocalTime(), day)
         val sun = QiblaEngine.calculateSunPosition(state.location, now)
 
         _uiState.value = state.copy(

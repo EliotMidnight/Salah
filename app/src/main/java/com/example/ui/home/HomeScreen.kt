@@ -121,7 +121,13 @@ fun HomeScreen(
     val strings = LocalStrings.current
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
 
-    val today = remember { LocalDate.now() }
+    // The date follows the schedule rather than the wall clock's value at first
+    // composition. `remember { LocalDate.now() }` froze this at whatever day the
+    // screen happened to be built on, so an app left open overnight kept showing
+    // yesterday: the date line, the Hijri date and the sun position all read from
+    // it. The ViewModel advances `todayPrayerTimes` when midnight passes, and this
+    // stays in step with it.
+    val today = state.todayPrayerTimes?.date ?: LocalDate.now()
     val timeFormatter = remember(state.timeFormat24h) {
         DateTimeFormatter.ofPattern(if (state.timeFormat24h) "HH:mm" else "h:mm a")
     }
@@ -137,7 +143,7 @@ fun HomeScreen(
         } ?: LocalTime.now()
     }
 
-    val sunPosition = remember(activeTime, state.location, state.sunPosition, simulatedMinutes) {
+    val sunPosition = remember(activeTime, today, state.location, state.sunPosition, simulatedMinutes) {
         if (simulatedMinutes != null) {
             QiblaEngine.calculateSunPosition(state.location, LocalDateTime.of(today, activeTime))
         } else {

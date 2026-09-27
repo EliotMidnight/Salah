@@ -85,12 +85,22 @@ fun PrayerScreen(
     val space = Space.current
     val strings = LocalStrings.current
 
-    var selectedDateText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
-    val selectedDate = remember(selectedDateText) { LocalDate.parse(selectedDateText) }
+    // Null means "today", so the screen keeps following the current day instead of
+    // freezing on whatever date it was built. It used to hold a concrete date
+    // seeded at first composition, so an app left open overnight still called
+    // yesterday "today" - and highlighted yesterday's row in the month table.
+    // A String because that is what rememberSaveable can persist.
+    var selectedDateText by rememberSaveable { mutableStateOf<String?>(null) }
+    // The schedule carries the date the app is showing, and the ViewModel advances
+    // it when midnight passes.
+    val today = state.todayPrayerTimes?.date ?: LocalDate.now()
+    val selectedDate = remember(selectedDateText, today) {
+        selectedDateText?.let { LocalDate.parse(it) } ?: today
+    }
     var showMethodSheet by rememberSaveable { mutableStateOf(false) }
     var showTrustSheet by rememberSaveable { mutableStateOf(false) }
 
-    val isToday = selectedDate == LocalDate.now()
+    val isToday = selectedDate == today
     val timePattern = if (state.timeFormat24h) "HH:mm" else "h:mm a"
     val timeFormatter = remember(timePattern) { DateTimeFormatter.ofPattern(timePattern) }
 
@@ -130,7 +140,7 @@ fun PrayerScreen(
                 todayLabel = strings.todayBtn,
                 onPrevious = { selectedDateText = selectedDate.minusDays(1).toString() },
                 onNext = { selectedDateText = selectedDate.plusDays(1).toString() },
-                onToday = { selectedDateText = LocalDate.now().toString() }
+                onToday = { selectedDateText = null }
             )
 
             SectionHeader(if (isToday) strings.todaysTimes else strings.prayerTimesHeader)
@@ -227,6 +237,7 @@ fun PrayerScreen(
             Spacer(Modifier.height(space.lg))
             MonthTable(
                 selectedDate = selectedDate,
+                today = today,
                 location = state.location,
                 method = state.method,
                 madhhab = state.madhhab,
@@ -447,10 +458,16 @@ private fun PrayerTimeRow(
  * the room, and drops the per-day card for a plain row: thirty bordered surfaces
  * with a coloured fill on the selected day was the loudest thing on a screen whose
  * job is to be scannable.
+ *
+ * The whole month is computed in one `remember` rather than one per row inside the
+ * loop. Thirty separate computations meant thirty separate cache entries, each
+ * re-evaluated whenever any input changed, which is what made switching months and
+ * changing the calculation method feel heavy on a slow phone.
  */
 @Composable
 private fun MonthTable(
     selectedDate: LocalDate,
+    today: LocalDate,
     location: com.example.data.model.UserLocation,
     method: CalculationMethod,
     madhhab: Madhhab,
@@ -462,9 +479,29 @@ private fun MonthTable(
     val strings = LocalStrings.current
     val month = selectedDate.month
     val daysInMonth = month.length(selectedDate.isLeapYear)
-    val today = LocalDate.now()
 
     val fard = listOf(Prayer.FAJR, Prayer.DHUHR, Prayer.ASR, Prayer.MAGHRIB, Prayer.ISHA)
+    val timePattern = remember { DateTimeFormatter.ofPattern("HH:mm") }
+
+    // day of month -> prayer -> time.
+    val monthTimes: Map<Int, Map<Prayer, PrayerTime>> = remember(
+        selectedDate.year,
+        month,
+        location,
+        method,
+        madhhab,
+        adjustments
+    ) {
+        (1..daysInMonth).associateWith { day ->
+            PrayerCalculationEngine.calculatePrayerTimes(
+                date = LocalDate.of(selectedDate.year, month, day),
+                location = location,
+                method = method,
+                madhhab = madhhab,
+                adjustments = adjustments
+            ).prayers.associateBy { it.prayer }
+        }
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
@@ -504,17 +541,7 @@ private fun MonthTable(
             val date = LocalDate.of(selectedDate.year, month, day)
             val isSelected = day == selectedDate.dayOfMonth
             val isToday = date == today
-
-            val times = remember(date, location, method, madhhab, adjustments) {
-                PrayerCalculationEngine.calculatePrayerTimes(
-                    date = date,
-                    location = location,
-                    method = method,
-                    madhhab = madhhab,
-                    adjustments = adjustments
-                )
-            }
-            val byPrayer = times.prayers.associateBy { it.prayer }
+            val byPrayer = monthTimes[day].orEmpty()
 
             Row(
                 modifier = Modifier
@@ -545,7 +572,7 @@ private fun MonthTable(
                 )
                 fard.forEach { prayer ->
                     Text(
-                        text = byPrayer[prayer]?.time?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "--:--",
+                        text = byPrayer[prayer]?.time?.format(timePattern) ?: "--:--",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isSelected) {
                             MaterialTheme.colorScheme.onPrimaryContainer

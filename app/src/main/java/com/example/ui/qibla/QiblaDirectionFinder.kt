@@ -5,14 +5,10 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,7 +19,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,19 +27,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CompassCalibration
-import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.NearMe
-import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Sensors
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -57,8 +43,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -69,14 +53,23 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.engine.MagneticFieldStatus
 import com.example.ui.SalahUiState
+import com.example.ui.components.ActionRow
+import com.example.ui.components.RowDivider
+import com.example.ui.components.SectionGroup
+import com.example.ui.components.SegmentedOptions
 import com.example.ui.localization.LocalStrings
+import com.example.ui.theme.Space
 import com.example.ui.theme.Tonal
 import java.util.Locale
 import kotlin.math.abs
@@ -99,6 +92,7 @@ fun QiblaDirectionFinder(
 ) {
     val isFacing = state.isFacingQibla
     val strings = LocalStrings.current
+    val space = Space.current
     val successColors = Tonal.colors
     val colorScheme = MaterialTheme.colorScheme
     val primaryColor = colorScheme.primary
@@ -154,65 +148,35 @@ fun QiblaDirectionFinder(
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(space.md))
 
-        // Large Bearing & Heading Readout
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "${String.format(Locale.US, "%.1f", state.qiblaBearing)}°",
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isFacing) alignedSuccess else onSurfaceColor,
-                    modifier = Modifier.testTag("qibla_bearing_text")
-                )
-                Text(
-                    text = strings.kaabaDistance,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = onSurfaceVariant
-                )
-            }
+        // The dial below used to be preceded by two more big numbers - the Qibla
+        // bearing again, which the header already states, and the live heading as
+        // text. The heading is what the dial *is*: the bezel turns with the phone
+        // and the arrow at the top marks where you are pointing, so the number was
+        // a second readout of the same fact competing with the instrument. It is
+        // now carried in the dial's accessibility description instead, where it is
+        // still reachable but no longer shouts over the compass.
 
-            // Divider Pill
-            Box(
-                modifier = Modifier
-                    .width(1.dp)
-                    .height(36.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant)
-            )
-
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                val cardinal = getCardinalDirection(state.compassAzimuth)
-                Text(
-                    text = "${state.compassAzimuth.toInt()}° $cardinal",
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.Light,
-                    color = onSurfaceColor,
-                    modifier = Modifier.testTag("current_heading_text")
-                )
-                Text(
-                    text = if (state.useTrueNorth) strings.trueNorth else strings.magneticNorth,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = onSurfaceVariant
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Interactive 2D Sensor Compass Dial (responsive: fills width, capped for tablets)
+        // Interactive 2D Sensor Compass Dial (responsive: fills width, capped for tablets).
+        //
+        // The one non-visual fact the dial carries is the live heading, so it is
+        // published to the accessibility tree here rather than as a second big
+        // number on screen.
+        val headingText = "${state.compassAzimuth.toInt()}° " +
+            getCardinalDirection(state.compassAzimuth)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .widthIn(max = 420.dp)
                 .aspectRatio(1f)
-                .testTag("qibla_sensor_compass_dial"),
+                .testTag("qibla_sensor_compass_dial")
+                .semantics(mergeDescendants = true) {
+                    contentDescription = strings.more.dialDescription.format(
+                        headingText,
+                        "${state.qiblaBearing.toInt()}°"
+                    )
+                },
             contentAlignment = Alignment.Center
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
@@ -457,15 +421,19 @@ fun QiblaDirectionFinder(
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
-                            contentDescription = "Aligned",
-                            modifier = Modifier.size(18.dp)
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clearAndSetSemantics { }
                         )
                     }
                 }
             }
         }
 
-        // Tilt Alert Reminder if device is not held flat
+        // Tilt reminder. The heading is only trustworthy with the phone flat, so
+        // this is an instruction rather than a status line, and it is localized -
+        // it was the last hardcoded English sentence on this screen.
         AnimatedVisibility(
             visible = !state.isDeviceLevel,
             enter = fadeIn(tween(150)),
@@ -473,178 +441,123 @@ fun QiblaDirectionFinder(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                horizontalArrangement = Arrangement.spacedBy(space.xs),
+                modifier = Modifier.padding(horizontal = space.md, vertical = space.sm)
             ) {
                 Icon(
                     imageVector = Icons.Default.Sensors,
                     contentDescription = null,
                     tint = alignedGold,
-                    modifier = Modifier.size(13.dp)
+                    modifier = Modifier
+                        .size(14.dp)
+                        .clearAndSetSemantics { }
                 )
                 Text(
-                    text = "Hold device flat for optimal compass precision",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium,
+                    text = strings.more.holdFlatHint,
+                    style = MaterialTheme.typography.bodySmall,
                     color = onSurfaceVariant
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(space.md))
 
-        // Telemetry & Quick Action Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            // Kaaba Distance Card
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.weight(1f)
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = "Distance",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = onSurfaceVariant
-                    )
-                    Text(
-                        text = "${String.format(Locale.US, "%,d", state.distanceToKaabaKm)} km",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = onSurfaceColor
-                    )
-                    Text(
-                        text = "Great-Circle to Mecca",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = onSurfaceVariant
-                    )
-                }
-            }
-
-            // North Mode Card
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                shape = MaterialTheme.shapes.medium,
+        // The facts, and the two tools that are used occasionally, as one quiet
+        // group of rows.
+        //
+        // This replaces four bordered cards plus two bordered buttons stacked
+        // under the dial, each with its own 14dp padding and its own idea of a
+        // corner radius: six competing frames around the one instrument this
+        // screen exists for. These are the row shapes Settings and Prayer
+        // already use, so the same kind of thing looks the same everywhere.
+        SectionGroup {
+            // Distance is a fact, not a control, so it is a labelled value.
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .clickable { onToggleTrueNorth() }
-                    .testTag("north_mode_card")
+                    .fillMaxWidth()
+                    .padding(vertical = space.md),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Reference",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = onSurfaceVariant
-                        )
-                        Icon(
-                            imageVector = Icons.Default.Explore,
-                            contentDescription = null,
-                            tint = primaryColor,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                    Text(
-                        text = if (state.useTrueNorth) strings.trueNorth else strings.magneticNorth,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = onSurfaceColor
-                    )
-                    Text(
-                        text = "Tap to switch",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = primaryColor
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Location Services & Offline Caching Card
-        LocationStatusCard(
-            state = state,
-            onFetchLocation = onFetchLocation,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Sensor Diagnostics and Sun Verification Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Sun Verification Button
-            Surface(
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 48.dp)
-                    .clip(MaterialTheme.shapes.small)
-                    .clickable { onShowSunVerification() }
-                    .testTag("verify_with_sun_button")
-            ) {
-                Row(
-                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.WbSunny,
-                        contentDescription = null,
-                        tint = alignedGold,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Verify with Sun",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = onSurfaceColor
-                    )
-                }
+                Text(
+                    text = strings.kaabaDistance,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = "${String.format(Locale.US, "%,d", state.distanceToKaabaKm)} km",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = onSurfaceColor
+                )
             }
 
-            // Sensor Calibration Button
-            Surface(
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 48.dp)
-                    .clip(MaterialTheme.shapes.small)
-                    .clickable { onShowCalibrationTip() }
-                    .testTag("sensor_calibration_button")
-            ) {
-                Row(
-                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CompassCalibration,
-                        contentDescription = null,
-                        tint = primaryColor,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "${state.magneticFieldMagnitude.toInt()} µT · Status",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = onSurfaceColor
-                    )
-                }
+            RowDivider()
+
+            // North reference: two exclusive options, so it is a segmented
+            // control rather than a card captioned "Tap to switch" - which told
+            // you that something would happen without saying what.
+            Column(modifier = Modifier.padding(vertical = space.md)) {
+                Text(
+                    text = strings.more.northReferenceLabel,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = onSurfaceColor
+                )
+                Spacer(modifier = Modifier.height(space.sm))
+                SegmentedOptions(
+                    options = listOf(strings.trueNorth, strings.magneticNorth),
+                    selectedIndex = if (state.useTrueNorth) 0 else 1,
+                    onSelect = { index ->
+                        if ((index == 0) != state.useTrueNorth) onToggleTrueNorth()
+                    },
+                    modifier = Modifier.testTag("north_mode_card")
+                )
             }
+
+            RowDivider()
+
+            // Locate: the title is the action and the subtitle is what it will
+            // change, which is the same shape as every other action row in the app.
+            ActionRow(
+                title = strings.more.locateMe,
+                subtitle = "${state.location.name}, ${state.location.country} · " +
+                    String.format(
+                        Locale.US,
+                        "%.4f°, %.4f° · %s",
+                        state.location.latitude,
+                        state.location.longitude,
+                        if (state.location.isGps) strings.more.gpsCached else strings.more.selectedCity
+                    ),
+                icon = Icons.Default.MyLocation,
+                value = if (state.isLocating) strings.more.loading else null,
+                enabled = !state.isLocating,
+                showChevron = false,
+                onClick = onFetchLocation,
+                testTag = "fetch_gps_location_button"
+            )
+
+            RowDivider()
+
+            // Two tools, both used occasionally: cross-check the bearing against
+            // the sun, or recalibrate the magnetometer. They were half-width
+            // buttons captioned with raw sensor telemetry ("46 µT · Status"),
+            // which read as a status readout rather than as something pressable.
+            ActionRow(
+                title = strings.more.solarReferenceTitle,
+                icon = Icons.Default.WbSunny,
+                showChevron = false,
+                onClick = onShowSunVerification,
+                testTag = "verify_with_sun_button"
+            )
+
+            RowDivider()
+
+            ActionRow(
+                title = strings.more.calibrationTitle,
+                icon = Icons.Default.CompassCalibration,
+                showChevron = false,
+                onClick = onShowCalibrationTip,
+                testTag = "sensor_calibration_button"
+            )
         }
     }
 }
@@ -660,6 +573,7 @@ private fun QiblaGuidanceBanner(
 ) {
     val relativeAngle = state.relativeQiblaAngle
     val isFacing = state.isFacingQibla
+    val space = Space.current
     val successColors = Tonal.colors
     val colorScheme = MaterialTheme.colorScheme
     val strings = LocalStrings.current
@@ -691,152 +605,45 @@ private fun QiblaGuidanceBanner(
         )
     }
 
+    // The banner is only a button when it does something: it opens the
+    // calibration tip, and only when the magnetometer is being interfered with
+    // and the user is therefore not aligned. Attaching clickable unconditionally
+    // gave a ripple to a surface that mostly does nothing when tapped.
+    val actionable = !isFacing && state.magneticStatus == MagneticFieldStatus.INTERFERENCE
+
     Surface(
         shape = MaterialTheme.shapes.small,
         color = bannerColor,
         contentColor = contentColor,
         modifier = modifier
             .testTag("qibla_guidance_banner")
-            .clickable {
-                if (!isFacing && state.magneticStatus == MagneticFieldStatus.INTERFERENCE) {
-                    onShowCalibrationTip()
+            .then(
+                if (actionable) {
+                    Modifier.clickable(onClick = onShowCalibrationTip)
+                } else {
+                    Modifier
                 }
-            }
+            )
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = space.md, vertical = space.sm),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
             Icon(
                 imageVector = if (isFacing) Icons.Default.CheckCircle else Icons.Default.NearMe,
                 contentDescription = null,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier
+                    .size(16.dp)
+                    .clearAndSetSemantics { }
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(Modifier.width(space.sm))
             Text(
                 text = guidanceText,
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center
             )
-        }
-    }
-}
-
-/**
- * Card displaying current coordinates, offline caching status, and GPS fetch action.
- */
-@Composable
-private fun LocationStatusCard(
-    state: SalahUiState,
-    onFetchLocation: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val successColors = Tonal.colors
-    val strings = LocalStrings.current
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
-        shape = MaterialTheme.shapes.medium,
-        modifier = modifier.testTag("location_status_card")
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.LocationOn,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Column {
-                        Text(
-                            text = "${state.location.name}, ${state.location.country}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = String.format(
-                                Locale.US,
-                                "%.4f° N, %.4f° E · %s",
-                                state.location.latitude,
-                                state.location.longitude,
-                                if (state.location.isGps) strings.more.gpsCached else strings.more.selectedCity
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                // Locate Me Button
-                Button(
-                    onClick = onFetchLocation,
-                    enabled = !state.isLocating,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    ),
-                    shape = MaterialTheme.shapes.small,
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = 14.dp,
-                        vertical = 10.dp
-                    ),
-                    modifier = Modifier.testTag("fetch_gps_location_button")
-                ) {
-                    if (state.isLocating) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.MyLocation,
-                                contentDescription = strings.more.locateMe,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = strings.more.locateMe,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Offline Caching Confirmation
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = null,
-                    tint = successColors.success,
-                    modifier = Modifier.size(14.dp)
-                )
-                Text(
-                    text = strings.more.coordinatesCachedOffline,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
     }
 }
