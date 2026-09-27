@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.ui.localization.LocalStrings
 import com.example.ui.theme.DotShape
 import com.example.ui.theme.Space
 import com.example.ui.theme.QuranShape
@@ -429,6 +430,7 @@ fun OptionRow(
     trailing: (@Composable () -> Unit)? = null
 ) {
     val space = Space.current
+    val strings = LocalStrings.current
 
     Surface(
         color = Color.Transparent,
@@ -437,7 +439,7 @@ fun OptionRow(
             .fillMaxWidth()
             .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
             .clickable(enabled = enabled, role = Role.RadioButton, onClick = onClick)
-            .semantics { stateDescription = if (selected) "Selected" else "Not selected" }
+            .semantics { stateDescription = if (selected) strings.more.selected else strings.more.notSelected }
             .padding(vertical = space.xs)
     ) {
         Row(
@@ -498,6 +500,7 @@ fun SegmentedOptions(
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
+    val strings = LocalStrings.current
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = MaterialTheme.shapes.small,
@@ -521,7 +524,7 @@ fun SegmentedOptions(
                             onClick = { onSelect(index) }
                         )
                         .semantics {
-                            stateDescription = if (selected) "Selected" else "Not selected"
+                            stateDescription = if (selected) strings.more.selected else strings.more.notSelected
                         }
                 ) {
                     Box(
@@ -745,12 +748,14 @@ fun PillTabRow(
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = PillTabBarHeight)
+                    // `selectable` already publishes the selected/not-selected
+                    // state. An extra stateDescription here used to overwrite it
+                    // with the tab label, so TalkBack announced "Surahs, Surahs".
                     .selectable(
                         selected = selected,
                         role = Role.Tab,
                         onClick = { onSelect(index) }
                     )
-                    .semantics { stateDescription = label }
             ) {
                 Box(
                     modifier = Modifier.padding(horizontal = space.xs, vertical = space.sm),

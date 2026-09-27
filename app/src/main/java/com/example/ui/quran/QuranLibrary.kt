@@ -39,12 +39,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -130,13 +133,15 @@ fun QuranLibrary(
                 onKindChange = { referenceKind = it },
                 onSelectPage = onPageSelected,
                 onSelectJuz = onJuzSelected,
-                onSelectHizb = onHizbSelected
+                onSelectHizb = onHizbSelected,
+                onOpenReader = onOpenReader
             )
 
             LibraryTab.SEARCH -> SearchResults(
                 query = query,
                 onQueryChange = { query = it },
                 results = results,
+                selectedSurahNumber = state.selectedSurah.number,
                 onSurahSelected = onSurahSelected,
                 onOpenReader = onOpenReader
             )
@@ -232,7 +237,14 @@ private fun SurahList(
 
         items(POPULAR_SURAHS, key = { "pop$it" }) { number ->
             QuranDataSource.getSurahByNumber(number)?.let { surah ->
-                SurahRow(surah = surah, onClick = { onSelect(surah.number) })
+                SurahRow(
+                    surah = surah,
+                    selected = state.selectedSurah.number == surah.number,
+                    onClick = {
+                        onSelect(surah.number)
+                        onOpenReader()
+                    }
+                )
                 RowDivider()
             }
         }
@@ -242,7 +254,14 @@ private fun SurahList(
         }
 
         items(QuranDataSource.SURAHS, key = { it.number }) { surah ->
-            SurahRow(surah = surah, onClick = { onSelect(surah.number) })
+            SurahRow(
+                surah = surah,
+                selected = state.selectedSurah.number == surah.number,
+                onClick = {
+                    onSelect(surah.number)
+                    onOpenReader()
+                }
+            )
             RowDivider()
         }
     }
@@ -275,8 +294,7 @@ private fun ContinueReadingHero(
         shape = QuranShape.card,
         modifier = modifier
             .fillMaxWidth()
-            .clip(QuranShape.card)
-            .clickableHero(onClick)
+            .clickableHero(shape = QuranShape.card, onClick = onClick)
             .testTag("quran_continue")
     ) {
         Column(modifier = Modifier.padding(space.lg)) {
@@ -339,7 +357,12 @@ private fun ReadingProgress(reference: String, modifier: Modifier = Modifier) {
  * loudest thing in the reader header is deliberately the quietest thing here.
  */
 @Composable
-private fun SurahRow(surah: Surah, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun SurahRow(
+    surah: Surah,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false
+) {
     val space = Space.current
     val strings = LocalStrings.current
 
@@ -347,17 +370,27 @@ private fun SurahRow(surah: Surah, onClick: () -> Unit, modifier: Modifier = Mod
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
-            .clip(QuranShape.tile)
             .clickableHero(onClick)
             .padding(horizontal = space.lg, vertical = space.md)
-            .testTag("surah_${surah.number}"),
+            .testTag("surah_${surah.number}")
+            // "You are here" for the surah currently open in the reader. Without
+            // it, 114 identical rows gave no way to tell which one you had opened.
+            .semantics { stateDescription = if (selected) strings.more.nowReading else "" },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            color = if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.primaryContainer
+            },
+            contentColor = if (selected) {
+                MaterialTheme.colorScheme.onPrimary
+            } else {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            },
             shape = QuranShape.tile,
-            modifier = Modifier.size(40.dp)
+            modifier = Modifier.size(Space.current.huge)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text(
@@ -437,6 +470,7 @@ private fun ReferenceList(
     onSelectPage: (Int) -> Unit,
     onSelectJuz: (Int) -> Unit,
     onSelectHizb: (Int) -> Unit,
+    onOpenReader: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val strings = LocalStrings.current
@@ -483,9 +517,11 @@ private fun ReferenceList(
                     shape = QuranShape.pill,
                     modifier = Modifier
                         .weight(1f)
-                        .heightIn(min = 40.dp)
-                        .clip(QuranShape.pill)
-                        .clickableHero { onKindChange(entry) }
+                        .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+                        .clickableHero(
+                            onClick = { onKindChange(entry) },
+                            shape = QuranShape.pill
+                        )
                 ) {
                     Box(
                         modifier = Modifier.padding(vertical = space.sm),
@@ -531,6 +567,7 @@ private fun ReferenceList(
                             ReferenceKind.JUZ -> onSelectJuz(number)
                             ReferenceKind.HIZB -> onSelectHizb(number)
                         }
+                        onOpenReader()
                     }
                 )
                 RowDivider()
@@ -630,6 +667,7 @@ private fun SearchResults(
     query: String,
     onQueryChange: (String) -> Unit,
     results: List<Ayah>,
+    selectedSurahNumber: Int,
     onSurahSelected: (Int) -> Unit,
     onOpenReader: () -> Unit,
     modifier: Modifier = Modifier
@@ -689,7 +727,14 @@ private fun SearchResults(
                     SectionLabel(strings.more.surahsFound.format(matching.size))
                 }
                 items(matching, key = { "s${it.number}" }) { surah ->
-                    SurahRow(surah = surah, onClick = { onSurahSelected(surah.number) })
+                    SurahRow(
+                        surah = surah,
+                        selected = selectedSurahNumber == surah.number,
+                        onClick = {
+                            onSurahSelected(surah.number)
+                            onOpenReader()
+                        }
+                    )
                     RowDivider()
                 }
             }
@@ -796,7 +841,7 @@ private fun SavedList(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(QuranShape.tile)
-                    .clickableHero { onSelect(bookmark) }
+                    .clickableHero(onClick = { onSelect(bookmark) })
                     .padding(horizontal = space.lg, vertical = space.md),
                 verticalAlignment = Alignment.Top
             ) {
@@ -837,10 +882,22 @@ private fun SavedList(
     }
 }
 
-/** Tappable row. 48dp minimum via [layoutMetrics], with a real button role. */
-private fun Modifier.clickableHero(onClick: () -> Unit): Modifier = this
-    .clip(QuranShape.tile)
-    .clickable(onClick = onClick)
+/**
+ * Tappable row for every card-shaped surface on this screen.
+ *
+ * The button role is real now. Without it, TalkBack announced 800+ rows as
+ * plain text and gave no hint that they were actions.
+ *
+ * The ripple shape is [QuranShape.tile]. Callers whose surface is a different
+ * shape (the pill chips, the hero card) pass the matching shape, so the ripple
+ * is not a 12dp-rectangle drawn inside a pill or a 20dp card.
+ */
+private fun Modifier.clickableHero(
+    onClick: () -> Unit,
+    shape: Shape = QuranShape.tile
+): Modifier = this
+    .clip(shape)
+    .clickable(role = Role.Button, onClick = onClick)
 
 @Composable
 private fun RowDivider() {
