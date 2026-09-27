@@ -329,7 +329,6 @@ private fun SalahApp(viewModel: SalahViewModel) {
                         onCustomLocationSave = viewModel::setCustomLocation,
                         onTranslationSelect = viewModel::setTranslationEdition,
                         onRecomputeEphemerisCache = viewModel::recomputeEphemerisCache,
-                        onClearAudioCache = viewModel::clearAudioCache,
                         onResetAllSettings = viewModel::resetAllSettings,
                         onLivingSkyChange = viewModel::setLivingSkyEnabled
                     )

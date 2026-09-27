@@ -747,13 +747,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         )
     }
 
-    fun clearAudioCache() {
-        audioPlayer.stop()
-        _uiState.value = _uiState.value.copy(
-            lastChecked = "Audio cache cleared (0 KB)"
-        )
-    }
-
     fun resetAllSettings() {
         setCalculationMethod(CalculationMethod.MOROCCO_MINISTRY)
         setMadhhab(Madhhab.STANDARD)

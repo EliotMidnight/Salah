@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
@@ -38,9 +36,9 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.model.CalculationMethod
 import com.example.data.model.Madhhab
@@ -157,7 +155,6 @@ fun SettingsScreen(
     onCustomLocationSave: (String, Double, Double, Double) -> Unit = { _, _, _, _ -> },
     onTranslationSelect: (String) -> Unit = {},
     onRecomputeEphemerisCache: () -> Unit = {},
-    onClearAudioCache: () -> Unit = {},
     onResetAllSettings: () -> Unit = {},
     onLivingSkyChange: (Boolean) -> Unit = {},
     onFetchLocation: () -> Unit = {},
@@ -515,6 +512,94 @@ fun SettingsScreen(
                         }
                     )
                 }
+
+            RowDivider()
+
+            // Free entry. The callback existed and was wired from MainActivity
+            // but nothing ever called it, so the city list plus GPS were the only
+            // ways to set a location - and 16 preset cities is not enough for
+            // anyone who does not live in one of them. The seven orphaned
+            // strings and imports that were already in the file are what this
+            // form was always meant to consume.
+            var customName by rememberSaveable { mutableStateOf("") }
+            var customLat by rememberSaveable { mutableStateOf("") }
+            var customLng by rememberSaveable { mutableStateOf("") }
+            var customError by rememberSaveable { mutableStateOf<String?>(null) }
+
+            SectionHeader(strings.more.customLocation)
+            OutlinedTextField(
+                value = customName,
+                onValueChange = { customName = it; customError = null },
+                label = { Text(strings.more.nameField) },
+                singleLine = true,
+                isError = customError == strings.more.nameRequired,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(space.sm))
+            Row(horizontalArrangement = Arrangement.spacedBy(space.sm)) {
+                OutlinedTextField(
+                    value = customLat,
+                    onValueChange = { customLat = it; customError = null },
+                    label = { Text(strings.more.latitudeField) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Next
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = customLng,
+                    onValueChange = { customLng = it; customError = null },
+                    label = { Text(strings.more.longitudeField) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Done
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            if (customError != null) {
+                Spacer(Modifier.height(space.xs))
+                Text(
+                    text = customError.orEmpty(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            Spacer(Modifier.height(space.sm))
+            OutlinedButton(
+                onClick = {
+                    // Validate before committing. Bounds are checked here rather
+                    // than in the ViewModel so the user is told what is wrong
+                    // next to the field, instead of the app silently keeping a
+                    // location it cannot calculate with.
+                    val lat = customLat.trim().toDoubleOrNull()
+                    val lng = customLng.trim().toDoubleOrNull()
+                    val name = customName.trim()
+                    when {
+                        name.isEmpty() ->
+                            customError = strings.more.nameRequired
+                        lat == null || lng == null ||
+                            lat !in -90.0..90.0 || lng !in -180.0..180.0 ->
+                            customError = strings.more.invalidCoordinates
+                        else -> {
+                            onCustomLocationSave(name, lat, lng, 0.0)
+                            customName = ""; customLat = ""; customLng = ""
+                            customError = null
+                            sheet = null
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+            ) {
+                Text(strings.more.actionSave, style = MaterialTheme.typography.labelLarge)
+            }
         }
 
         Sheet.METHOD -> OptionSheet(
@@ -864,24 +949,23 @@ fun SettingsScreen(
             title = strings.more.storageLabel,
             onDismiss = { sheet = null }
         ) {
+            // Read-only. The "Clear audio cache" button is gone.
+            //
+            // QuranAudioPlayer streams from everyayah.com through MediaPlayer and
+            // keeps nothing on disk; when the stream cannot be prepared it falls
+            // back to a synthesised chime. There is no cache. The button deleted
+            // nothing, reported a hardcoded "0 KB" as though it had measured
+            // something, and wrote that into `lastChecked` - the field the
+            // Ephemeris row and the "Last checked" detail both display - so
+            // pressing it made the app claim its prayer times had been verified
+            // when they had not. A control that reports a fabricated result is
+            // worse than no control.
             DetailList(
                 items = listOf(
                     strings.sectionQuran to strings.more.corpusSummary,
-                    strings.more.storageLabel to "On device"
+                    strings.more.audioSourceLabel to strings.more.audioStreamedNotCached
                 )
             )
-            Spacer(Modifier.height(space.md))
-            OutlinedButton(
-                onClick = {
-                    onClearAudioCache()
-                    sheet = null
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
-            ) {
-                Text(strings.more.clearAudioCache, style = MaterialTheme.typography.labelLarge)
-            }
         }
 
         Sheet.COMPASS -> OptionSheet(
