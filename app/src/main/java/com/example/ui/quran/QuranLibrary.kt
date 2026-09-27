@@ -28,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -159,6 +160,12 @@ fun QuranLibrary(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
+                // A scrim behind the floating pills. Without it the list scrolled
+                // visibly through the 8dp gaps between pills and the 16dp side
+                // margins: unselected pills are `surface` on a `background` page,
+                // two different colours, and the docstring's promise that
+                // "nothing can slide underneath" only held at rest.
+                .background(MaterialTheme.colorScheme.background)
         ) {
             Spacer(Modifier.height(topInset()))
             PillTabRow(
@@ -191,9 +198,18 @@ private fun topInset(): Dp {
     return with(density) { top.toDp() } + Space.current.sm
 }
 
-/** The height every list reserves so its first row clears the floating tabs. */
+/**
+ * The height every list reserves so its first row clears the floating tabs.
+ *
+ * [PillTabBarHeight] is only the pill. The row also carries
+ * `padding(vertical = space.sm)` above and below, so the real occupied height
+ * is PillTabBarHeight + 2 * sm. Reserving the bare pill height silently ate
+ * the whole gap, which left the Continue Reading card, the search field and the
+ * first bookmark row flush against the pills while a section label further
+ * down got its full 16dp.
+ */
 @Composable
-private fun tabBarReserve(): Dp = PillTabBarHeight + Space.current.lg
+private fun tabBarReserve(): Dp = PillTabBarHeight + Space.current.sm * 2 + Space.current.lg
 
 // ---------------------------------------------------------------------------
 // Surahs
@@ -492,7 +508,14 @@ private fun ReferenceList(
             value = query,
             onValueChange = onQueryChange,
             onClear = { onQueryChange("") },
-            placeholder = strings.more.search,
+            // "Search" was the placeholder over a filter that accepts digits
+            // only, so it promised more than it did. Say which kind of number
+            // is wanted; searchPages already existed and was never used.
+            placeholder = when (kind) {
+                ReferenceKind.PAGE -> strings.more.searchPages
+                ReferenceKind.JUZ -> strings.more.searchJuz
+                ReferenceKind.HIZB -> strings.more.searchHizb
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = space.lg)
@@ -550,8 +573,13 @@ private fun ReferenceList(
         if (filtered.isEmpty()) {
             EmptyState(
                 title = strings.more.noSearchResults,
-                message = query,
-                icon = Icons.Default.Search
+                message = strings.more.noResultsMessage,
+                icon = Icons.Default.Search,
+                action = {
+                    TextButton(onClick = { onQueryChange("") }) {
+                        Text(strings.more.clearSearch)
+                    }
+                }
             )
             return@Column
         }
@@ -592,7 +620,10 @@ private fun ReferenceRow(
         ReferenceKind.PAGE -> {
             val surah = QuranDataSource.surahForPage(number)
             val ayah = QuranDataSource.firstAyahOnPage(number)
-            title = "${strings.more.pageWord} $number"
+            // The numeral already heads the row, so the title is the kind, not
+            // the kind plus the number again. This used to render
+            // "1 | Page 1 | Al-Fatihah - 1:1" - the number three times.
+            title = strings.more.pageWord
             detail = surah?.let {
                 "${it.englishName} · ${strings.more.verseReference.format(it.number, ayah?.ayahNumber ?: 1)}"
             }
@@ -600,7 +631,7 @@ private fun ReferenceRow(
 
         ReferenceKind.JUZ -> {
             val ayah = QuranDataSource.firstAyahForJuz(number)
-            title = strings.more.juzOf.format(number)
+            title = strings.more.juzWord
             detail = ayah?.let {
                 "${QuranDataSource.getSurahByNumber(it.surahNumber)?.englishName.orEmpty()} · " +
                     strings.more.verseReference.format(it.surahNumber, it.ayahNumber)
@@ -609,17 +640,13 @@ private fun ReferenceRow(
 
         ReferenceKind.HIZB -> {
             val ayah = QuranDataSource.firstAyahForHizb(number)
-            title = strings.more.hizbOf.format(number)
-            detail = ayah?.let {
-                strings.more.hizbInJuz.format(
-                    it.juzNumber,
-                    if (it.hizbQuarter % 2 == 1) {
-                        strings.more.hizbHalfFirst
-                    } else {
-                        strings.more.hizbHalfSecond
-                    }
-                )
-            }
+            title = strings.more.hizbWord
+            // No "1st half" / "2nd half" here. The row stands for a whole hizb,
+            // and firstAyahForHizb always resolves to the hizb's opening ayah -
+            // whose quarter index is 4(n-1)+1, i.e. always odd. Every row
+            // therefore claimed "1st half" and the 2nd-half string was
+            // unreachable. Saying just the juz is true and sufficient.
+            detail = ayah?.let { strings.more.juzOf.format(it.juzNumber) }
         }
     }
 
@@ -713,10 +740,18 @@ private fun SearchResults(
         }
 
         if (matching.isEmpty() && results.isEmpty()) {
+            // The body used to be the raw query, which told the user nothing
+            // about what to do next, and EmptyState's action slot was never used
+            // anywhere in the module - so both no-results screens were dead ends.
             EmptyState(
                 title = strings.more.noSearchResults,
-                message = query,
-                icon = Icons.Default.Search
+                message = strings.more.noResultsMessage,
+                icon = Icons.Default.Search,
+                action = {
+                    TextButton(onClick = { onQueryChange("") }) {
+                        Text(strings.more.clearSearch)
+                    }
+                }
             )
             return@Column
         }
@@ -867,15 +902,10 @@ private fun SavedList(
                         )
                     }
                 }
-                Icon(
-                    painter = painterResource(R.drawable.salah_quran_bookmark),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .padding(start = space.sm)
-                        .size(20.dp)
-                        .clearAndSetSemantics { }
-                )
+                // The trailing bookmark glyph is gone. Every row in the *bookmark*
+                // list carried one, where it is true by definition: 20dp of
+                // nothing per row, and the only icon in the list, so it pulled
+                // the eye to the least informative element on the row.
             }
             RowDivider()
         }

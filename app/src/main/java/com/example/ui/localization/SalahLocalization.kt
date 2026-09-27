@@ -422,6 +422,10 @@ data class UiStringsMore(
         "Preparing the text. If this does not finish, go back and pick the surah again.",
     val noSurahMatchMessage: String =
         "No surah matches that. Try a number, or part of a name.",
+    val noResultsMessage: String =
+        "Nothing matched. Try a different spelling, or a shorter query.",
+    val searchJuz: String = "Jump to juz number",
+    val searchHizb: String = "Jump to hizb number",
     val juzLabel: String = "Juz\u2019",
     val selectLayoutTitle: String = "Reading layout",
     val selectLayoutSubtitle: String = "Per verse suits study; continuous suits reading straight through.",
