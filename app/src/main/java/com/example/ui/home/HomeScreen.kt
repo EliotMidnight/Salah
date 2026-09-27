@@ -767,7 +767,14 @@ private fun PrayerRow(
                     tint = if (isDone) {
                         semantic.success
                     } else {
-                        MaterialTheme.colorScheme.outline
+                        // onSurfaceVariant, not outline. `outline` is tuned for
+                        // dividers and unselected boundaries and measured 2.89:1
+                        // against `surface` in dark mode - under the 3:1 that
+                        // WCAG 1.4.11 requires of a control boundary. This circle
+                        // is the row's primary control, not decoration, so it now
+                        // uses the role Material's own Checkbox uses for its
+                        // unchecked border: 7.35:1 dark, 7.58:1 light.
+                        MaterialTheme.colorScheme.onSurfaceVariant
                     }
                 )
             }

@@ -171,7 +171,11 @@ fun ActionRow(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.outline,
+                    // onSurfaceVariant, not outline. `outline` measures 2.89:1
+                    // against `surface` in dark mode, and this chevron is the
+                    // only signal that the row opens something. M3 tints list
+                    // chevrons with onSurfaceVariant for the same reason.
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .size(20.dp)
                         .clearAndSetSemantics { }
@@ -245,7 +249,7 @@ fun EmptyState(
             val iconModifier = Modifier
                 .size(32.dp)
                 .clearAndSetSemantics { }
-            val iconTint = MaterialTheme.colorScheme.outline
+            val iconTint = MaterialTheme.colorScheme.onSurfaceVariant
             val vector = icon
             if (painter != null) {
                 Icon(
