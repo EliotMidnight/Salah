@@ -54,6 +54,7 @@ import com.example.ui.components.DetailRow
 import com.example.ui.components.OptionSheet
 import com.example.ui.components.RowDivider
 import com.example.ui.components.ScreenScaffold
+import com.example.ui.home.DaySelector
 import com.example.ui.components.SectionGroup
 import com.example.ui.components.SectionHeader
 import com.example.ui.localization.LocalStrings
@@ -80,23 +81,20 @@ fun PrayerScreen(
     state: SalahUiState,
     onMethodChange: (CalculationMethod) -> Unit,
     onMadhhabChange: (Madhhab) -> Unit,
+    onSelectDate: (LocalDate?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
     val strings = LocalStrings.current
 
-    // Null means "today", so the screen keeps following the current day instead of
-    // freezing on whatever date it was built. It used to hold a concrete date
-    // seeded at first composition, so an app left open overnight still called
-    // yesterday "today" - and highlighted yesterday's row in the month table.
-    // A String because that is what rememberSaveable can persist.
-    var selectedDateText by rememberSaveable { mutableStateOf<String?>(null) }
-    // The schedule carries the date the app is showing, and the ViewModel advances
-    // it when midnight passes.
+    // The selected day lives in the ViewModel, not in this screen. This is the
+    // app's only date switcher, and the Today page follows whatever it picks -
+    // two independent switches were two answers to "which day is this".
+    //
+    // Null means "today", so the app keeps following the current day instead of
+    // freezing on whatever date it was built.
     val today = state.todayPrayerTimes?.date ?: LocalDate.now()
-    val selectedDate = remember(selectedDateText, today) {
-        selectedDateText?.let { LocalDate.parse(it) } ?: today
-    }
+    val selectedDate = state.selectedDate ?: today
     var showMethodSheet by rememberSaveable { mutableStateOf(false) }
     var showTrustSheet by rememberSaveable { mutableStateOf(false) }
 
@@ -138,9 +136,9 @@ fun PrayerScreen(
                     DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault())
                 ),
                 todayLabel = strings.todayBtn,
-                onPrevious = { selectedDateText = selectedDate.minusDays(1).toString() },
-                onNext = { selectedDateText = selectedDate.plusDays(1).toString() },
-                onToday = { selectedDateText = null }
+                onPrevious = { onSelectDate(selectedDate.minusDays(1)) },
+                onNext = { onSelectDate(selectedDate.plusDays(1)) },
+                onToday = { onSelectDate(null) }
             )
 
             SectionHeader(if (isToday) strings.todaysTimes else strings.prayerTimesHeader)
@@ -242,7 +240,7 @@ fun PrayerScreen(
                 method = state.method,
                 madhhab = state.madhhab,
                 adjustments = state.adjustments,
-                onSelectDate = { selectedDateText = it.toString() }
+                onSelectDate = onSelectDate
             )
         }
     }
@@ -323,72 +321,6 @@ fun PrayerScreen(
 }
 
 private fun signed(minutes: Int): String = if (minutes >= 0) "+$minutes" else "$minutes"
-
-/** Previous / next day, with the current day always one tap away. */
-@Composable
-private fun DaySelector(
-    selectedDate: LocalDate,
-    isToday: Boolean,
-    hijriLabel: String,
-    gregorianLabel: String,
-    todayLabel: String,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-    onToday: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val space = Space.current
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = onPrevious, modifier = Modifier.testTag("day_prev")) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .clip(MaterialTheme.shapes.small)
-                .clickable(enabled = !isToday, onClick = onToday)
-                .padding(vertical = space.xs)
-                .semantics { contentDescription = "$gregorianLabel, $hijriLabel" },
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = gregorianLabel,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = if (isToday) "$hijriLabel · ${todayLabel.lowercase()}" else hijriLabel,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        IconButton(onClick = onNext, modifier = Modifier.testTag("day_next")) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
 
 /** One prayer time. The next prayer is marked by weight and a dot, not a badge. */
 @Composable

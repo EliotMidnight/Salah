@@ -68,6 +68,18 @@ data class SalahUiState(
     val skyPeriod: SkyPeriod = SkyPeriod.DHUHR_MIDDAY,
     val celestialProgress: Float = 0.5f,
     val hijriDate: HijriDate? = null,
+    /**
+     * The day the Prayer times are being shown for, or null for today.
+     *
+     * Shared, and deliberately not per-screen: there is one date switcher in the
+     * app, on the Prayer tab, and the Today page follows it. Two switches meant
+     * two answers to "which day am I looking at", and they drifted apart the
+     * moment you used one and not the other.
+     *
+     * Null rather than a concrete date so an app left open overnight still calls
+     * today today - the ViewModel advances `todayPrayerTimes` at midnight.
+     */
+    val selectedDate: LocalDate? = null,
     val prayerLog: PrayerLogEntity = PrayerLogEntity(LocalDate.now().toString()),
     val continueReading: ContinueReadingEntity = ContinueReadingEntity(),
     val bookmarks: List<BookmarkEntity> = emptyList(),
@@ -870,6 +882,20 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             repository.saveContinueReading(entity)
         }
     }
+
+    /**
+     * Show prayer times for [date], or for today when it is null.
+     *
+     * Purely a selection: the timetable is already computed on demand by
+     * [com.example.engine.PrayerCalculationEngine] for any date, so this changes
+     * what the screens ask for and nothing else.
+     */
+    fun setSelectedDate(date: LocalDate?) {
+        _uiState.value = _uiState.value.copy(selectedDate = date)
+    }
+
+    /** Back to today, whatever day is currently selected. */
+    fun clearSelectedDate() = setSelectedDate(null)
 
     fun jumpToContinueReading() {
         val cr = _uiState.value.continueReading

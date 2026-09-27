@@ -240,10 +240,41 @@ data class UiStrings(
      * exactly why none of them could ever be translated. They are English
      * defaults; add a per-language override as each is translated.
      */
-    val more: UiStringsMore = UiStringsMore()
+    val more: UiStringsMore = UiStringsMore(),
+    val clock: ClockStrings = ClockStrings()
 )
 
 /** Copy the redesign added, kept in its own class to stay under the JVM method limit. */
+/**
+ * Strings for the clock page: the 24-hour dial, the windows a worshipper
+ * watches for, and the day pager.
+ *
+ * Separate from [UiStringsMore] on purpose. That class is at 247 fields and the
+ * JVM refuses a constructor with more than 255 parameters, so it cannot absorb
+ * another screen's worth. A screen that needs its own copy should get its own
+ * class rather than pushing the shared one over the edge.
+ */
+data class ClockStrings(
+    val tapForFullClock: String = "Tap for the full clock",
+    val tapToCloseClock: String = "Tap to close",
+    val nextPrayerPrefix: String = "Next",
+    val duhaUntil: String = "Duha until %s",
+    val qaylulaUntil: String = "Qaylula until %s",
+    val jumuahDuaUntil: String = "Jumu'ah dua until Maghrib",
+    val firstThirdUntil: String = "1st third until %s",
+    val lastThirdUntilFajr: String = "Last third until Fajr",
+    val offsetToday: String = "Today",
+    val offsetTomorrow: String = "Tomorrow",
+    val offsetYesterday: String = "Yesterday",
+    val offsetDaysAhead: String = "%d days ahead",
+    val offsetDaysBack: String = "%d days back",
+    val daySummaryTitle: String = "Prayer log, alerts and reading",
+    val fullHijriMonth: String = "Full Hijri month",
+    val openDaySummary: String = "Open day summary",
+    val previousMonth: String = "Previous month",
+    val nextMonth: String = "Next month"
+)
+
 data class UiStringsMore(
     val actionCancel: String = "Cancel",
     val actionSave: String = "Save",
@@ -441,6 +472,7 @@ data class UiStringsMore(
         "No surah matches that. Try a number, or part of a name.",
     val noResultsMessage: String =
         "Nothing matched. Try a different spelling, or a shorter query.",
+    val versesLabel: String = "Verses",
     val searchJuz: String = "Jump to juz number",
     val searchHizb: String = "Jump to hizb number",
     val alertAdhan: String = "Adhan",
@@ -485,7 +517,7 @@ data class UiStringsMore(
     val translationCreditLine: String = "English — Saheeh International",
     val tapVerseHint: String = "Tap a verse to inspect it",
     val searchVersesHint: String = "Search Arabic text or English translation...",
-    val translationNotAvailable: String = "Translation not available",
+    val translationNotAvailable: String = "Translation not available"
 )
 
 val EnglishStrings = UiStrings(
@@ -2432,6 +2464,21 @@ val UiStrings.ayahLabel: String
  * Quran reader strings (nour-style reading experience).
  * English defaults; other languages fall back to English until translated.
  */
+
+/**
+ * Is the interface in Arabic?
+ *
+ * The Today page's headline follows the interface language, and Arabic leads
+ * only when the reader chose Arabic - so this needs to answer that question, not
+ * "is this right-to-left", because Urdu is also RTL and has its own name for a
+ * prayer that should lead in Urdu.
+ */
+fun isArabicInterface(language: String): Boolean =
+    AppLanguage.entries.firstOrNull {
+        it.code == language ||
+            it.englishName.equals(language, ignoreCase = true) ||
+            it.nativeName == language
+    }?.code == "ar"
 
 fun UiStrings.prayerName(prayer: com.example.data.model.Prayer): String {
     return when (prayer) {

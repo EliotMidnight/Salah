@@ -168,20 +168,75 @@ Release notes:
 - Notifications require the runtime `POST_NOTIFICATIONS` grant (Android 13+);
   prayer times themselves always work without it.
 
+## Today
+
+The Today page is a port of the [athan-pwa](https://github.com/klsoen/athan-pwa)
+home page: one dominant prayer name, the countdown on a hairline rule, the day's
+times as a dotted-leader list, and a tap anywhere that opens the whole day as a
+24-hour clock with Maghrib at the top.
+
+- `ui/home/TodayScreen.kt` — the page, both views, and the day pager.
+- `ui/home/ClockGeometry.kt` — the dial's angles, arcs and windows. Pure, and
+  unit-tested in `ClockGeometryTest`, because a misplaced prayer still looks like
+  a clock and a reversed arc still looks like an arc.
+- `ui/home/CelestialBody.kt` — the sun or moon above the prayer name, glowing in
+  its own colour and *placed* by the sky it is in. The sun's altitude and
+  azimuth come from `QiblaEngine` for the user's location and time, so it rises
+  on the correct side and crosses at the actual solar noon; its colour is the same
+  `AstronomicalSky` altitude ramp that tints the sky, so it reddens at sunset for
+  the same reason the horizon does. The moon's position is *derived from its
+  phase* — new moon rides with the sun, full moon is opposite — because the app
+  does not compute lunar ephemeris and a prayer app should not pretend to. Its
+  phase is exact. On a light page the disc is mixed toward warm ink rather than
+  shown at its glow value, because a cream sun on cream paper measures 1.1:1.
+- `ui/home/HijriMonthSheet.kt` — the whole Hijri month, each cell carrying both
+  the Hijri and Gregorian number. Month length is found by walking outward and
+  asking the engine, not by arithmetic: a Hijri month is 29 or 30 days and
+  guessing puts a day in two months or none.
+- `ui/home/DaySelector.kt` — the date switcher, shared by the Prayer tab and
+  Today.
+
+The headline is the prayer's name **in the language the app is set to**, set in
+Kalam — a handwriting face bundled under the SIL OFL
+(`app/src/main/assets/kalam_OFL.txt`) — with the Arabic underneath as a subtitle.
+Arabic leads only when the reader chose Arabic: a headline in a language you did
+not pick is decoration, and it keeps the serif because Kalam has no Arabic
+glyphs. The prayer *names* come from the same dictionary the rest of the app
+uses, so the list below the headline speaks the same language.
+
+The Hijri month sheet pages by whole Hijri months, walking outward and asking the
+engine where each day lands rather than stepping 29 or 30 days - either of those
+drifts, and lands in the wrong month within a year.
+
+The Quran library has no top bar and no tab row. Two floating controls sit in the
+top-right corner: search, which expands in place into a field carrying the
+Verses/Page/Juz'/Hizb filters, and bookmarks. Prayer is not in the bottom dock -
+four tabs, and the Prayer screen is reached from Settings.
+- `ui/compose/CelestialClock.kt` — the dial and its labels.
+
+The date lives in `SalahUiState.selectedDate` and is switched on the **Prayer**
+tab. It is the app's only date switcher; Today follows it. Two switches meant two
+answers to "which day am I looking at", and they drifted apart the moment you used
+one and not the other.
+
+The webapp's nine accent themes and its Google Fonts are **not** ported: the page
+reads from the app's Material light/dark scheme so it sits with every other
+screen, and the display serif is the system one. The webapp's own source is
+checked out alongside this project at `../athan-pwa` for reference.
+
 ## Accessibility
 
 - **Reduced motion**: when the system animation scale is 0 (*Remove animations* /
   developer setting), the living sky renders the same scene statically — the
-  twinkling starfield, drifting clouds, sun corona and ray rotation all stop
+  twinkling starfield, sun corona and ray rotation all stop
   looping, and every screen transition collapses to an instant change. This
   matters more here than in most apps, because large-area, slow, full-screen
   movement is exactly the pattern that triggers vestibular symptoms. See
   `SalahReduceMotion` in `ui/theme/Motion.kt`; every spec routes through
   `ExpressiveMotion.duration(...)`.
-- **Adaptive text over the sky**: text drawn on the living sky picks black or
-  white per element by sampling the rendered background and computing the WCAG
-  contrast ratio, so the countdown stays legible at every hour
-  (`AdaptiveSkyText.kt`, unit-tested).
+- **Reduced motion on the clock page**: the sun and moon's arrival and breathing
+  glow, and the clock hand's entry sweep, all park into a single static frame at
+  animation scale 0. The 24-hour dial is legible without any of it.
 - **Touch targets** are 48 dp minimum; layouts use wrapping rows and bounded
   content widths so they survive large font scales and small screens.
 - **RTL** is supported across all 11 languages.

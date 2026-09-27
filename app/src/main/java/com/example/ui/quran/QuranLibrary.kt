@@ -1,6 +1,15 @@
 package com.example.ui.quran
 
 import androidx.compose.foundation.background
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.example.ui.theme.Motion
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +32,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -71,20 +82,29 @@ import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
 import kotlinx.coroutines.delay
 
-/** The four things you can do from the Quran library. */
-private enum class LibraryTab { SURAHS, REFERENCE, SEARCH, SAVED }
+/** What the library is showing. The pills are gone; this is now all there is. */
+private enum class LibraryView { SURAHS, SEARCH, SAVED }
 
-/** Which numbering scheme the Reference tab is listing. */
+/** Which numbering scheme the reference filters are browsing. */
 private enum class ReferenceKind { PAGE, JUZ, HIZB }
 
 /**
  * Browse.
  *
- * Four pill tabs float over the content rather than sitting in a Material band,
- * and the first block of every list reserves their height so nothing can slide
- * underneath. The Continue Reading card is the only accent-filled block on the
- * page and carries the heaviest type in the screen, which is what gives the
- * library a focal point instead of 114 equal rows.
+ * There is no top bar and no tab row. Two floating controls sit in the top-right
+ * corner - search and bookmarks - and nothing else, because the page has three
+ * states and a row of four pills was three more controls than that needs.
+ *
+ * The search control is a button until you want it, and then it is a field: the
+ * same button expands in place rather than opening a screen, so the page never
+ * navigates away from the list you were reading. The three quick filters -
+ * page, juz', hizb - live *inside* the expanded field, which is where the old
+ * Reference tab's only job was. Choosing one browses that numbering; choosing
+ * none searches verses.
+ *
+ * The Continue Reading card is the only accent-filled block on the page and
+ * carries the heaviest type in the screen, which is what gives the library a
+ * focal point instead of 114 equal rows.
  */
 @Composable
 fun QuranLibrary(
@@ -99,15 +119,17 @@ fun QuranLibrary(
     val space = Space.current
     val strings = LocalStrings.current
 
-    var tab by rememberSaveable { mutableStateOf(LibraryTab.SURAHS) }
+    var view by rememberSaveable { mutableStateOf(LibraryView.SURAHS) }
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
-    var referenceKind by rememberSaveable { mutableStateOf(ReferenceKind.PAGE) }
+    // Null means "search the verses". A kind means "browse that numbering".
+    var referenceKind by rememberSaveable { mutableStateOf<ReferenceKind?>(null) }
 
     // Verse search runs over all 6,236 verses. Debounced, because the previous
     // version filtered on every keystroke.
     var results by remember { mutableStateOf<List<Ayah>>(emptyList()) }
-    LaunchedEffect(query) {
-        if (query.isBlank()) {
+    LaunchedEffect(query, referenceKind) {
+        if (query.isBlank() || referenceKind != null) {
             results = emptyList()
             return@LaunchedEffect
         }
@@ -115,79 +137,117 @@ fun QuranLibrary(
         results = QuranDataSource.searchAyahs(query).take(50)
     }
 
+    val listInset = contentTopInset(searchOpen)
+
+    val closeSearch = {
+        searchOpen = false
+        referenceKind = null
+        query = ""
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        when (tab) {
-            LibraryTab.SURAHS -> SurahList(
-                state = state,
-                onSelect = onSurahSelected,
-                onOpenReader = onOpenReader
-            )
-
-            LibraryTab.REFERENCE -> ReferenceList(
-                kind = referenceKind,
-                query = query,
-                onQueryChange = { query = it },
-                onKindChange = { referenceKind = it },
-                onSelectPage = onPageSelected,
-                onSelectJuz = onJuzSelected,
-                onSelectHizb = onHizbSelected,
-                onOpenReader = onOpenReader
-            )
-
-            LibraryTab.SEARCH -> SearchResults(
-                query = query,
-                onQueryChange = { query = it },
-                results = results,
-                selectedSurahNumber = state.selectedSurah.number,
-                onSurahSelected = onSurahSelected,
-                onOpenReader = onOpenReader
-            )
-
-            LibraryTab.SAVED -> SavedList(
+        when {
+            view == LibraryView.SAVED -> SavedList(
+                contentTopInset = listInset,
                 bookmarks = state.bookmarks,
                 onSelect = {
                     onSurahSelected(it.surahNumber)
                     onOpenReader()
                 }
             )
+
+            searchOpen && referenceKind != null -> ReferenceList(
+                kind = referenceKind!!,
+                query = query,
+                contentTopInset = listInset,
+                onSelectPage = onPageSelected,
+                onSelectJuz = onJuzSelected,
+                onSelectHizb = onHizbSelected,
+                onOpenReader = onOpenReader
+            )
+
+            searchOpen -> SearchResults(
+                query = query,
+                onQueryChange = { query = it },
+                contentTopInset = listInset,
+                results = results,
+                selectedSurahNumber = state.selectedSurah.number,
+                onSurahSelected = onSurahSelected,
+                onOpenReader = onOpenReader
+            )
+
+            else -> SurahList(
+                state = state,
+                contentTopInset = listInset,
+                onSelect = onSurahSelected,
+                onOpenReader = onOpenReader
+            )
         }
 
+        // The two controls. Right-aligned, floating, and the only things in the
+        // top corner - the page's own header used to be a Material band above a
+        // row of pills, which is two layers of chrome around a list.
         Column(
             modifier = Modifier
-                .align(Alignment.TopCenter)
+                .align(Alignment.TopEnd)
                 .fillMaxWidth()
-                // A scrim behind the floating pills. Without it the list scrolled
-                // visibly through the 8dp gaps between pills and the 16dp side
-                // margins: unselected pills are `surface` on a `background` page,
-                // two different colours, and the docstring's promise that
-                // "nothing can slide underneath" only held at rest.
-                .background(MaterialTheme.colorScheme.background)
+                .padding(top = topInset())
+                .padding(horizontal = space.lg),
+            horizontalAlignment = Alignment.End
         ) {
-            Spacer(Modifier.height(topInset()))
-            PillTabRow(
-                tabs = listOf(
-                    strings.more.surahsTab,
-                    strings.more.referenceTab,
-                    strings.more.search,
-                    if (state.bookmarks.isEmpty()) {
-                        strings.bookmarksTab
-                    } else {
-                        "${strings.bookmarksTab} ${state.bookmarks.size}"
-                    }
-                ),
-                selectedIndex = tab.ordinal,
-                onSelect = { tab = LibraryTab.entries[it] },
-                modifier = Modifier.testTag("quran_tabs")
-            )
+            AnimatedVisibility(
+                visible = searchOpen,
+                enter = fadeIn(tween(Motion.duration(180))) +
+                    expandHorizontally(
+                        expandFrom = Alignment.End,
+                        animationSpec = tween(Motion.duration(240))
+                    ),
+                exit = fadeOut(tween(Motion.duration(120))) +
+                    shrinkHorizontally(
+                        shrinkTowards = Alignment.End,
+                        animationSpec = tween(Motion.duration(200))
+                    )
+            ) {
+                ExpandedSearchBar(
+                    query = query,
+                    onQueryChange = { query = it },
+                    referenceKind = referenceKind,
+                    onKindChange = { referenceKind = it },
+                    onClose = closeSearch
+                )
+            }
+
+            if (!searchOpen) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    FloatingCircleButton(
+                        icon = Icons.Default.BookmarkBorder,
+                        contentDescription = strings.bookmarksTab,
+                        onClick = { view = LibraryView.SAVED },
+                        badge = state.bookmarks.size,
+                        selected = view == LibraryView.SAVED,
+                        testTag = "quran_bookmark"
+                    )
+                    Spacer(Modifier.width(space.sm))
+                    FloatingCircleButton(
+                        icon = Icons.Default.Search,
+                        contentDescription = strings.more.search,
+                        onClick = {
+                            view = LibraryView.SURAHS
+                            searchOpen = true
+                        },
+                        testTag = "quran_search"
+                    )
+                }
+            }
         }
     }
 }
 
-/** Status bar plus any display cutout, so the floating tabs clear both. */
+/** Status bar plus any display cutout, so the floating controls clear both. */
 @Composable
 private fun topInset(): Dp {
     val density = LocalDensity.current
@@ -199,25 +259,197 @@ private fun topInset(): Dp {
 }
 
 /**
- * The height every list reserves so its first row clears the floating tabs.
+ * A circular floating control, with an optional count badge.
  *
- * [PillTabBarHeight] is only the pill. The row also carries
- * `padding(vertical = space.sm)` above and below, so the real occupied height
- * is PillTabBarHeight + 2 * sm. Reserving the bare pill height silently ate
- * the whole gap, which left the Continue Reading card, the search field and the
- * first bookmark row flush against the pills while a section label further
- * down got its full 16dp.
+ * `surfaceContainerHigh` on a `background` page rather than a Material filled
+ * button: the page has no bar to sit in, so these need to read as objects
+ * floating over the list instead of as a band that happens to have gaps in it.
  */
 @Composable
-private fun tabBarReserve(): Dp = PillTabBarHeight + Space.current.sm * 2 + Space.current.lg
+private fun FloatingCircleButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    testTag: String,
+    badge: Int = 0,
+    selected: Boolean = false
+) {
+    val space = Space.current
+    Box(contentAlignment = Alignment.TopEnd) {
+        Surface(
+            color = if (selected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            },
+            contentColor = if (selected) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            shape = CircleShape,
+            modifier = Modifier
+                .size(48.dp)
+                .clickable(onClick = onClick)
+                .testTag(testTag)
+                .semantics {
+                    this.contentDescription = contentDescription
+                    if (badge > 0) stateDescription = "$badge"
+                }
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(imageVector = icon, contentDescription = null)
+            }
+        }
+        if (badge > 0) {
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .clearAndSetSemantics { },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (badge > 9) "9+" else "$badge",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+        }
+    }
+}
 
-// ---------------------------------------------------------------------------
-// Surahs
-// ---------------------------------------------------------------------------
+/**
+ * The search control, open: a field with the three quick filters beneath it.
+ *
+ * The filters are the whole reason this replaces a tab. Page, juz' and hizb are
+ * three ways of asking "where is this", and burying them behind a tab made the
+ * common case - look up today's page - two taps and a mode switch away.
+ */
+@Composable
+private fun ExpandedSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    referenceKind: ReferenceKind?,
+    onKindChange: (ReferenceKind?) -> Unit,
+    onClose: () -> Unit
+) {
+    val space = Space.current
+    val strings = LocalStrings.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = space.sm)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = QuranShape.pill,
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+            ) {
+                SearchInput(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    placeholder = strings.more.search,
+                    onClear = if (query.isNotEmpty()) ({ onQueryChange("") }) else null
+                )
+            }
+            Spacer(Modifier.width(space.xs))
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier
+                    .size(MaterialTheme.layoutMetrics.minTouchTarget)
+                    .testTag("quran_search_close")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = strings.more.closeReader,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(Modifier.height(space.xs))
+
+        // Page / Juz' / Hizb. Selecting one browses that numbering; the leading
+        // "verses" chip clears back to searching the text.
+        Row(horizontalArrangement = Arrangement.spacedBy(space.xs)) {
+            ReferenceChip(
+                label = strings.more.versesLabel,
+                selected = referenceKind == null,
+                onClick = { onKindChange(null) }
+            )
+            ReferenceChip(
+                label = strings.pageTab,
+                selected = referenceKind == ReferenceKind.PAGE,
+                onClick = { onKindChange(ReferenceKind.PAGE) }
+            )
+            ReferenceChip(
+                label = strings.more.juzWord,
+                selected = referenceKind == ReferenceKind.JUZ,
+                onClick = { onKindChange(ReferenceKind.JUZ) }
+            )
+            ReferenceChip(
+                label = strings.more.hizbWord,
+                selected = referenceKind == ReferenceKind.HIZB,
+                onClick = { onKindChange(ReferenceKind.HIZB) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReferenceChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        },
+        contentColor = if (selected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        shape = QuranShape.pill,
+        modifier = Modifier
+            .heightIn(min = 36.dp)
+            .clickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+/**
+ * How much room the first list item keeps clear at the top.
+ *
+ * The floating controls are only 48dp tall when collapsed, but the open search
+ * bar adds a row of filter chips, so the two states need different reserves.
+ * A single reserve large enough for both pushed the Continue Reading card a
+ * whole row further down the page; a single one sized for the buttons let the
+ * expanded field sit on top of the first list item.
+ */
+@Composable
+private fun contentTopInset(searchOpen: Boolean): Dp =
+    topInset() + if (searchOpen) 108.dp else 60.dp
 
 @Composable
 private fun SurahList(
     state: SalahUiState,
+    contentTopInset: Dp,
     onSelect: (Int) -> Unit,
     onOpenReader: () -> Unit,
     modifier: Modifier = Modifier
@@ -230,7 +462,7 @@ private fun SurahList(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = space.xxxl)
     ) {
-        item(key = "reserve") { Spacer(Modifier.height(tabBarReserve())) }
+        item(key = "reserve") { Spacer(Modifier.height(contentTopInset)) }
 
         if (resume.surahNumber > 0) {
             item(key = "continue") {
@@ -467,8 +699,7 @@ private fun SectionLabel(text: String, modifier: Modifier = Modifier) {
 private fun ReferenceList(
     kind: ReferenceKind,
     query: String,
-    onQueryChange: (String) -> Unit,
-    onKindChange: (ReferenceKind) -> Unit,
+    contentTopInset: Dp,
     onSelectPage: (Int) -> Unit,
     onSelectJuz: (Int) -> Unit,
     onSelectHizb: (Int) -> Unit,
@@ -488,87 +719,18 @@ private fun ReferenceList(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        Spacer(Modifier.height(tabBarReserve()))
+        // The field and the Page/Juz'/Hizb selector both live in the floating
+        // bar now. Leaving a copy here is what put a second outlined field and a
+        // second set of chips on the page.
+        Spacer(Modifier.height(contentTopInset))
 
-        SearchInput(
-            value = query,
-            onValueChange = onQueryChange,
-            onClear = { onQueryChange("") },
-            // "Search" was the placeholder over a filter that accepts digits
-            // only, so it promised more than it did. Say which kind of number
-            // is wanted; searchPages already existed and was never used.
-            placeholder = when (kind) {
+        SectionLabel(
+            when (kind) {
                 ReferenceKind.PAGE -> strings.more.searchPages
                 ReferenceKind.JUZ -> strings.more.searchJuz
                 ReferenceKind.HIZB -> strings.more.searchHizb
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = space.lg)
-        )
-
-        Spacer(Modifier.height(space.md))
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = space.lg),
-            horizontalArrangement = Arrangement.spacedBy(space.sm)
-        ) {
-            ReferenceKind.entries.forEach { entry ->
-                val selected = entry == kind
-                Surface(
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surface
-                    },
-                    shape = QuranShape.pill,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
-                        .clickableHero(
-                            onClick = { onKindChange(entry) },
-                            shape = QuranShape.pill
-                        )
-                ) {
-                    Box(
-                        modifier = Modifier.padding(vertical = space.sm),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = when (entry) {
-                                ReferenceKind.PAGE -> strings.more.pageWord
-                                ReferenceKind.JUZ -> strings.more.juzWord
-                                ReferenceKind.HIZB -> strings.more.hizbWord
-                            },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (selected) {
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                        )
-                    }
-                }
             }
-        }
-
-        Spacer(Modifier.height(space.sm))
-
-        if (filtered.isEmpty()) {
-            EmptyState(
-                title = strings.more.noSearchResults,
-                message = strings.more.noResultsMessage,
-                icon = Icons.Default.Search,
-                action = {
-                    TextButton(onClick = { onQueryChange("") }) {
-                        Text(strings.more.clearSearch)
-                    }
-                }
-            )
-            return@Column
-        }
+        )
 
         LazyColumn(contentPadding = PaddingValues(bottom = space.xxxl)) {
             items(filtered, key = { it }) { number ->
@@ -679,6 +841,7 @@ private fun ReferenceRow(
 private fun SearchResults(
     query: String,
     onQueryChange: (String) -> Unit,
+    contentTopInset: Dp,
     results: List<Ayah>,
     selectedSurahNumber: Int,
     onSurahSelected: (Int) -> Unit,
@@ -702,19 +865,10 @@ private fun SearchResults(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        Spacer(Modifier.height(tabBarReserve()))
-
-        SearchInput(
-            value = query,
-            onValueChange = onQueryChange,
-            onClear = { onQueryChange("") },
-            placeholder = strings.more.searchSurahsAndVerses,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = space.lg)
-        )
-
-        Spacer(Modifier.height(space.sm))
+        // No field here. The floating bar is the field; this used to render a
+        // second one underneath the old pill row, which is where the duplicate
+        // outline and the stray "search a surah" copy came from.
+        Spacer(Modifier.height(contentTopInset))
 
         if (query.isBlank()) {
             EmptyState(
@@ -831,6 +985,7 @@ private fun VerseResultCard(ayah: Ayah, onClick: () -> Unit, modifier: Modifier 
 
 @Composable
 private fun SavedList(
+    contentTopInset: Dp,
     bookmarks: List<BookmarkEntity>,
     onSelect: (BookmarkEntity) -> Unit,
     modifier: Modifier = Modifier
@@ -840,7 +995,7 @@ private fun SavedList(
 
     if (bookmarks.isEmpty()) {
         Column(modifier = modifier.fillMaxSize()) {
-            Spacer(Modifier.height(tabBarReserve()))
+            Spacer(Modifier.height(contentTopInset))
             EmptyState(
                 title = strings.more.noBookmarksTitle,
                 message = strings.more.noBookmarksMessage,
@@ -854,7 +1009,7 @@ private fun SavedList(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = space.xxxl)
     ) {
-        item(key = "reserve") { Spacer(Modifier.height(tabBarReserve())) }
+        item(key = "reserve") { Spacer(Modifier.height(contentTopInset)) }
         items(bookmarks, key = { "${it.surahNumber}_${it.ayahNumber}" }) { bookmark ->
             val ayah = QuranDataSource.resolveAyah(bookmark.surahNumber, bookmark.ayahNumber)
             val surah = QuranDataSource.getSurahByNumber(bookmark.surahNumber)

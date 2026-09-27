@@ -158,6 +158,7 @@ fun SettingsScreen(
     onResetAllSettings: () -> Unit = {},
     onLivingSkyChange: (Boolean) -> Unit = {},
     onFetchLocation: () -> Unit = {},
+    onOpenPrayerTimes: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
@@ -209,6 +210,15 @@ fun SettingsScreen(
             // -- Location & calculation -----------------------------------
             SectionHeader(strings.more.sectionLocationAndCalculation)
             SectionGroup {
+                // Prayer is off the bottom dock, so this is the way in. Its month
+                // table - a whole Gregorian month of prayer times, which nothing
+                // else in the app shows - lives only on that screen.
+                ActionRow(
+                    title = strings.more.prayerTimesTitle,
+                    value = state.method.title,
+                    onClick = onOpenPrayerTimes
+                )
+                RowDivider()
                 ActionRow(
                     title = strings.locationLabel,
                     subtitle = state.location.name,

@@ -2,6 +2,8 @@ package com.example.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import com.example.R
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
@@ -25,6 +27,27 @@ private val Sans = FontFamily.Default
 
 /** Arabic and Quranic text. Serif gives the script the stroke contrast it needs. */
 val ArabicFamily = FontFamily.Serif
+
+/**
+ * Handwriting, for the one place on the Today page that wants to feel written
+ * rather than typeset - the prayer's name, at headline size.
+ *
+ * Kalam, under the SIL Open Font License (`res/font/kalam_license.txt`).
+ *
+ * Latin and Devanagari only. A handwritten face has no Arabic, Bengali, Cyrillic
+ * or Latin-extended coverage, so those scripts fall back per-glyph to
+ * [ArabicFamily] / the system face - which is the right outcome anyway, since
+ * an Arabic headline in a Latin handwriting alphabet would be unreadable. It
+ * means the headline *style* differs by language, not just its content.
+ *
+ * Static Regular and Bold rather than the variable cut: `minSdk 24` predates
+ * reliable variable-font support, and a headline that renders at a different
+ * weight on some devices is worse than two weights everywhere.
+ */
+val HandwritingFamily = FontFamily(
+    Font(R.font.kalam_regular, FontWeight.Normal),
+    Font(R.font.kalam_bold, FontWeight.Bold)
+)
 
 private val trim = LineHeightStyle(
     alignment = LineHeightStyle.Alignment.Center,

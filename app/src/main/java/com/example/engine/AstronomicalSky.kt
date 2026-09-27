@@ -121,14 +121,20 @@ data class MoonPhaseInfo(
     val nameAr: String
 )
 
+/**
+ * The sky at one instant, derived entirely from the sun's altitude and whether
+ * it is rising or setting.
+ *
+ * Every field here is consumed by a renderer. There is no second, decorative
+ * colour set: [sunColor] is the same ramp that tints the gradient, so the disc
+ * and the sky it sits in can never disagree.
+ */
 data class SkyColorPalette(
     val zenithColor: Color,
     val midSkyColor: Color,
     val horizonColor: Color,
     val horizonHazeColor: Color,
     val sunColor: Color,
-    val sunHaloColor: Color,
-    val cloudTint: Color,
     val starAlpha: Float,
     val isNight: Boolean
 )
@@ -172,6 +178,10 @@ object AstronomicalSky {
     /**
      * Calculates smooth, continuous sky gradient and atmospheric colors
      * based on exact solar altitude and whether sun is rising or setting.
+     *
+     * The seven bands are contiguous: each one starts where the previous ended,
+     * so the gradient is continuous across the whole solar day rather than
+     * stepping at each boundary.
      */
     fun calculateContinuousSkyColors(altitude: Float, isSetting: Boolean = false): SkyColorPalette {
         return when {
@@ -183,8 +193,6 @@ object AstronomicalSky {
                     horizonColor = Color(0xFF10152B),
                     horizonHazeColor = Color(0x1A1B2440),
                     sunColor = Color(0xFFFF9800),
-                    sunHaloColor = Color(0x00FF9800),
-                    cloudTint = Color(0x22181F38),
                     starAlpha = 1.0f,
                     isNight = true
                 )
@@ -198,8 +206,6 @@ object AstronomicalSky {
                     horizonColor = lerpColor(Color(0xFF10152B), Color(0xFF261D42), t),
                     horizonHazeColor = Color(0x262A2B52),
                     sunColor = Color(0xFFFF9800),
-                    sunHaloColor = Color(0x0AEC407A),
-                    cloudTint = Color(0x2E242845),
                     starAlpha = 1.0f - (t * 0.25f),
                     isNight = true
                 )
@@ -213,8 +219,6 @@ object AstronomicalSky {
                     horizonColor = lerpColor(Color(0xFF261D42), Color(0xFF7A3356), t),
                     horizonHazeColor = lerpColor(Color(0x262A2B52), Color(0x55C25562), t),
                     sunColor = Color(0xFFFF7043),
-                    sunHaloColor = Color(0x26FF5722),
-                    cloudTint = lerpColor(Color(0x2E242845), Color(0x559C385C), t),
                     starAlpha = (1.0f - t) * 0.75f,
                     isNight = false
                 )
@@ -228,8 +232,6 @@ object AstronomicalSky {
                     horizonColor = lerpColor(Color(0xFF7A3356), Color(0xFFE86A3E), t),
                     horizonHazeColor = lerpColor(Color(0x55C25562), Color(0x88FFA726), t),
                     sunColor = Color(0xFFFF8A65),
-                    sunHaloColor = Color(0x44FF7043),
-                    cloudTint = lerpColor(Color(0x559C385C), Color(0x77FF8A65), t),
                     starAlpha = (1.0f - t) * 0.25f,
                     isNight = false
                 )
@@ -243,8 +245,6 @@ object AstronomicalSky {
                     horizonColor = lerpColor(Color(0xFFE86A3E), Color(0xFFFFB74D), t),
                     horizonHazeColor = lerpColor(Color(0x88FFA726), Color(0x66FFE082), t),
                     sunColor = lerpColor(Color(0xFFFF8A65), Color(0xFFFFD54F), t),
-                    sunHaloColor = Color(0x55FFB300),
-                    cloudTint = lerpColor(Color(0x77FF8A65), Color(0x88FFCC80), t),
                     starAlpha = 0.0f,
                     isNight = false
                 )
@@ -258,8 +258,6 @@ object AstronomicalSky {
                     horizonColor = lerpColor(Color(0xFFFFB74D), Color(0xFFBCE3F5), t),
                     horizonHazeColor = Color(0x44B3E5FC),
                     sunColor = Color(0xFFFFF9C4),
-                    sunHaloColor = Color(0x40FFF59D),
-                    cloudTint = Color(0x66FFFFFF),
                     starAlpha = 0.0f,
                     isNight = false
                 )
@@ -273,8 +271,6 @@ object AstronomicalSky {
                     horizonColor = lerpColor(Color(0xFFBCE3F5), Color(0xFFA1D3F0), t),
                     horizonHazeColor = Color(0x38E1F5FE),
                     sunColor = Color(0xFFFFFDE7),
-                    sunHaloColor = Color(0x4DFFF9C4),
-                    cloudTint = Color(0x80FFFFFF),
                     starAlpha = 0.0f,
                     isNight = false
                 )

@@ -12,7 +12,7 @@ import com.example.data.model.PrayerTimesDay
 import com.example.data.model.UserLocation
 import com.example.engine.SkyPeriod
 import com.example.ui.SalahUiState
-import com.example.ui.home.HomeScreen
+import com.example.ui.home.TodayScreen
 import com.example.ui.localization.ProvideAppLanguage
 import com.example.ui.theme.SalahTheme
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
@@ -79,12 +79,10 @@ class GreetingScreenshotTest {
         composeTestRule.setContent {
             SalahTheme(darkTheme = dark) {
                 ProvideAppLanguage(language = "English") {
-                    HomeScreen(
+                    TodayScreen(
                         state = sampleState(),
-                        onTogglePrayer = {},
-                        onContinueReadingClick = {},
-                        onOpenPrayerTimes = {},
-                        onLocationClick = {}
+                        onLocationClick = {},
+                        onContinueReadingClick = {}
                     )
                 }
             }

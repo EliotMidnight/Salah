@@ -9,15 +9,11 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -26,7 +22,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -34,16 +29,18 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.example.data.model.UserLocation
-import com.example.ui.theme.Motion
 import com.example.engine.AstronomicalSky
 import com.example.engine.MoonPhaseInfo
 import com.example.engine.QiblaEngine
-import com.example.engine.SkyColorPalette
-import com.example.engine.SkyPeriod
 import com.example.engine.SunPosition
+import com.example.ui.theme.Motion
+import com.example.ui.theme.mix
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import kotlin.math.PI
@@ -51,9 +48,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
 
-/**
- * Stable Star definition for astronomical sky rendering
- */
+/** Stable Star definition for astronomical sky rendering */
 private data class AstroStar(
     val normX: Float,
     val normY: Float,
@@ -64,9 +59,7 @@ private data class AstroStar(
     val phaseOffset: Float
 )
 
-/**
- * Constellation line segment connecting two normalized coordinates
- */
+/** Constellation line segment connecting two normalized coordinates */
 private data class ConstellationLine(
     val x1: Float,
     val y1: Float,
@@ -74,59 +67,112 @@ private data class ConstellationLine(
     val y2: Float
 )
 
+/** Solar altitudes below this put the disc under the horizon, so it is not drawn. */
+private const val SUN_SET_DROP_DEGREES = -8f
+
+/** Azimuth arc, in degrees from true north, mapped across the full canvas width. */
+private const val SUN_PATH_AZIMUTH_START = 60f
+private const val SUN_PATH_AZIMUTH_END = 300f
+
+/** Screen-x bounds for the sun, so the disc never clips against either edge. */
+private const val SUN_PATH_MIN_X = 0.12f
+private const val SUN_PATH_MAX_X = 0.88f
+
+/** The sun's own colour pushed toward deep amber, for its rays and shaded limb. */
+private val SunShade = Color(0xFF8A4B00)
+
+/**
+ * Horizontal screen position, 0..1, for a body at [azimuth].
+ *
+ * Azimuths outside the sun's arc are clamped rather than wrapped, because they
+ * are still meaningful: below 60° the sun is north of the frame edge, above 300°
+ * it has swung past it, and either way it has to render on the correct side so
+ * the disc and the glow beneath it stay together.
+ */
+private fun azimuthToScreenX(azimuth: Float): Float = when {
+    azimuth <= SUN_PATH_AZIMUTH_START -> SUN_PATH_MIN_X
+    azimuth >= SUN_PATH_AZIMUTH_END -> SUN_PATH_MAX_X
+    else -> ((azimuth - SUN_PATH_AZIMUTH_START) / (SUN_PATH_AZIMUTH_END - SUN_PATH_AZIMUTH_START))
+        .coerceIn(SUN_PATH_MIN_X, SUN_PATH_MAX_X)
+}
+
+/**
+ * Vertical screen position for the sun, from its [altitude] in degrees.
+ *
+ * Clamped to the band the disc is actually drawn in, so the sun sits on the
+ * horizon line at sunset instead of sliding under the dune silhouette.
+ */
+private fun altitudeToScreenY(altitude: Float, arcZoneHeight: Float): Float {
+    val progress = ((altitude.coerceIn(SUN_SET_DROP_DEGREES, 85f) - SUN_SET_DROP_DEGREES) / 93f)
+        .coerceIn(0f, 1f)
+    val zenithY = arcZoneHeight * 0.22f
+    val baseHorizonY = arcZoneHeight * 0.88f
+    return baseHorizonY - (baseHorizonY - zenithY) * progress
+}
+
+/**
+ * The animated sky.
+ *
+ * Every celestial fact on this canvas is derived, never invented: the sun's
+ * altitude and azimuth come from [QiblaEngine.calculateSunPosition] for the given
+ * location and time, the gradient comes from that same altitude via
+ * [AstronomicalSky.calculateContinuousSkyColors], and the moon's phase comes from
+ * the lunar day. Nothing here is a decorative layer laid over the top - which is
+ * why the gradient, the disc and the glow all move as one when the clock moves.
+ *
+ * What *is* decorative is confined to motion: twinkle, corona pulse, ray
+ * rotation and meteors. All of it stops when the system animation scale is zero,
+ * and each loop is parked while the sky does not need it, so a midday frame
+ * never runs a star animation.
+ *
+ * Not the default background for the Today screen - see [StaticSkyBackground] for
+ * why the still sky won - but available behind the "Animated sky" setting.
+ */
 @Composable
 fun LivingSkyCanvas(
-    skyPeriod: SkyPeriod,
-    celestialProgress: Float,
     modifier: Modifier = Modifier,
     sunPosition: SunPosition? = null,
     location: UserLocation? = null,
     currentTime: LocalTime = LocalTime.now(),
     hijriDay: Int = 14
 ) {
-    // 1. Resolve exact solar altitude and azimuth based on user location and time
+    // 1. Resolve exact solar altitude and azimuth for this location and time.
     val effectiveSunPosition = remember(sunPosition, location, currentTime) {
-        sunPosition ?: run {
-            val loc = location ?: UserLocation.RABAT
-            val ldt = LocalDateTime.of(
-                java.time.LocalDate.now(),
-                currentTime
-            )
-            QiblaEngine.calculateSunPosition(loc, ldt)
-        }
+        sunPosition ?: QiblaEngine.calculateSunPosition(
+            location ?: UserLocation.RABAT,
+            LocalDateTime.of(LocalDate.now(), currentTime)
+        )
     }
 
     val sunAltitude = effectiveSunPosition.altitude
-    val sunAzimuth = effectiveSunPosition.azimuth
-    val isSetting = sunAzimuth > 180f
+    val isSetting = effectiveSunPosition.azimuth > 180f
 
-    // 2. Compute dynamic continuous sky palette
-    val rawPalette: SkyColorPalette = remember(sunAltitude, isSetting) {
+    // 2. One palette drives the gradient, the glow and the disc alike.
+    val rawPalette = remember(sunAltitude, isSetting) {
         AstronomicalSky.calculateContinuousSkyColors(sunAltitude, isSetting)
     }
 
-    // Smooth color transitions across sky changes
+    // Smooth colour transitions across sky changes.
     val colorAnimSpec = tween<Color>(durationMillis = Motion.duration(1600), easing = FastOutSlowInEasing)
-    val animatedZenith by animateColorAsState(targetValue = rawPalette.zenithColor, animationSpec = colorAnimSpec, label = "zenith")
-    val animatedMidSky by animateColorAsState(targetValue = rawPalette.midSkyColor, animationSpec = colorAnimSpec, label = "midSky")
-    val animatedHorizon by animateColorAsState(targetValue = rawPalette.horizonColor, animationSpec = colorAnimSpec, label = "horizon")
-    val animatedHorizonHaze by animateColorAsState(targetValue = rawPalette.horizonHazeColor, animationSpec = colorAnimSpec, label = "haze")
-    val animatedSunColor by animateColorAsState(targetValue = rawPalette.sunColor, animationSpec = colorAnimSpec, label = "sunColor")
-    val animatedSunHalo by animateColorAsState(targetValue = rawPalette.sunHaloColor, animationSpec = colorAnimSpec, label = "sunHalo")
-    val animatedCloudTint by animateColorAsState(targetValue = rawPalette.cloudTint, animationSpec = colorAnimSpec, label = "cloudTint")
+    val animatedZenith by animateColorAsState(rawPalette.zenithColor, colorAnimSpec, label = "zenith")
+    val animatedMidSky by animateColorAsState(rawPalette.midSkyColor, colorAnimSpec, label = "midSky")
+    val animatedHorizon by animateColorAsState(rawPalette.horizonColor, colorAnimSpec, label = "horizon")
+    val animatedHaze by animateColorAsState(rawPalette.horizonHazeColor, colorAnimSpec, label = "haze")
+    val animatedSun by animateColorAsState(rawPalette.sunColor, colorAnimSpec, label = "sun")
 
-    // Moon phase based on lunar Hijri day
     val moonPhase: MoonPhaseInfo = remember(hijriDay) {
         AstronomicalSky.getMoonPhaseInfo(hijriDay)
     }
 
-    // 3. Infinite animations for living atmosphere — only animate what this sky period needs.
-    // Night twinkle/meteor paused during full day; sun rays/corona paused when sun is below horizon.
-    // When the user has reduced motion enabled, none of these loops start: the sky
+    // 3. Infinite animations for living atmosphere - only animate what this sky
+    // needs. Night twinkle/meteor paused during full day; sun rays/corona paused
+    // when the sun is below the horizon.
+    //
+    // When the user has reduced motion, none of these loops start: the sky
     // renders the same scene statically (large, slow, full-screen movement is the
     // classic vestibular trigger, so this matters more here than almost anywhere).
     val needStars = rawPalette.starAlpha > 0.03f || rawPalette.isNight || sunAltitude < 6f
-    val needSunFx = sunAltitude > -8f
+    val needSunFx = sunAltitude > SUN_SET_DROP_DEGREES
     val reducedMotion = !Motion.allowContinuous
     val atmosphere = rememberInfiniteTransition(label = "livingAtmosphere")
 
@@ -166,16 +212,6 @@ fun LivingSkyCanvas(
         label = "rayRotation"
     )
 
-    val cloudDrift by atmosphere.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (reducedMotion) 1 else 65_000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "cloudDrift"
-    )
-
     // Meteor window only advances while stars can actually show (saves most day frames).
     val meteorCycle by atmosphere.animateFloat(
         initialValue = 0f,
@@ -190,7 +226,7 @@ fun LivingSkyCanvas(
         label = "meteorCycle"
     )
 
-    // 4. Stable starfield coordinates & constellations (Ursa Major, Orion Belt)
+    // 4. Stable starfield coordinates & constellations (Ursa Major, Orion Belt).
     val stars = remember {
         val rand = Random(1337)
         val starColors = listOf(
@@ -201,395 +237,327 @@ fun LivingSkyCanvas(
             Color(0xFFB3E5FC)  // Cyan Arcturus
         )
         List(65) {
-            val normX = rand.nextFloat()
-            val normY = rand.nextFloat() * 0.72f // Upper 72% of sky
-            val radius = rand.nextFloat() * 1.8f + 0.6f
-            val baseAlpha = rand.nextFloat() * 0.55f + 0.45f
-            val color = starColors[rand.nextInt(starColors.size)]
-            val speed = rand.nextFloat() * 1.6f + 0.7f
-            val phase = rand.nextFloat() * (2 * PI).toFloat()
-            AstroStar(normX, normY, radius, baseAlpha, color, speed, phase)
+            AstroStar(
+                normX = rand.nextFloat(),
+                normY = rand.nextFloat() * 0.72f, // Upper 72% of sky
+                radius = rand.nextFloat() * 1.8f + 0.6f,
+                baseAlpha = rand.nextFloat() * 0.55f + 0.45f,
+                color = starColors[rand.nextInt(starColors.size)],
+                twinkleSpeed = rand.nextFloat() * 1.6f + 0.7f,
+                phaseOffset = rand.nextFloat() * (2 * PI).toFloat()
+            )
         }
     }
 
-    // Ursa Major (The Big Dipper / الدب الأكبر) constellation segments
-    val bigDipper = remember {
+    val constellations = remember {
         listOf(
+            // Ursa Major (The Big Dipper / الدب الأكبر)
             ConstellationLine(0.18f, 0.14f, 0.24f, 0.16f), // Alkaid to Mizar
             ConstellationLine(0.24f, 0.16f, 0.29f, 0.20f), // Mizar to Alioth
             ConstellationLine(0.29f, 0.20f, 0.35f, 0.22f), // Alioth to Megrez
             ConstellationLine(0.35f, 0.22f, 0.36f, 0.28f), // Megrez to Phecda
             ConstellationLine(0.36f, 0.28f, 0.44f, 0.27f), // Phecda to Merak
             ConstellationLine(0.44f, 0.27f, 0.43f, 0.21f), // Merak to Dubhe
-            ConstellationLine(0.43f, 0.21f, 0.35f, 0.22f)  // Dubhe to Megrez
-        )
-    }
-
-    // Orion's Belt (حزام الجبار)
-    val orionBelt = remember {
-        listOf(
+            ConstellationLine(0.43f, 0.21f, 0.35f, 0.22f), // Dubhe to Megrez
+            // Orion's Belt (حزام الجبار)
             ConstellationLine(0.72f, 0.18f, 0.76f, 0.20f), // Alnitak to Alnilam
             ConstellationLine(0.76f, 0.20f, 0.80f, 0.22f)  // Alnilam to Mintaka
         )
     }
 
-    // Static silhouette geometry does not depend on animation values — build once per size.
-    var canvasW by remember { mutableStateOf(0f) }
-    var canvasH by remember { mutableStateOf(0f) }
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val staticSilhouette = remember(canvasW, canvasH, density) {
-        if (canvasW <= 0f || canvasH <= 0f) null
-        else with(density) { buildHorizonSilhouette(canvasW, canvasH) }
+    // Static silhouette geometry does not depend on animation values - build once per size.
+    var canvasSize by remember { mutableStateOf(Size.Zero) }
+    val density = LocalDensity.current
+    val silhouette = remember(canvasSize, density) {
+        if (canvasSize.width <= 0f || canvasSize.height <= 0f) null
+        else with(density) { buildHorizonSilhouette(canvasSize.width, canvasSize.height) }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .onSizeChanged { size ->
-                    canvasW = size.width.toFloat()
-                    canvasH = size.height.toFloat()
-                }
-        ) {
-            val width = size.width
-            val height = size.height
-            val arcZoneHeight = minOf(height * 0.50f, 380.dp.toPx())
-            val horizonY = height * 0.88f
+    Canvas(
+        modifier = modifier
+            .fillMaxSize()
+            .onSizeChanged { canvasSize = Size(it.width.toFloat(), it.height.toFloat()) }
+    ) {
+        val width = size.width
+        val height = size.height
+        val arcZoneHeight = minOf(height * 0.50f, 380.dp.toPx())
+        val horizonY = height * 0.88f
 
-            // A. Primary Living Sky Vertical Gradient
-            val skyBrush = Brush.verticalGradient(
+        // 1. The gradient: zenith -> mid sky -> horizon.
+        drawRect(
+            brush = Brush.verticalGradient(
                 colors = listOf(animatedZenith, animatedMidSky, animatedHorizon),
                 startY = 0f,
                 endY = horizonY
-            )
-            drawRect(brush = skyBrush, size = size)
+            ),
+            size = size
+        )
 
-            // B. Horizon Atmospheric Diffusion / Belt of Venus Glow
-            if (animatedHorizonHaze.alpha > 0.05f) {
-                // Calculate sun azimuth position mapped to screen width
-                val sunNormX = when {
-                    sunAzimuth < 60f -> 0.15f
-                    sunAzimuth > 300f -> 0.85f
-                    else -> ((sunAzimuth - 60f) / 240f).coerceIn(0.1f, 0.9f)
-                }
-                val hazeCenter = Offset(width * sunNormX, horizonY * 0.92f)
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            animatedHorizonHaze,
-                            animatedHorizonHaze.copy(alpha = animatedHorizonHaze.alpha * 0.4f),
-                            Color.Transparent
-                        ),
-                        center = hazeCenter,
-                        radius = width * 0.75f
+        // 2. Belt of Venus glow, centred on the sun's own azimuth so it tracks the disc.
+        if (animatedHaze.alpha > 0.05f) {
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        animatedHaze,
+                        animatedHaze.copy(alpha = animatedHaze.alpha * 0.4f),
+                        Color.Transparent
                     ),
-                    size = size
-                )
-            }
-
-            // C. Living Starfield & Constellations
-            val starAlpha = rawPalette.starAlpha
-            if (starAlpha > 0.03f) {
-                // 1. Constellation guide paths
-                val constellationAlpha = (starAlpha * 0.28f).coerceIn(0f, 0.35f)
-                val constellationColor = Color.White.copy(alpha = constellationAlpha)
-
-                for (line in bigDipper) {
-                    drawLine(
-                        color = constellationColor,
-                        start = Offset(line.x1 * width, line.y1 * height),
-                        end = Offset(line.x2 * width, line.y2 * height),
-                        strokeWidth = 1.2.dp.toPx(),
-                        cap = StrokeCap.Round
-                    )
-                }
-                for (line in orionBelt) {
-                    drawLine(
-                        color = constellationColor,
-                        start = Offset(line.x1 * width, line.y1 * height),
-                        end = Offset(line.x2 * width, line.y2 * height),
-                        strokeWidth = 1.2.dp.toPx(),
-                        cap = StrokeCap.Round
-                    )
-                }
-
-                // 2. Twinkling individual stars
-                for (star in stars) {
-                    val twinkle = sin(twinkleTime * star.twinkleSpeed + star.phaseOffset)
-                    val modAlpha = (star.baseAlpha * (0.35f + 0.65f * ((twinkle + 1f) / 2f)) * starAlpha).coerceIn(0f, 1f)
-
-                    if (modAlpha > 0.02f) {
-                        val center = Offset(star.normX * width, star.normY * height)
-                        // Star center core
-                        drawCircle(
-                            color = star.color.copy(alpha = modAlpha),
-                            radius = star.radius.dp.toPx(),
-                            center = center
-                        )
-                        // Subtle star diffraction shimmer for bright stars
-                        if (star.radius > 1.8f && modAlpha > 0.65f) {
-                            drawCircle(
-                                color = star.color.copy(alpha = modAlpha * 0.25f),
-                                radius = (star.radius * 2.6f).dp.toPx(),
-                                center = center
-                            )
-                        }
-                    }
-                }
-
-                // 3. Periodic Shooting Star / Meteor Streak
-                // Active during meteorCycle window [0.18 .. 0.24] (~840ms duration)
-                if ((rawPalette.isNight || starAlpha > 0.45f) && meteorCycle in 0.18f..0.24f) {
-                    val meteorT = (meteorCycle - 0.18f) / 0.06f // 0f to 1f
-                    val startX = width * 0.72f
-                    val startY = height * 0.08f
-                    val streakLen = 140.dp.toPx()
-                    val dx = -180.dp.toPx()
-                    val dy = 95.dp.toPx()
-
-                    val headX = startX + dx * meteorT
-                    val headY = startY + dy * meteorT
-                    val tailX = headX - (dx / 2.2f)
-                    val tailY = headY - (dy / 2.2f)
-
-                    val meteorAlpha = sin(meteorT * PI.toFloat()).coerceIn(0f, 1f) * starAlpha
-                    if (meteorAlpha > 0.05f) {
-                        drawLine(
-                            brush = Brush.linearGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color(0xFFFFD54F).copy(alpha = meteorAlpha * 0.6f),
-                                    Color.White.copy(alpha = meteorAlpha)
-                                ),
-                                start = Offset(tailX, tailY),
-                                end = Offset(headX, headY)
-                            ),
-                            start = Offset(tailX, tailY),
-                            end = Offset(headX, headY),
-                            strokeWidth = 2.4.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                        drawCircle(
-                            color = Color.White.copy(alpha = meteorAlpha),
-                            radius = 2.5.dp.toPx(),
-                            center = Offset(headX, headY)
-                        )
-                    }
-                }
-            }
-
-            // D. Living Sun (Google Weather-inspired Simple Geometric Vector Aesthetics)
-            if (sunAltitude > -8.0f) {
-                // Determine screen coordinates from solar altitude & azimuth
-                val sunNormX = when {
-                    sunAzimuth < 60f -> 0.12f
-                    sunAzimuth > 300f -> 0.88f
-                    else -> ((sunAzimuth - 60f) / 240f).coerceIn(0.12f, 0.88f)
-                }
-                val sunX = width * sunNormX
-
-                // Map altitude (-8° to 90°) to vertical position
-                val altClamped = sunAltitude.coerceIn(-8f, 85f)
-                val altProgress = ((altClamped - (-8f)) / 93f).coerceIn(0f, 1f)
-                val zenithY = arcZoneHeight * 0.22f
-                val baseHorizonY = arcZoneHeight * 0.88f
-                val sunY = baseHorizonY - (baseHorizonY - zenithY) * altProgress
-
-                val sunCenter = Offset(sunX, sunY)
-
-                drawGoogleWeatherSun(
-                    sunCenter = sunCenter,
-                    sunAltitude = sunAltitude,
-                    sunColor = animatedSunColor,
-                    sunHaloColor = animatedSunHalo,
-                    coronaPulse = coronaPulse,
-                    rotationDegrees = rayRotation
-                )
-            }
-
-            // E. Living Moon (Google Weather-inspired Simple Geometric Vector Aesthetics with Hijri Phase)
-            if (sunAltitude < 8.0f || rawPalette.isNight) {
-                val moonX = width * 0.80f
-                val moonY = arcZoneHeight * 0.32f
-                val moonRadius = 24.dp.toPx()
-                val moonCenter = Offset(moonX, moonY)
-
-                val moonAlpha = when {
-                    sunAltitude <= -12f -> 1.0f
-                    sunAltitude <= 0f -> 0.85f
-                    else -> (1.0f - (sunAltitude / 8f)).coerceIn(0f, 1f)
-                }
-
-                if (moonAlpha > 0.05f) {
-                    drawGoogleWeatherMoon(
-                        moonCenter = moonCenter,
-                        moonRadius = moonRadius,
-                        illumination = moonPhase.illumination,
-                        isWaxing = moonPhase.isWaxing,
-                        alpha = moonAlpha
-                    )
-                }
-            }
-
-            // F. Floating Atmospheric Cloud Wisps (Dynamic drift with sunlight tint)
-            drawAtmosphericClouds(
-                width = width,
-                height = height,
-                drift = cloudDrift,
-                cloudTint = animatedCloudTint
+                    center = Offset(
+                        x = width * azimuthToScreenX(effectiveSunPosition.azimuth),
+                        y = horizonY * 0.92f
+                    ),
+                    radius = width * 0.75f
+                ),
+                size = size
             )
+        }
 
-            // G. Horizon Silhouette with Desert Dunes & Architectural Minaret (static paths)
-            staticSilhouette?.let { sil ->
-                drawPath(path = sil.backDune, color = animatedHorizon.copy(alpha = 0.45f), style = Fill)
-                drawPath(path = sil.minaret, color = animatedHorizon.copy(alpha = 0.65f), style = Fill)
-                drawCircle(
-                    color = animatedHorizon.copy(alpha = 0.75f),
-                    radius = 1.4.dp.toPx(),
-                    center = sil.finial
-                )
-                drawPath(path = sil.frontDune, color = animatedHorizon.copy(alpha = 0.75f), style = Fill)
+        // 3. Stars, constellations and meteors - only once the sky is dark enough.
+        drawStarfield(
+            width = width,
+            height = height,
+            stars = stars,
+            constellations = constellations,
+            starAlpha = rawPalette.starAlpha,
+            isNight = rawPalette.isNight,
+            twinkleTime = twinkleTime,
+            meteorCycle = meteorCycle
+        )
+
+        // 4. The sun, at its real altitude and azimuth for this time and place.
+        if (needSunFx) {
+            drawSun(
+                center = Offset(
+                    x = width * azimuthToScreenX(effectiveSunPosition.azimuth),
+                    y = altitudeToScreenY(sunAltitude, arcZoneHeight)
+                ),
+                sunAltitude = sunAltitude,
+                sunColor = animatedSun,
+                coronaPulse = coronaPulse,
+                rotationDegrees = rayRotation
+            )
+        }
+
+        // 5. The moon, once the sun is low enough to share the frame.
+        if (sunAltitude < 8f || rawPalette.isNight) {
+            val moonAlpha = when {
+                sunAltitude <= -12f -> 1.0f
+                sunAltitude <= 0f -> 0.85f
+                else -> (1.0f - (sunAltitude / 8f)).coerceIn(0f, 1f)
             }
+            drawMoon(
+                center = Offset(width * 0.80f, arcZoneHeight * 0.32f),
+                moonRadius = 24.dp.toPx(),
+                illumination = moonPhase.illumination,
+                isWaxing = moonPhase.isWaxing,
+                alpha = moonAlpha
+            )
+        }
+
+        // 6. Desert dunes and a minaret on the horizon line.
+        silhouette?.let { sil ->
+            drawPath(path = sil.backDune, color = animatedHorizon.copy(alpha = 0.45f), style = Fill)
+            drawPath(path = sil.minaret, color = animatedHorizon.copy(alpha = 0.65f), style = Fill)
+            drawCircle(
+                color = animatedHorizon.copy(alpha = 0.75f),
+                radius = 1.4.dp.toPx(),
+                center = sil.finial
+            )
+            drawPath(path = sil.frontDune, color = animatedHorizon.copy(alpha = 0.75f), style = Fill)
         }
     }
 }
 
 /**
- * Renders the Sun with Google Weather-inspired simple geometric vector aesthetics:
- * - Bold, vibrant geometric solar disc (#FBBC04 sunshine gold / #FF7043 horizon coral)
- * - 8 iconic geometric capsule rays with rounded caps
- * - Concentric geometric vector orbital aura rings
- * - Clean geometric specular core and subtle vector duo-tone depth
+ * Stars, the two guide constellations, and a periodic meteor.
+ *
+ * No-op until the palette actually lets stars show, which is most of a daylight
+ * frame.
  */
-private fun DrawScope.drawGoogleWeatherSun(
-    sunCenter: Offset,
+private fun DrawScope.drawStarfield(
+    width: Float,
+    height: Float,
+    stars: List<AstroStar>,
+    constellations: List<ConstellationLine>,
+    starAlpha: Float,
+    isNight: Boolean,
+    twinkleTime: Float,
+    meteorCycle: Float
+) {
+    if (starAlpha <= 0.03f) return
+
+    // 1. Constellation guide paths
+    val constellationColor = Color.White.copy(alpha = (starAlpha * 0.28f).coerceIn(0f, 0.35f))
+    for (line in constellations) {
+        drawLine(
+            color = constellationColor,
+            start = Offset(line.x1 * width, line.y1 * height),
+            end = Offset(line.x2 * width, line.y2 * height),
+            strokeWidth = 1.2.dp.toPx(),
+            cap = StrokeCap.Round
+        )
+    }
+
+    // 2. Twinkling individual stars
+    for (star in stars) {
+        val twinkle = sin(twinkleTime * star.twinkleSpeed + star.phaseOffset)
+        val alpha = (star.baseAlpha * (0.35f + 0.65f * ((twinkle + 1f) / 2f)) * starAlpha).coerceIn(0f, 1f)
+        if (alpha <= 0.02f) continue
+
+        val center = Offset(star.normX * width, star.normY * height)
+        drawCircle(color = star.color.copy(alpha = alpha), radius = star.radius.dp.toPx(), center = center)
+        // Subtle star diffraction shimmer for bright stars
+        if (star.radius > 1.8f && alpha > 0.65f) {
+            drawCircle(
+                color = star.color.copy(alpha = alpha * 0.25f),
+                radius = (star.radius * 2.6f).dp.toPx(),
+                center = center
+            )
+        }
+    }
+
+    // 3. Periodic shooting star, active during the [0.18 .. 0.24] window of
+    //    [meteorCycle] - about 840ms out of every 14s, and only at night.
+    if (!isNight && starAlpha <= 0.45f) return
+    if (meteorCycle < 0.18f || meteorCycle > 0.24f) return
+
+    val t = (meteorCycle - 0.18f) / 0.06f
+    val headX = width * 0.72f - 180.dp.toPx() * t
+    val headY = height * 0.08f + 95.dp.toPx() * t
+    val tailX = headX + 180.dp.toPx() / 2.2f
+    val tailY = headY - 95.dp.toPx() / 2.2f
+
+    val alpha = (sin(t * PI.toFloat()).coerceIn(0f, 1f) * starAlpha).coerceAtLeast(0f)
+    if (alpha <= 0.05f) return
+
+    drawLine(
+        brush = Brush.linearGradient(
+            colors = listOf(
+                Color.Transparent,
+                Color(0xFFFFD54F).copy(alpha = alpha * 0.6f),
+                Color.White.copy(alpha = alpha)
+            ),
+            start = Offset(tailX, tailY),
+            end = Offset(headX, headY)
+        ),
+        start = Offset(tailX, tailY),
+        end = Offset(headX, headY),
+        strokeWidth = 2.4.dp.toPx(),
+        cap = StrokeCap.Round
+    )
+    drawCircle(color = Color.White.copy(alpha = alpha), radius = 2.5.dp.toPx(), center = Offset(headX, headY))
+}
+
+/**
+ * Renders the Sun with simple geometric vector aesthetics:
+ * - Vibrant geometric disc, coloured by [sunColor] from the same altitude ramp
+ *   that tints the gradient, so the disc is never a different sun than the sky
+ * - 8 iconic geometric capsule rays with rounded caps
+ * - Concentric geometric orbital aura rings
+ * - Clean geometric specular core and subtle duo-tone depth
+ */
+private fun DrawScope.drawSun(
+    center: Offset,
     sunAltitude: Float,
     sunColor: Color,
-    sunHaloColor: Color,
     coronaPulse: Float,
     rotationDegrees: Float
 ) {
     val baseRadius = 21.dp.toPx()
-    val isNearHorizon = sunAltitude in -8f..6f
+    val isNearHorizon = sunAltitude <= 6f
 
-    // Google Weather signature solar palette (vibrant gold with warm amber depth)
-    val coreColor = if (isNearHorizon) {
-        Color(0xFFFF7043) // Warm horizon coral
-    } else {
-        Color(0xFFFBBC04) // Google's iconic vibrant sunshine gold
-    }
-    val rayColor = if (isNearHorizon) {
-        Color(0xFFFFA726)
-    } else {
-        Color(0xFFF9AB00)
-    }
+    // Every other tone is the same hue pushed toward deep amber, so the whole
+    // disc shifts together as the sun reddens instead of snapping between two
+    // hand-picked palettes.
+    val coreColor = sunColor
+    val rayColor = sunColor.mix(SunShade, 0.18f)
+    val limbColor = sunColor.mix(SunShade, 0.45f)
 
-    // 1. Concentric Geometric Vector Aura Rings (Material vector orbit, not fuzzy blur)
+    // 1. Concentric aura rings (vector orbit, not fuzzy blur)
     val ring1Radius = baseRadius * 1.65f * coronaPulse
     val ring2Radius = baseRadius * 2.30f * coronaPulse
-
     drawCircle(
         color = coreColor.copy(alpha = 0.16f),
         radius = ring2Radius,
-        center = sunCenter,
+        center = center,
         style = Stroke(width = 1.2.dp.toPx())
     )
     drawCircle(
         color = coreColor.copy(alpha = 0.28f),
         radius = ring1Radius,
-        center = sunCenter,
+        center = center,
         style = Stroke(width = 1.5.dp.toPx())
     )
     // Soft subtle inner disk backing (crisp flat vector fill)
-    drawCircle(
-        color = coreColor.copy(alpha = 0.07f),
-        radius = ring1Radius,
-        center = sunCenter
-    )
+    drawCircle(color = coreColor.copy(alpha = 0.07f), radius = ring1Radius, center = center)
 
-    // 2. Google Weather Iconic Geometric Capsule Rays
-    // 8 equidistant radial rays with rounded caps
+    // 2. Geometric capsule rays, 8 equidistant with rounded caps
     val rayInnerOffset = baseRadius + 6.dp.toPx()
     val rayLength = 7.5.dp.toPx() * coronaPulse
     val rayStrokeWidth = 3.6.dp.toPx()
 
-    rotate(degrees = rotationDegrees, pivot = sunCenter) {
+    rotate(degrees = rotationDegrees, pivot = center) {
         for (i in 0 until 8) {
             val angleRad = (i * 45.0) * (PI / 180.0)
             val cosA = cos(angleRad).toFloat()
             val sinA = sin(angleRad).toFloat()
-
-            val startP = Offset(
-                sunCenter.x + rayInnerOffset * cosA,
-                sunCenter.y + rayInnerOffset * sinA
-            )
-            val endP = Offset(
-                sunCenter.x + (rayInnerOffset + rayLength) * cosA,
-                sunCenter.y + (rayInnerOffset + rayLength) * sinA
-            )
-
             drawLine(
                 color = rayColor.copy(alpha = 0.92f),
-                start = startP,
-                end = endP,
+                start = Offset(
+                    center.x + rayInnerOffset * cosA,
+                    center.y + rayInnerOffset * sinA
+                ),
+                end = Offset(
+                    center.x + (rayInnerOffset + rayLength) * cosA,
+                    center.y + (rayInnerOffset + rayLength) * sinA
+                ),
                 strokeWidth = rayStrokeWidth,
                 cap = StrokeCap.Round
             )
         }
     }
 
-    // 3. Central Geometric Solar Disc
+    // 3. Central disc
+    drawCircle(color = coreColor, radius = baseRadius, center = center)
+
     if (isNearHorizon) {
-        // At horizon: crisp geometric vector disc with warm lower horizon band
-        drawCircle(
-            color = coreColor,
-            radius = baseRadius,
-            center = sunCenter
-        )
-        // Warm lower vector crescent / shadow band
+        // At the horizon: warm shaded lower band, as the disc sits into the haze
         drawArc(
-            color = Color(0xFFD84315).copy(alpha = 0.65f),
+            color = limbColor.copy(alpha = 0.65f),
             startAngle = 0f,
             sweepAngle = 180f,
             useCenter = true,
-            topLeft = Offset(sunCenter.x - baseRadius, sunCenter.y - baseRadius),
+            topLeft = Offset(center.x - baseRadius, center.y - baseRadius),
             size = Size(baseRadius * 2, baseRadius * 2)
         )
     } else {
-        // Daytime: Solid brilliant vector sun disc
-        drawCircle(
-            color = coreColor,
-            radius = baseRadius,
-            center = sunCenter
-        )
-        // Subtle duo-tone geometric depth (Google vector style warm accent on lower perimeter)
+        // High sun: subtle rim on the lower perimeter, plus a specular highlight
         drawArc(
-            color = Color(0xFFF29900).copy(alpha = 0.35f),
+            color = limbColor.copy(alpha = 0.35f),
             startAngle = 15f,
             sweepAngle = 120f,
             useCenter = false,
-            topLeft = Offset(sunCenter.x - baseRadius * 0.92f, sunCenter.y - baseRadius * 0.92f),
+            topLeft = Offset(center.x - baseRadius * 0.92f, center.y - baseRadius * 0.92f),
             size = Size(baseRadius * 1.84f, baseRadius * 1.84f),
             style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
         )
-        // Clean geometric specular highlight dot (top-left)
         drawCircle(
             color = Color.White.copy(alpha = 0.92f),
             radius = 3.2.dp.toPx(),
-            center = Offset(sunCenter.x - baseRadius * 0.38f, sunCenter.y - baseRadius * 0.38f)
+            center = Offset(center.x - baseRadius * 0.38f, center.y - baseRadius * 0.38f)
         )
     }
 }
 
 /**
- * Renders the Moon with Google Weather-inspired simple geometric vector aesthetics:
- * - Crisp porcelain white (#F8F9FA) geometric lunar body
+ * Renders the Moon with simple geometric vector aesthetics:
+ * - Crisp porcelain white geometric lunar body
  * - Boolean circle subtraction for razor-sharp, authentic crescent curvature
- * - 3 clean geometric circular crater spots (Google Weather signature maria)
- * - Concentric geometric vector aura rings and clean earthshine outline
+ * - 3 clean geometric circular crater spots
+ * - Concentric aura rings and clean earthshine outline
  */
-private fun DrawScope.drawGoogleWeatherMoon(
-    moonCenter: Offset,
+private fun DrawScope.drawMoon(
+    center: Offset,
     moonRadius: Float,
     illumination: Float,
     isWaxing: Boolean,
@@ -597,216 +565,104 @@ private fun DrawScope.drawGoogleWeatherMoon(
 ) {
     if (alpha <= 0.02f) return
 
-    val moonColor = Color(0xFFF8F9FA).copy(alpha = alpha) // Crisp Google porcelain white
-    val craterColor = Color(0xFF90A4AE).copy(alpha = 0.32f * alpha) // Clean vector crater tint
+    val moonColor = Color(0xFFF8F9FA).copy(alpha = alpha) // Crisp porcelain white
+    val craterColor = Color(0xFF90A4AE).copy(alpha = 0.32f * alpha) // Vector crater tint
 
-    // 1. Concentric Geometric Vector Aura Rings
+    // 1. Concentric aura rings
     drawCircle(
         color = Color.White.copy(alpha = 0.20f * alpha),
         radius = moonRadius * 1.48f,
-        center = moonCenter,
+        center = center,
         style = Stroke(width = 1.2.dp.toPx())
     )
     drawCircle(
         color = Color.White.copy(alpha = 0.09f * alpha),
         radius = moonRadius * 1.88f,
-        center = moonCenter,
+        center = center,
         style = Stroke(width = 1.0.dp.toPx())
     )
 
-    // 2. Geometric Earthshine (Unlit side silhouette with clean vector boundary)
-    drawCircle(
-        color = Color(0xFFB0BEC5).copy(alpha = 0.14f * alpha),
-        radius = moonRadius,
-        center = moonCenter
-    )
+    // 2. Earthshine (unlit side silhouette with clean vector boundary)
+    drawCircle(color = Color(0xFFB0BEC5).copy(alpha = 0.14f * alpha), radius = moonRadius, center = center)
     drawCircle(
         color = Color.White.copy(alpha = 0.16f * alpha),
         radius = moonRadius,
-        center = moonCenter,
+        center = center,
         style = Stroke(width = 1.0.dp.toPx())
     )
 
-    // 3. Illuminated Lunar Body (Geometric vector construction)
+    // 3. Illuminated lunar body
     if (illumination >= 0.90f) {
-        // Full Moon (Badr): Pure crisp geometric disc
-        drawCircle(
-            color = moonColor,
-            radius = moonRadius,
-            center = moonCenter
-        )
-
-        // 3 iconic Google Weather geometric circular craters
-        drawCircle(
-            color = craterColor,
-            radius = moonRadius * 0.22f,
-            center = Offset(moonCenter.x - moonRadius * 0.26f, moonCenter.y - moonRadius * 0.18f)
-        )
-        drawCircle(
-            color = craterColor,
-            radius = moonRadius * 0.16f,
-            center = Offset(moonCenter.x + moonRadius * 0.24f, moonCenter.y + moonRadius * 0.22f)
-        )
-        drawCircle(
-            color = craterColor,
-            radius = moonRadius * 0.12f,
-            center = Offset(moonCenter.x - moonRadius * 0.06f, moonCenter.y + moonRadius * 0.32f)
-        )
+        // Full moon (Badr): pure geometric disc
+        drawCircle(color = moonColor, radius = moonRadius, center = center)
+        for (crater in MoonCraters) {
+            drawCircle(color = craterColor, radius = moonRadius * crater.scale, center = center.offset(crater))
+        }
     } else {
-        // Crescent to Gibbous (Hilal, Tarbi', Ahdab)
-        // Construct clean vector path using boolean geometry
-        val baseCirclePath = Path().apply {
-            addOval(
-                Rect(
-                    moonCenter.x - moonRadius,
-                    moonCenter.y - moonRadius,
-                    moonCenter.x + moonRadius,
-                    moonCenter.y + moonRadius
-                )
-            )
-        }
-
-        val illuminatedPath = Path()
-
-        if (illumination <= 0.50f) {
-            // Crescent: Base circle MINUS an offset subtractive circle
-            val normIllum = (illumination / 0.50f).coerceIn(0.04f, 1.0f)
-            val shadowOffset = moonRadius * (1.95f - normIllum * 1.05f)
-            val shadowCenter = Offset(
-                if (isWaxing) moonCenter.x - shadowOffset else moonCenter.x + shadowOffset,
-                moonCenter.y
-            )
-            val shadowRadius = moonRadius * (1.02f + (1f - normIllum) * 0.25f)
-            val shadowCirclePath = Path().apply {
-                addOval(
-                    Rect(
-                        shadowCenter.x - shadowRadius,
-                        shadowCenter.y - shadowRadius,
-                        shadowCenter.x + shadowRadius,
-                        shadowCenter.y + shadowRadius
-                    )
-                )
-            }
-            illuminatedPath.op(baseCirclePath, shadowCirclePath, PathOperation.Difference)
+        // Crescent to gibbous (Hilal, Tarbi', Ahdab) built by boolean geometry
+        val normIllum = if (illumination <= 0.50f) {
+            (illumination / 0.50f).coerceIn(0.04f, 1.0f)
         } else {
-            // Gibbous
-            val normIllum = ((illumination - 0.50f) / 0.50f).coerceIn(0f, 1f)
-            val shadowOffset = moonRadius * (1.0f - normIllum) * 1.25f
-            val shadowCenter = Offset(
-                if (isWaxing) moonCenter.x - shadowOffset - moonRadius else moonCenter.x + shadowOffset + moonRadius,
-                moonCenter.y
-            )
-            val shadowRadius = moonRadius * 1.05f
-            val shadowCirclePath = Path().apply {
-                addOval(
-                    Rect(
-                        shadowCenter.x - shadowRadius,
-                        shadowCenter.y - shadowRadius,
-                        shadowCenter.x + shadowRadius,
-                        shadowCenter.y + shadowRadius
-                    )
-                )
+            ((illumination - 0.50f) / 0.50f).coerceIn(0f, 1f)
+        }
+
+        // The shadow circle slides across the lit disc: far off-centre and larger
+        // for a thin crescent, overlapping for a gibbous.
+        val shadowOffset = if (illumination <= 0.50f) {
+            moonRadius * (1.95f - normIllum * 1.05f)
+        } else {
+            moonRadius * (1.0f - normIllum) * 1.25f + moonRadius
+        }
+        val shadowCenterX = if (isWaxing) {
+            center.x - shadowOffset
+        } else {
+            center.x + shadowOffset
+        }
+        val shadowRadius = if (illumination <= 0.50f) {
+            moonRadius * (1.02f + (1f - normIllum) * 0.25f)
+        } else {
+            moonRadius * 1.05f
+        }
+
+        val shadow = Path().apply { addOval(Offset(shadowCenterX, center.y).toRect(shadowRadius)) }
+        val lit = Path()
+        lit.op(Path().apply { addOval(center.toRect(moonRadius)) }, shadow, PathOperation.Difference)
+
+        drawPath(path = lit, color = moonColor, style = Fill)
+
+        // Clip craters inside the illuminated surface so they read as integrated
+        clipPath(lit) {
+            for (crater in MoonCraters) {
+                drawCircle(color = craterColor, radius = moonRadius * crater.scale, center = center.offset(crater))
             }
-            illuminatedPath.op(baseCirclePath, shadowCirclePath, PathOperation.Difference)
         }
 
-        // Draw the illuminated vector shape
+        // Crisp limb outline on the curved edge
         drawPath(
-            path = illuminatedPath,
-            color = moonColor,
-            style = Fill
-        )
-
-        // Clip craters inside illuminated surface so they look integrated
-        clipPath(illuminatedPath) {
-            drawCircle(
-                color = craterColor,
-                radius = moonRadius * 0.22f,
-                center = Offset(moonCenter.x - moonRadius * 0.22f, moonCenter.y - moonRadius * 0.16f)
-            )
-            drawCircle(
-                color = craterColor,
-                radius = moonRadius * 0.15f,
-                center = Offset(moonCenter.x + moonRadius * 0.20f, moonCenter.y + moonRadius * 0.20f)
-            )
-            drawCircle(
-                color = craterColor,
-                radius = moonRadius * 0.11f,
-                center = Offset(moonCenter.x - moonRadius * 0.05f, moonCenter.y + moonRadius * 0.28f)
-            )
-        }
-
-        // Crisp vector limb outline on the curved edge
-        drawPath(
-            path = illuminatedPath,
+            path = lit,
             color = Color.White.copy(alpha = 0.55f * alpha),
             style = Stroke(width = 1.2.dp.toPx())
         )
     }
 }
 
-/**
- * Renders layered atmospheric cloud wisps with continuous horizontal drift.
- */
-private fun DrawScope.drawAtmosphericClouds(
-    width: Float,
-    height: Float,
-    drift: Float,
-    cloudTint: Color
-) {
-    if (cloudTint.alpha < 0.04f) return
+/** A crater, positioned as a fraction of the moon's radius. */
+private data class MoonCrater(val dx: Float, val dy: Float, val scale: Float)
 
-    val driftPx1 = (drift * width * 1.2f) % (width * 1.5f) - (width * 0.25f)
-    val driftPx2 = ((drift * 0.7f + 0.4f) * width * 1.2f) % (width * 1.5f) - (width * 0.25f)
+private val MoonCraters = listOf(
+    MoonCrater(-0.24f, -0.17f, 0.20f),
+    MoonCrater(0.22f, 0.21f, 0.15f),
+    MoonCrater(-0.06f, 0.30f, 0.11f)
+)
 
-    // High Atmospheric Wisp (Layer 1)
-    val cloudPath1 = Path().apply {
-        val y1 = height * 0.24f
-        moveTo(-width * 0.2f + driftPx1, y1)
-        cubicTo(
-            width * 0.15f + driftPx1, y1 - 18.dp.toPx(),
-            width * 0.45f + driftPx1, y1 + 12.dp.toPx(),
-            width * 0.75f + driftPx1, y1 - 10.dp.toPx()
-        )
-        cubicTo(
-            width * 0.95f + driftPx1, y1 - 4.dp.toPx(),
-            width * 1.15f + driftPx1, y1 + 14.dp.toPx(),
-            width * 1.35f + driftPx1, y1
-        )
-        lineTo(width * 1.35f + driftPx1, y1 + 22.dp.toPx())
-        cubicTo(
-            width * 1.05f + driftPx1, y1 + 34.dp.toPx(),
-            width * 0.65f + driftPx1, y1 + 16.dp.toPx(),
-            width * 0.25f + driftPx1, y1 + 28.dp.toPx()
-        )
-        close()
-    }
-    drawPath(path = cloudPath1, color = cloudTint.copy(alpha = cloudTint.alpha * 0.35f), style = Fill)
+private fun Offset.offset(crater: MoonCrater) = Offset(x + crater.dx, y + crater.dy)
 
-    // Mid-Atmospheric Cirrus Vapor (Layer 2)
-    val cloudPath2 = Path().apply {
-        val y2 = height * 0.42f
-        moveTo(-width * 0.2f + driftPx2, y2)
-        cubicTo(
-            width * 0.20f + driftPx2, y2 + 14.dp.toPx(),
-            width * 0.50f + driftPx2, y2 - 20.dp.toPx(),
-            width * 0.80f + driftPx2, y2 + 8.dp.toPx()
-        )
-        cubicTo(
-            width * 1.00f + driftPx2, y2 + 16.dp.toPx(),
-            width * 1.20f + driftPx2, y2 - 6.dp.toPx(),
-            width * 1.40f + driftPx2, y2
-        )
-        lineTo(width * 1.40f + driftPx2, y2 + 25.dp.toPx())
-        cubicTo(
-            width * 0.90f + driftPx2, y2 + 35.dp.toPx(),
-            width * 0.40f + driftPx2, y2 + 18.dp.toPx(),
-            -width * 0.2f + driftPx2, y2 + 28.dp.toPx()
-        )
-        close()
-    }
-    drawPath(path = cloudPath2, color = cloudTint.copy(alpha = cloudTint.alpha * 0.45f), style = Fill)
-}
+private fun Offset.toRect(radius: Float) = Rect(
+    left = x - radius,
+    top = y - radius,
+    right = x + radius,
+    bottom = y + radius
+)
 
 private data class HorizonSilhouette(
     val backDune: Path,
@@ -871,4 +727,3 @@ private fun Density.buildHorizonSilhouette(width: Float, height: Float): Horizon
         finial = Offset(minaretX, minaretTopY - 2.dp.toPx())
     )
 }
-

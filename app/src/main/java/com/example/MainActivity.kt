@@ -75,7 +75,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.ui.SalahViewModel
-import com.example.ui.home.HomeScreen
+import com.example.ui.home.TodayScreen
 import com.example.ui.localization.LocalStrings
 import com.example.ui.localization.ProvideAppLanguage
 import com.example.ui.prayer.PrayerScreen
@@ -110,6 +110,22 @@ enum class SalahDestination(
     QIBLA("qibla", Icons.Filled.Explore, Icons.Outlined.Explore),
     SETTINGS("settings", Icons.Filled.Settings, Icons.Outlined.Settings)
 }
+
+/**
+ * The four destinations the bottom bar offers.
+ *
+ * A list rather than `entries`, because the bar is not every destination. Prayer
+ * is one of the app's real screens - calculation method, madhhab, the month
+ * table, and the day switcher the Today page follows - but it is reached from
+ * Settings rather than from the dock, so five tabs became four and the phone's
+ * dock stopped being the widest thing on screen.
+ */
+private val SALAH_TABS = listOf(
+    SalahDestination.TODAY,
+    SalahDestination.QURAN,
+    SalahDestination.QIBLA,
+    SalahDestination.SETTINGS
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -244,19 +260,13 @@ private fun SalahApp(viewModel: SalahViewModel) {
                 modifier = Modifier.fillMaxSize()
             ) {
                 composable(SalahDestination.TODAY.route) {
-                    HomeScreen(
+                    TodayScreen(
                         state = uiState,
-                        onTogglePrayer = viewModel::togglePrayerCompleted,
+                        onLocationClick = { navController.navigateTab(SalahDestination.SETTINGS) },
                         onContinueReadingClick = {
                             viewModel.jumpToContinueReading()
                             navController.navigateTab(SalahDestination.QURAN)
-                        },
-                        onOpenPrayerTimes = { navController.navigateTab(SalahDestination.PRAYER) },
-                        onLocationClick = { navController.navigateTab(SalahDestination.SETTINGS) },
-                        onRefreshClick = viewModel::refreshData,
-                        onToggleGlobalSilent = viewModel::toggleGlobalSilentMode,
-                        onCyclePrayerAlertMode = viewModel::cyclePrayerAlertMode,
-                        onSilenceActiveAlert = viewModel::stopAudioPreview
+                        }
                     )
                 }
 
@@ -264,7 +274,8 @@ private fun SalahApp(viewModel: SalahViewModel) {
                     PrayerScreen(
                         state = uiState,
                         onMethodChange = viewModel::setCalculationMethod,
-                        onMadhhabChange = viewModel::setMadhhab
+                        onMadhhabChange = viewModel::setMadhhab,
+                        onSelectDate = viewModel::setSelectedDate
                     )
                 }
 
@@ -309,6 +320,7 @@ private fun SalahApp(viewModel: SalahViewModel) {
                         onPrePrayerToggle = viewModel::setPrePrayerAlert,
                         onVibrateOnlyToggle = viewModel::setVibrateOnly,
                         onGlobalSilentToggle = viewModel::toggleGlobalSilentMode,
+                        onOpenPrayerTimes = { navController.navigateTab(SalahDestination.PRAYER) },
                         onAutoSilentDuringPrayerToggle = viewModel::toggleAutoSilentDuringPrayer,
                         onAutoSilentDurationChange = viewModel::setAutoSilentDuration,
                         onLanguageSelect = viewModel::setLanguage,
@@ -454,7 +466,7 @@ private fun SalahNavigationBar(
             tonalElevation = 0.dp,
             windowInsets = WindowInsets.navigationBars
         ) {
-            SalahDestination.entries.forEach { destination ->
+            SALAH_TABS.forEach { destination ->
                 val selected = currentRoute == destination.route
                 val label = when (destination) {
                     SalahDestination.TODAY -> strings.navToday
