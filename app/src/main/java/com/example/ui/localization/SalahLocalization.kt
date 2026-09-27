@@ -418,6 +418,10 @@ data class UiStringsMore(
     val selected: String = "Selected",
     val notSelected: String = "Not selected",
     val nowReading: String = "Now reading",
+    val loadingQuranMessage: String =
+        "Preparing the text. If this does not finish, go back and pick the surah again.",
+    val noSurahMatchMessage: String =
+        "No surah matches that. Try a number, or part of a name.",
     val juzLabel: String = "Juz\u2019",
     val selectLayoutTitle: String = "Reading layout",
     val selectLayoutSubtitle: String = "Per verse suits study; continuous suits reading straight through.",

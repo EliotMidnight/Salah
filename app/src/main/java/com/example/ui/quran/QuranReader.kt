@@ -27,7 +27,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material3.HorizontalDivider
@@ -37,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -137,17 +141,30 @@ fun QuranReader(
     var selectedAyah by rememberSaveable { mutableStateOf(0) }
 
     val listState = rememberLazyListState()
-    val resumeIndex = remember(state.continueReading.surahNumber, surah.number) {
-        if (state.continueReading.surahNumber == surah.number) {
-            ayahs.indexOfFirst { it.ayahNumber == state.continueReading.ayahNumber }.coerceAtLeast(0)
-        } else {
-            0
-        }
-    }
 
-    // Jump to the saved position once per surah, not on every recomposition.
-    LaunchedEffect(surah.number) {
-        if (resumeIndex > 0) listState.scrollToItem(resumeIndex + 1)
+    // Open on the right ayah, and open it only once.
+    //
+    // `state.activeReadingAyahNumber` is the position the ViewModel resolved. It
+    // is what the Reference tab needs: selectPage/Juz/Hizb resolve to a surah
+    // *and* an ayah, and the reader used to discard the ayah and open at the top
+    // of the surah - so tapping page 300 landed you on page 1's worth of text.
+    //
+    // Keyed on the surah and the layout rather than remembered against
+    // `activeReadingAyahNumber`, because that value also moves while the user
+    // scrolls and a remember() keyed on it would fight the reader.
+    //
+    // This also clears the selection on a surah change. It used to survive, so
+    // selecting verse 50 and then changing surah opened the verse inspector on
+    // verse 50 of a surah the user had never tapped.
+    LaunchedEffect(surah.number, layout) {
+        val target = state.activeReadingAyahNumber.coerceIn(1, ayahs.size.coerceAtLeast(1))
+        if (layout == QuranReadingLayout.PER_VERSE) {
+            selectedAyah = 0
+            val index = ayahs.indexOfFirst { it.ayahNumber == target }.coerceAtLeast(0)
+            if (index > 0) listState.scrollToItem(index + 1)
+        } else {
+            selectedAyah = target
+        }
     }
 
     // Record progress, debounced. This wrote to the database on every scroll step.
@@ -157,6 +174,16 @@ fun QuranReader(
             .distinctUntilChanged()
             .debounce(400)
             .collect { index -> ayahs.getOrNull(index - 1)?.let(onAyahViewed) }
+    }
+
+    // Continuous is the *default* layout, so this is the effect that actually
+    // runs for most users. Without it the saved reading position never moved in
+    // the default layout, which meant the library's Continue Reading hero - the
+    // element meant to answer "where was I?" - stayed empty or permanently stale
+    // unless the user had switched to per-verse first.
+    LaunchedEffect(selectedAyah, layout) {
+        if (layout != QuranReadingLayout.CONTINUOUS) return@LaunchedEffect
+        ayahs.firstOrNull { it.ayahNumber == selectedAyah }?.let(onAyahViewed)
     }
 
     Column(
@@ -180,8 +207,15 @@ fun QuranReader(
         )
 
         if (ayahs.isEmpty()) {
+            // This is the first frame on launch, because currentSurahAyahs starts
+            // empty - and it is also what the user would stare at forever if the
+            // corpus ever failed to produce verses. A bare "Loading" with no
+            // message, no icon and no exit covered both cases and explained
+            // neither. Say what is happening, and say what to do if it persists.
             EmptyState(
                 title = strings.more.loading,
+                message = strings.more.loadingQuranMessage,
+                icon = Icons.Default.MenuBook,
                 modifier = Modifier.fillMaxSize()
             )
             return@Column
@@ -503,7 +537,11 @@ private fun ContinuousReading(
     }
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
 
-    val accessibilityActions = remember(ayahs) {
+    // Keyed on `selectedAyah` as well as `ayahs`. It used to be remembered
+    // against `ayahs` alone, so the captured `selectedAyah` was frozen at its
+    // first value: after one selection every action compared against a stale
+    // number and the tap-to-deselect path could never fire.
+    val accessibilityActions = remember(ayahs, selectedAyah) {
         ayahs.map { ayah ->
             CustomAccessibilityAction(
                 label = "${strings.more.selectVerse} ${ayah.ayahNumber}"
@@ -565,6 +603,7 @@ private fun ContinuousReading(
                             it.surahNumber == ayah.surahNumber && it.ayahNumber == ayah.ayahNumber
                         },
                         isPlaying = state.isAudioPlaying && state.currentAudioAyah == ayah.ayahNumber,
+                        fontScale = state.quranFontScale,
                         onDismiss = { onSelectAyah(0) },
                         onToggleBookmark = { onToggleBookmark(ayah) },
                         onTogglePlay = { onTogglePlayAyah(ayah) },
@@ -693,6 +732,7 @@ private fun VerseInspector(
     ayah: Ayah,
     isBookmarked: Boolean,
     isPlaying: Boolean,
+    fontScale: Float,
     onDismiss: () -> Unit,
     onToggleBookmark: () -> Unit,
     onTogglePlay: () -> Unit,
@@ -736,7 +776,14 @@ private fun VerseInspector(
 
             Text(
                 text = "${ayah.textArabic} ۝${QuranDataSource.toArabicDigits(ayah.ayahNumber)}",
-                style = MaterialTheme.typography.bodyLarge.copy(fontSize = 19.sp, lineHeight = 32.sp),
+                // The same base size and line height the mushaf uses, so the
+                // inspector tracks the Text Size slider. It was pinned at 19sp
+                // while the page it quotes ran 17-38sp, which meant the setting
+                // silently did nothing here and 19sp sat off the type scale.
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = (24 * fontScale).sp,
+                    lineHeight = (32 * fontScale).sp
+                ),
                 fontFamily = ArabicFamily,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.End,
@@ -761,8 +808,20 @@ private fun VerseInspector(
                     modifier = Modifier.size(MaterialTheme.layoutMetrics.minTouchTarget)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = strings.more.playVerse,
+                        // Honours `isPlaying`. This was a dead parameter: the
+                        // caller computed it and the body never read it, so a
+                        // verse that was playing offered no pause and TalkBack
+                        // announced "Play" on it.
+                        imageVector = if (isPlaying) {
+                            Icons.Default.Pause
+                        } else {
+                            Icons.Default.PlayArrow
+                        },
+                        contentDescription = if (isPlaying) {
+                            strings.more.pauseVerse
+                        } else {
+                            strings.more.playVerse
+                        },
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp)
                     )
@@ -796,6 +855,15 @@ private fun VerseInspector(
                     iconRes = R.drawable.salah_quran_translation,
                     label = strings.more.copyVerse,
                     onClick = { copyVerse(context, clipboard, ayah, strings.more.verseCopied) }
+                )
+                // Share belongs here too. It existed only on the per-verse block,
+                // so reaching it meant switching reading layout - and the
+                // inspector is what continuous mode shows, continuous being the
+                // default.
+                VerseTextAction(
+                    iconRes = R.drawable.salah_quran_recitation,
+                    label = strings.more.shareVerse,
+                    onClick = { shareVerse(context, ayah, strings.more.shareVerse) }
                 )
             }
         }
@@ -1191,7 +1259,7 @@ private fun AudioStrip(
                 color = MaterialTheme.colorScheme.primaryContainer,
                 shape = QuranShape.pill,
                 modifier = Modifier
-                    .heightIn(min = 40.dp)
+                    .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
                     .clip(QuranShape.pill)
                     .clickable(onClick = onStop)
             ) {
@@ -1225,7 +1293,7 @@ private fun SurahPicker(current: Int, onSelect: (Int) -> Unit, onDismiss: () -> 
 
     OptionSheet(
         title = strings.more.selectSurah,
-        subtitle = "${QuranDataSource.SURAHS.size} ${strings.more.surahsTab.lowercase()}",
+        subtitle = strings.more.corpusSummary,
         onDismiss = onDismiss
     ) {
         com.example.ui.components.SearchInput(
@@ -1235,11 +1303,22 @@ private fun SurahPicker(current: Int, onSelect: (Int) -> Unit, onDismiss: () -> 
             placeholder = strings.more.search
         )
         Spacer(Modifier.height(space.sm))
-        Column(
-            modifier = Modifier
-                .heightIn(max = 420.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
+        if (filtered.isEmpty()) {
+            // A non-matching query used to render the search field over blank
+            // space, with no explanation and no way back except retyping.
+            EmptyState(
+                title = strings.more.noSearchResults,
+                message = strings.more.noSurahMatchMessage,
+                icon = Icons.Default.Search,
+                action = {
+                    TextButton(onClick = { query = "" }) { Text(strings.more.clearSearch) }
+                }
+            )
+        } else {
+            // No inner scroll. OptionSheet's content is already a vertical
+            // scroll, so wrapping the list in a second one gave two competing
+            // drag consumers and pinned the list to a raw 420dp that dominated
+            // the sheet in landscape.
             filtered.forEach { surah ->
                 OptionRow(
                     title = "${surah.number}. ${surah.englishName}",
