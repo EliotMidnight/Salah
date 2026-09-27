@@ -54,13 +54,11 @@ fun skyBands(palette: SkyColorPalette, page: Color): SkyBands {
 }
 
 /**
- * The default background for the Today screen: a still sky.
+ * The background for the Today screen: a still sky.
  *
- * The animated [LivingSkyCanvas] remains available behind a Settings toggle, but
- * it is no longer the default, and this is what replaced it.
- *
- * The animated sky is a continuously moving, high-contrast field, and text on top
- * of it needed six layout-bound probes per frame to decide between dark and light
+ * It replaced an animated sky, which was a continuously moving high-contrast
+ * field; text on top of it needed six layout-bound probes per frame to decide
+ * between dark and light
  * type, plus a drop shadow on every string, plus translucent surfaces and borders
  * to keep rows readable.
  *

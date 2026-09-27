@@ -320,7 +320,6 @@ private fun SalahApp(viewModel: SalahViewModel) {
                         onPrePrayerToggle = viewModel::setPrePrayerAlert,
                         onVibrateOnlyToggle = viewModel::setVibrateOnly,
                         onGlobalSilentToggle = viewModel::toggleGlobalSilentMode,
-                        onOpenPrayerTimes = { navController.navigateTab(SalahDestination.PRAYER) },
                         onAutoSilentDuringPrayerToggle = viewModel::toggleAutoSilentDuringPrayer,
                         onAutoSilentDurationChange = viewModel::setAutoSilentDuration,
                         onLanguageSelect = viewModel::setLanguage,
@@ -342,7 +341,6 @@ private fun SalahApp(viewModel: SalahViewModel) {
                         onTranslationSelect = viewModel::setTranslationEdition,
                         onRecomputeEphemerisCache = viewModel::recomputeEphemerisCache,
                         onResetAllSettings = viewModel::resetAllSettings,
-                        onLivingSkyChange = viewModel::setLivingSkyEnabled
                     )
                 }
             }

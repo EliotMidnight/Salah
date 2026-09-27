@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -51,6 +54,7 @@ import com.example.ui.components.ConfirmDialog
 import com.example.ui.components.DetailList
 import com.example.ui.components.LabeledSlider
 import com.example.ui.components.OptionRow
+import com.example.data.model.CapitalLocations
 import com.example.ui.components.OptionSheet
 import com.example.ui.components.RowDivider
 import com.example.ui.components.ScreenScaffold
@@ -156,9 +160,7 @@ fun SettingsScreen(
     onTranslationSelect: (String) -> Unit = {},
     onRecomputeEphemerisCache: () -> Unit = {},
     onResetAllSettings: () -> Unit = {},
-    onLivingSkyChange: (Boolean) -> Unit = {},
     onFetchLocation: () -> Unit = {},
-    onOpenPrayerTimes: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
@@ -197,28 +199,11 @@ fun SettingsScreen(
                     value = if (state.timeFormat24h) "24h" else "12h",
                     onClick = { onTimeFormatToggle(!state.timeFormat24h) }
                 )
-                RowDivider()
-                ToggleRow(
-                    title = strings.more.livingSkyLabel,
-                    subtitle = strings.more.livingSkyDescription,
-                    checked = state.livingSkyEnabled,
-                    onCheckedChange = onLivingSkyChange,
-                    testTag = "setting_living_sky"
-                )
             }
 
             // -- Location & calculation -----------------------------------
             SectionHeader(strings.more.sectionLocationAndCalculation)
             SectionGroup {
-                // Prayer is off the bottom dock, so this is the way in. Its month
-                // table - a whole Gregorian month of prayer times, which nothing
-                // else in the app shows - lives only on that screen.
-                ActionRow(
-                    title = strings.more.prayerTimesTitle,
-                    value = state.method.title,
-                    onClick = onOpenPrayerTimes
-                )
-                RowDivider()
                 ActionRow(
                     title = strings.locationLabel,
                     subtitle = state.location.name,
@@ -522,6 +507,42 @@ fun SettingsScreen(
                         }
                     )
                 }
+
+            RowDivider()
+
+            // Every country's capital, so a location is a name away rather than
+            // two numbers. Bounded and lazy: the sheet's own content is a
+            // scrolling column, and 195 rows composed eagerly inside one is a
+            // visible stutter on open.
+            SectionHeader(strings.more.allCountriesTitle)
+            val capitals = remember(cityQuery) { CapitalLocations.search(cityQuery) }
+            if (capitals.isEmpty()) {
+                Text(
+                    text = strings.more.noSearchResults,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = space.md)
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(space.xs)
+                ) {
+                    items(capitals, key = { it.country }) { entry ->
+                        val location = entry.toLocation()
+                        OptionRow(
+                            title = entry.capital,
+                            description = entry.country,
+                            selected = location.name == state.location.name &&
+                                location.country == state.location.country,
+                            onClick = {
+                                onLocationSelect(location)
+                                sheet = null
+                            }
+                        )
+                    }
+                }
+            }
 
             RowDivider()
 

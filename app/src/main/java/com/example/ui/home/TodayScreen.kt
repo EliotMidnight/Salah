@@ -1,12 +1,6 @@
 package com.example.ui.home
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -70,13 +64,10 @@ import com.example.engine.HijriCalendarEngine
 import com.example.engine.PrayerCalculationEngine
 import com.example.engine.QiblaEngine
 import com.example.ui.SalahUiState
-import com.example.ui.compose.CelestialClock
-import com.example.ui.compose.ClockFaceLabels
-import com.example.ui.compose.ClockLayout
 import com.example.ui.localization.LocalStrings
 import com.example.ui.localization.prayerName
 import com.example.ui.localization.isArabicInterface
-import com.example.ui.localization.ClockStrings
+import com.example.ui.localization.DateNavStrings
 import com.example.ui.theme.Motion
 import com.example.ui.theme.layoutMetrics
 import com.example.ui.theme.HandwritingFamily
@@ -117,7 +108,6 @@ fun TodayScreen(
         DateTimeFormatter.ofPattern(if (state.timeFormat24h) "HH:mm" else "h:mm a")
     }
 
-    var clockOpen by rememberSaveable { mutableStateOf(false) }
     var showMonth by rememberSaveable { mutableStateOf(false) }
     // How far the reader has walked from the shared date with this page's own
     // arrows. Kept as an offset rather than a second selected date, so the two
@@ -225,61 +215,36 @@ fun TodayScreen(
 
             Spacer(Modifier.height(space.xl))
 
-            // 2. The page itself. One tap target wraps both views so "tap for the
-            //    full clock" is literally true anywhere on the screen.
+            // 2. The page itself. No tap target: the 24-hour clock is gone, and
+            //    with it the gesture that was the only reason to make the whole
+            //    page tappable.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(
-                        onClickLabel = strings.clock.tapForFullClock,
-                        onClick = { clockOpen = !clockOpen }
-                    )
                     .padding(horizontal = space.lg),
                 contentAlignment = Alignment.Center
             ) {
-                AnimatedContent(
-                    targetState = clockOpen,
-                    transitionSpec = {
-                        (fadeIn(tween(Motion.duration(300))) + scaleIn(initialScale = 0.94f))
-                            .togetherWith(
-                                fadeOut(tween(Motion.duration(150))) + scaleOut(targetScale = 0.98f)
-                            )
-                    },
-                    label = "todayView"
-                ) { open ->
-                    if (open) {
-                        ClockView(
-                            times = times,
-                            now = now,
-                            currentPrayer = currentPrayer,
-                            isToday = isToday,
-                            timeFormatter = timeFormatter,
-                            state = state
-                        )
-                    } else {
-                        SimpleView(
-                            currentPrayer = currentPrayer,
-                            isArabicUi = isArabicUi,
-                            nextPrayer = nextPrayer,
-                            nextTime = nextPrayer?.let { times[it] },
-                            countdown = countdown,
-                            isToday = isToday,
-                            times = times,
-                            date = date,
-                            hijri = hijri,
-                            dayOffset = dayOffset,
-                            onShiftDate = { dayOffset = it },
-                            onShowMonth = { showMonth = true },
-                            onContinueReadingClick = onContinueReadingClick,
-                            continueReadingRef = continueReadingRef,
-                            sunAltitude = sunAltitude,
-                            sunAzimuth = sunAzimuth,
-                            isSetting = isSetting,
-                            hijriDay = hijri.day,
-                            timeFormatter = timeFormatter
-                        )
-                    }
-                }
+                SimpleView(
+                    currentPrayer = currentPrayer,
+                    isArabicUi = isArabicUi,
+                    nextPrayer = nextPrayer,
+                    nextTime = nextTime,
+                    countdown = countdown,
+                    isToday = isToday,
+                    times = times,
+                    date = date,
+                    hijri = hijri,
+                    dayOffset = dayOffset,
+                    onShiftDate = { dayOffset = it },
+                    onShowMonth = { showMonth = true },
+                    onContinueReadingClick = onContinueReadingClick,
+                    continueReadingRef = continueReadingRef,
+                    sunAltitude = sunAltitude,
+                    sunAzimuth = sunAzimuth,
+                    isSetting = isSetting,
+                    hijriDay = hijri.day,
+                    timeFormatter = timeFormatter
+                )
             }
         }
     }
@@ -297,6 +262,22 @@ fun TodayScreen(
         )
     }
 }
+
+/**
+ * The prayers in day order, which is the order the list below uses.
+ *
+ * Sunrise is in it even though it is not one of the five: the point of the list
+ * is to be the whole day, and a row that came and went with the season would be
+ * worse than one that does not pray.
+ */
+private val PrayerListOrder = listOf(
+    Prayer.FAJR,
+    Prayer.SUNRISE,
+    Prayer.DHUHR,
+    Prayer.ASR,
+    Prayer.MAGHRIB,
+    Prayer.ISHA
+)
 
 /**
  * The default view: which prayer it is, when it was, what is next, and the
@@ -420,7 +401,7 @@ private fun SimpleView(
                 horizontalArrangement = Arrangement.spacedBy(space.sm)
             ) {
                 Text(
-                    text = strings.clock.nextPrayerPrefix.uppercase(),
+                    text = strings.dateNav.nextPrayerPrefix.uppercase(),
                     fontSize = size,
                     lineHeight = size * 1.2f,
                     fontWeight = FontWeight.Bold,
@@ -495,7 +476,7 @@ private fun SimpleView(
         // weight than the prayer times, and the whole point is that they are the
         // quiet way out of this page.
         LinkRow(
-            label = LocalStrings.current.clock.fullHijriMonth,
+            label = LocalStrings.current.dateNav.fullHijriMonth,
             onClick = onShowMonth
         )
         LinkRow(
@@ -666,151 +647,6 @@ private fun LeaderDots(colour: Color, modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * The 24-hour clock, with the same centre the simple view shows.
- *
- * The window readout below the dial is the reason the special arcs exist at
- * all: an arc you are currently inside brightens, and this line says which one
- * in words, so the highlight is never the only signal.
- */
-@Composable
-private fun ClockView(
-    times: Map<Prayer, LocalTime>,
-    now: LocalTime,
-    currentPrayer: Prayer,
-    isToday: Boolean,
-    timeFormatter: DateTimeFormatter,
-    state: SalahUiState
-) {
-    val strings = LocalStrings.current
-    val space = Space.current
-    val onSurface = MaterialTheme.colorScheme.onSurface
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val accent = MaterialTheme.colorScheme.primary
-    val maghrib = times[Prayer.MAGHRIB] ?: return
-
-    val layout = remember(maghrib, times) { ClockLayout.build(maghrib, times) }
-    val nowHour = ClockGeometry.hoursOf(now)
-    val active = layout.at(nowHour)
-
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        // The dial is a square, but its labels sit on a 57-unit radius around a
-        // 100-unit box, so they hang off the top, bottom and sides. The labels
-        // are allowed to overflow the box - that is what puts them outside the
-        // ring - so everything *after* the dial has to clear that overhang
-        // itself, or it lands on the Sunrise and Fajr labels.
-        val labelOverhang = maxWidth * 0.10f
-
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                CelestialClock(
-                    now = now,
-                    maghrib = maghrib,
-                    prayerTimes = times,
-                    currentPrayer = currentPrayer,
-                    accent = accent,
-                    accentBright = accent,
-                    accentDim = accent.copy(alpha = 0.55f),
-                    marker = muted,
-                    qiblaBearing = state.qiblaBearing,
-                    compassAzimuth = state.compassAzimuth,
-                    showQibla = true,
-                    modifier = Modifier.fillMaxSize()
-                )
-                ClockFaceLabels(
-                    layout = layout,
-                    prayerTimes = times,
-                    currentPrayer = currentPrayer,
-                    timeFormatter = timeFormatter,
-                    modifier = Modifier.fillMaxSize()
-                )
-
-                // The dial's middle. The webapp puts the countdown here too; we
-                // keep it to the prayer, because the countdown is already on the
-                // simple view and repeating it invites two answers to "how long".
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = currentPrayer.arabicName,
-                        fontFamily = FontFamily.Serif,
-                        fontSize = 34.sp,
-                        lineHeight = 40.sp,
-                        color = accent,
-                        textAlign = TextAlign.Center
-                    )
-                    Text(
-                        text = strings.prayerName(currentPrayer),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = onSurface
-                    )
-                    if (isToday) {
-                        Spacer(Modifier.height(space.xs))
-                        Text(
-                            text = strings.clock.tapToCloseClock,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = muted.copy(alpha = 0.7f)
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(labelOverhang))
-
-            // Which window, if any, we are inside right now.
-            val readout = activeWindowReadout(layout, active, timeFormatter, isFriday(), strings.clock)
-            if (readout != null) {
-                Spacer(Modifier.height(space.sm))
-                Text(
-                    text = readout,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = accent,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-    }
-}
-
-/**
- * The one line under the dial naming whichever window is current.
- *
- * This is the only place the highlighted arcs are explained in words. An arc
- * that brightens while you are inside it is a pleasant detail; a bright arc
- * with no label is a puzzle. The windows cannot overlap in practice, but the
- * order here is the order they are drawn in, so the text and the highlight can
- * never disagree about which is which.
- */
-private fun activeWindowReadout(
-    layout: ClockLayout,
-    active: com.example.ui.compose.ActiveClockLayout,
-    timeFormatter: DateTimeFormatter,
-    isFriday: Boolean,
-    strings: ClockStrings
-): String? {
-    return when {
-        active.inDuha -> strings.duhaUntil.format(layout.duha.endHour.asLocalTime().format(timeFormatter))
-        active.inQaylula -> strings.qaylulaUntil.format(layout.qaylula.endHour.asLocalTime().format(timeFormatter))
-        active.inLastThird -> strings.lastThirdUntilFajr
-        active.inFirstThird -> strings.firstThirdUntil.format(layout.firstThird.endHour.asLocalTime().format(timeFormatter))
-        isFriday -> strings.jumuahDuaUntil
-        else -> null
-    }
-}
-
-/** An hour-of-day as a [LocalTime], for formatting a segment's closing bound. */
-private fun Float.asLocalTime(): LocalTime {
-    val totalMinutes = (this * 60f).toInt().coerceIn(0, 24 * 60 - 1)
-    return LocalTime.of(totalMinutes / 60, totalMinutes % 60)
-}
-
-private fun isFriday(): Boolean = LocalDate.now().dayOfWeek.value == 5
 
 // ---------------------------------------------------------------------------
 // Facts about a day, derived from the timetable the engine already produced.

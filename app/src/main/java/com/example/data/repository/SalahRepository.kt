@@ -118,16 +118,6 @@ class SalahRepository(
     private val _prayerAlertModesFlow = MutableStateFlow(loadPrayerAlertModes())
     val prayerAlertModesFlow: StateFlow<Map<Prayer, String>> = _prayerAlertModesFlow.asStateFlow()
 
-    /**
-     * Whether the Today screen animates its background sky.
-     *
-     * Defaults to off. The animated sky is the app's signature visual, but it is
-     * also continuous full-screen motion and a measurable battery cost, so it is
-     * opt-in rather than something every user pays for.
-     */
-    private val _livingSkyFlow = MutableStateFlow(prefs.getBoolean("pref_living_sky", false))
-    val livingSkyFlow: StateFlow<Boolean> = _livingSkyFlow.asStateFlow()
-
     private fun loadPrayerAlertModes(): Map<Prayer, String> {
         return Prayer.entries.associateWith { prayer ->
             val defaultMode = if (prayer == Prayer.SUNRISE) "Silent Reminder" else "Full Adhan"
@@ -344,11 +334,6 @@ class SalahRepository(
     fun setReciter(reciter: String) {
         prefs.edit().putString("pref_reciter", reciter).apply()
         _reciterFlow.value = reciter
-    }
-
-    fun setLivingSkyEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean("pref_living_sky", enabled).apply()
-        _livingSkyFlow.value = enabled
     }
 
     // Room DB delegated methods

@@ -29,7 +29,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.ViewAgenda
@@ -52,6 +56,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ClipboardManager
@@ -233,7 +239,10 @@ fun QuranReader(
                 showTranslations = showTranslations,
                 onToggleTranslations = { showTranslations = !showTranslations },
                 onChangeSurah = onSelectSurah,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .pinchToResize(state.quranFontScale, onFontScaleChange)
+                    .swipeToChangeSurah(surah.number, onChange = onSelectSurah)
             )
 
             QuranReadingLayout.PER_VERSE -> PerVerseReading(
@@ -246,7 +255,10 @@ fun QuranReader(
                 showTranslations = showTranslations,
                 onToggleTranslations = { showTranslations = !showTranslations },
                 onChangeSurah = onSelectSurah,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .pinchToResize(state.quranFontScale, onFontScaleChange)
+                    .swipeToChangeSurah(surah.number, onChange = onSelectSurah)
             )
         }
     }
@@ -826,33 +838,26 @@ private fun VerseInspector(
                         modifier = Modifier.size(20.dp)
                     )
                 }
-                IconButton(
-                    onClick = onToggleBookmark,
-                    modifier = Modifier.size(MaterialTheme.layoutMetrics.minTouchTarget)
-                ) {
-                    Icon(
-                        painter = painterResource(
-                            if (isBookmarked) {
-                                R.drawable.salah_quran_bookmark
-                            } else {
-                                R.drawable.salah_quran_bookmark_closed
-                            }
-                        ),
-                        contentDescription = if (isBookmarked) {
-                            strings.more.removeBookmark
-                        } else {
-                            strings.more.bookmarkVerse
-                        },
-                        tint = if (isBookmarked) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
                 VerseTextAction(
-                    iconRes = R.drawable.salah_quran_translation,
+                    icon = if (isBookmarked) {
+                        Icons.Default.Bookmark
+                    } else {
+                        Icons.Default.BookmarkBorder
+                    },
+                    label = if (isBookmarked) {
+                        strings.more.removeBookmark
+                    } else {
+                        strings.more.bookmarkVerse
+                    },
+                    tint = if (isBookmarked) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    onClick = onToggleBookmark
+                )
+                VerseTextAction(
+                    icon = Icons.Default.ContentCopy,
                     label = strings.more.copyVerse,
                     onClick = { copyVerse(context, clipboard, ayah, strings.more.verseCopied) }
                 )
@@ -861,7 +866,7 @@ private fun VerseInspector(
                 // inspector is what continuous mode shows, continuous being the
                 // default.
                 VerseTextAction(
-                    iconRes = R.drawable.salah_quran_recitation,
+                    icon = Icons.Default.Share,
                     label = strings.more.shareVerse,
                     onClick = { shareVerse(context, ayah, strings.more.shareVerse) }
                 )
@@ -988,38 +993,31 @@ private fun VerseBlock(
                     modifier = Modifier.size(20.dp)
                 )
             }
-            IconButton(
-                onClick = onToggleBookmark,
-                modifier = Modifier.size(MaterialTheme.layoutMetrics.minTouchTarget)
-            ) {
-                Icon(
-                    painter = painterResource(
-                        if (isBookmarked) {
-                            R.drawable.salah_quran_bookmark
-                        } else {
-                            R.drawable.salah_quran_bookmark_closed
-                        }
-                    ),
-                    contentDescription = if (isBookmarked) {
-                        strings.more.removeBookmark
-                    } else {
-                        strings.more.bookmarkVerse
-                    },
-                    tint = if (isBookmarked) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    modifier = Modifier.size(20.dp)
-                )
-            }
             VerseTextAction(
-                iconRes = R.drawable.salah_quran_translation,
+                icon = if (isBookmarked) {
+                    Icons.Default.Bookmark
+                } else {
+                    Icons.Default.BookmarkBorder
+                },
+                label = if (isBookmarked) {
+                    strings.more.removeBookmark
+                } else {
+                    strings.more.bookmarkVerse
+                },
+                tint = if (isBookmarked) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                onClick = onToggleBookmark
+            )
+            VerseTextAction(
+                icon = Icons.Default.ContentCopy,
                 label = strings.more.copyVerse,
                 onClick = { copyVerse(context, clipboard, ayah, strings.more.verseCopied) }
             )
             VerseTextAction(
-                iconRes = R.drawable.salah_quran_recitation,
+                icon = Icons.Default.Share,
                 label = strings.more.shareVerse,
                 onClick = { shareVerse(context, ayah, strings.more.shareVerse) }
             )
@@ -1170,8 +1168,9 @@ private fun PagerButton(
 
 @Composable
 private fun VerseTextAction(
-    iconRes: Int,
+    icon: ImageVector,
     label: String,
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     onClick: () -> Unit
 ) {
     IconButton(
@@ -1179,9 +1178,9 @@ private fun VerseTextAction(
         modifier = Modifier.size(MaterialTheme.layoutMetrics.minTouchTarget)
     ) {
         Icon(
-            painter = painterResource(iconRes),
+            imageVector = icon,
             contentDescription = label,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = tint,
             modifier = Modifier.size(20.dp)
         )
     }
@@ -1203,7 +1202,7 @@ private fun TextSizeRow(scale: Float, onScaleChange: (Float) -> Unit) {
         Slider(
             value = scale,
             onValueChange = onScaleChange,
-            valueRange = 0.7f..1.6f,
+            valueRange = QuranScaleRange,
             modifier = Modifier
                 .weight(1f)
                 .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)

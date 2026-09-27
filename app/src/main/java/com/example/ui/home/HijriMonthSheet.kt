@@ -128,7 +128,7 @@ fun HijriMonthSheet(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = strings.clock.previousMonth,
+                        contentDescription = strings.dateNav.previousMonth,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -156,7 +156,7 @@ fun HijriMonthSheet(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = strings.clock.nextMonth,
+                        contentDescription = strings.dateNav.nextMonth,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
