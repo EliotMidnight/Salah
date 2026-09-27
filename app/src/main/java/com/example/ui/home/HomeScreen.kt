@@ -53,9 +53,11 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
@@ -77,6 +79,7 @@ import com.example.ui.components.StatusBanner
 import com.example.ui.components.StatusDot
 import com.example.ui.components.BannerTone
 import com.example.ui.localization.LocalStrings
+import com.example.ui.localization.alertModeLabel
 import com.example.ui.localization.prayerName
 import com.example.ui.theme.ArabicFamily
 import com.example.ui.theme.Space
@@ -710,7 +713,7 @@ private fun PrayerRow(
             }
 
             Text(
-                text = alertMode.shortLabel(),
+                text = strings.more.alertModeLabel(alertMode),
                 style = MaterialTheme.typography.labelSmall,
                 color = if (alertsSilenced) {
                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -722,7 +725,14 @@ private fun PrayerRow(
                     .clip(MaterialTheme.shapes.extraSmall)
                     .clickable(onClick = onCycleAlert)
                     .padding(horizontal = space.sm, vertical = space.sm)
-                    .semantics { stateDescription = alertMode }
+                    // This is a button, not a label: tapping it cycles the alert
+                    // mode. It had no role and no indication of what the tap
+                    // would do, so TalkBack read it as static text.
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = strings.more.changeAlertMode
+                        stateDescription = strings.more.alertModeLabel(alertMode)
+                    }
             )
 
             Spacer(Modifier.width(space.sm))
@@ -765,14 +775,9 @@ private fun PrayerRow(
     }
 }
 
-/** Short label for an alert mode, used in the prayer row. */
-private fun String.shortLabel(): String = when (this) {
-    "Full Adhan" -> "Adhan"
-    "Takbeer Only" -> "Takbeer"
-    "Gentle Chime" -> "Chime"
-    "Vibrate Only" -> "Vibrate"
-    else -> "Silent"
-}
+// The five prayer-alert mode strings are persisted preference keys, not copy,
+// so they stay English; `alertModeLabel` maps a key to a localized label. See
+// its docstring in SalahLocalization.kt before "fixing" them to be translated.
 
 /** One row that returns the user to where they left off reading. */
 @Composable

@@ -61,12 +61,24 @@ import com.example.ui.components.SectionGroup
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.SegmentedOptions
 import com.example.ui.localization.LocalStrings
+import com.example.ui.localization.alertModeLabel
+import com.example.ui.localization.prayerName
 import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
 import androidx.compose.material3.OutlinedTextField
 
 /** The five alert levels a prayer can be set to, in cycle order. */
 private val ALERT_MODES = listOf("Full Adhan", "Takbeer Only", "Gentle Chime", "Vibrate Only", "Silent")
+
+/**
+ * Sunrise's options.
+ *
+ * Sunrise is seeded with "Silent Reminder" (SalahViewModel), which is not one
+ * of [ALERT_MODES] - and a full adhan at sunrise is not a sensible offer. These
+ * are the levels that make sense for the dawn sign, and they include the seeded
+ * value so the row can show the truth.
+ */
+private val SUNRISE_ALERT_MODES = listOf("Silent Reminder", "Vibrate Only", "Silent")
 private val AUTO_SILENCE_OPTIONS = listOf(15, 20, 30, 45)
 private val ADHAN_SOUNDS = listOf(
     "Makkah Al-Mukarramah",
@@ -220,7 +232,12 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.width(space.sm))
-                        OutlinedButton(onClick = onFetchLocation) {
+                        OutlinedButton(
+                            onClick = onFetchLocation,
+                            modifier = Modifier.heightIn(
+                                min = MaterialTheme.layoutMetrics.minTouchTarget
+                            )
+                        ) {
                             Text(strings.more.useGps, style = MaterialTheme.typography.labelLarge)
                         }
                     }
@@ -286,7 +303,9 @@ fun SettingsScreen(
                     checked = state.prePrayerAlertEnabled,
                     onCheckedChange = onPrePrayerToggle,
                     onClick = { sheet = Sheet.PRE_PRAYER },
-                    testTag = "setting_pre_prayer"
+                    testTag = "setting_pre_prayer",
+                    // Opens a sheet, so it is a button, not a switch.
+                    role = Role.Button
                 )
                 RowDivider()
                 ActionRow(
@@ -312,8 +331,14 @@ fun SettingsScreen(
                     onCheckedChange = onVibrateOnlyToggle,
                     testTag = "setting_vibrate_only"
                 )
+                RowDivider()
+                ToggleRow(
+                    title = strings.autoMasjidModeLabel,
+                    checked = state.autoSilentDuringPrayer,
+                    onCheckedChange = { onAutoSilentDuringPrayerToggle() },
+                    testTag = "setting_auto_silent"
+                )
                 if (state.autoSilentDuringPrayer) {
-                    RowDivider()
                     Column(modifier = Modifier.padding(horizontal = space.md, vertical = space.sm)) {
                         Text(
                             text = strings.more.autoSilenceDurationLabel,
@@ -328,14 +353,6 @@ fun SettingsScreen(
                             onSelect = { onAutoSilentDurationChange(AUTO_SILENCE_OPTIONS[it]) }
                         )
                     }
-                } else {
-                    RowDivider()
-                    ToggleRow(
-                        title = strings.autoMasjidModeLabel,
-                        checked = state.autoSilentDuringPrayer,
-                        onCheckedChange = { onAutoSilentDuringPrayerToggle() },
-                        testTag = "setting_auto_silent"
-                    )
                 }
             }
 
@@ -545,13 +562,17 @@ fun SettingsScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(space.sm)) {
                 OutlinedButton(
                     onClick = { onAdjustmentsChange(com.example.data.model.PrayerAdjustments()) },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
                 ) {
                     Text(strings.more.actionReset, style = MaterialTheme.typography.labelLarge)
                 }
                 OutlinedButton(
                     onClick = { sheet = null },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
                 ) {
                     Text(strings.more.actionClose, style = MaterialTheme.typography.labelLarge)
                 }
@@ -605,18 +626,25 @@ fun SettingsScreen(
             title = strings.more.perPrayerModes,
             onDismiss = { sheet = null }
         ) {
-            // Sunrise was previously rendered here even though the subtitle said the
-            // five obligatory prayers, and its default value ("Silent Reminder") was
-            // not one of the options - so that row showed no selection at all.
+            // Sunrise is offered here because it has a real, separately
+            // configurable alert - it is not one of the five obligatory
+            // prayers, but it does sound. Its seeded value is
+            // "Silent Reminder", which is not in ALERT_MODES, so
+            // `indexOf` returned -1, `coerceAtLeast(0)` turned that into 0,
+            // and the row highlighted "Full Adhan" on first run for every
+            // user - advertising a full adhan call at sunrise that the stored
+            // setting never asked for. Sunrise therefore gets its own option
+            // list, built around the value it is actually seeded with.
             listOf(
                 Prayer.FAJR, Prayer.DHUHR, Prayer.ASR,
                 Prayer.MAGHRIB, Prayer.ISHA, Prayer.SUNRISE
             ).forEach { prayer ->
                 val current = state.prayerAlertModes[prayer] ?: ALERT_MODES.first()
+                val options = if (prayer == Prayer.SUNRISE) SUNRISE_ALERT_MODES else ALERT_MODES
                 Column(modifier = Modifier.padding(vertical = space.sm)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = prayer.englishName,
+                            text = strings.prayerName(prayer),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f)
@@ -635,9 +663,13 @@ fun SettingsScreen(
                     }
                     Spacer(Modifier.height(space.sm))
                     ChipRow(
-                        labels = ALERT_MODES,
-                        selectedIndex = ALERT_MODES.indexOf(current).coerceAtLeast(0),
-                        onSelect = { onPrayerAlertModeChange(prayer, ALERT_MODES[it]) }
+                        // Labels are localized; the values passed back are still
+                        // the stored preference keys.
+                        labels = options.map { strings.more.alertModeLabel(it) },
+                        selectedIndex = options.indexOf(current)
+                            .takeIf { it >= 0 }
+                            ?: options.indexOfFirst { strings.more.alertModeLabel(it) == strings.more.alertModeLabel(current) },
+                        onSelect = { onPrayerAlertModeChange(prayer, options[it]) }
                     )
                 }
                 RowDivider()
@@ -778,7 +810,9 @@ fun SettingsScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(space.sm)) {
                 OutlinedButton(
                     onClick = { onPlayAudioPreview(state.adhanSound) },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(space.xs))
@@ -789,7 +823,9 @@ fun SettingsScreen(
                         onStopAudioPreview()
                         sheet = null
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
                 ) {
                     Text(strings.more.stopAudio, style = MaterialTheme.typography.labelLarge)
                 }
@@ -814,7 +850,9 @@ fun SettingsScreen(
                     onRecomputeEphemerisCache()
                     sheet = null
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
             ) {
                 Text(strings.more.recomputeSchedule, style = MaterialTheme.typography.labelLarge)
             }
@@ -836,7 +874,9 @@ fun SettingsScreen(
                     onClearAudioCache()
                     sheet = null
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
             ) {
                 Text(strings.more.clearAudioCache, style = MaterialTheme.typography.labelLarge)
             }
@@ -897,9 +937,15 @@ private fun ToggleRow(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     onClick: (() -> Unit)? = null,
-    testTag: String? = null
+    testTag: String? = null,
+    // A row that opens a picker is not a switch. The pre-prayer row passes an
+    // `onClick` that opens a bottom sheet, so it was announcing
+    // "Pre-prayer reminder, switch, on, double tap to activate" and then
+    // showing a sheet - role, state and behaviour all disagreeing.
+    role: Role = Role.Switch
 ) {
     val space = Space.current
+    val strings = LocalStrings.current
 
     val toggle: () -> Unit = onClick ?: { onCheckedChange(!checked) }
 
@@ -912,9 +958,13 @@ private fun ToggleRow(
             .then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
             .padding(horizontal = space.md, vertical = space.sm)
             .semantics(mergeDescendants = true) {
-                role = Role.Switch
-                stateDescription = if (checked) "On" else "Off"
-                onClick(label = null) {
+                this.role = role
+                stateDescription = if (role == Role.Switch) {
+                    if (checked) strings.more.stateOn else strings.more.stateOff
+                } else {
+                    ""
+                }
+                onClick(label = if (role == Role.Switch) null else strings.more.actionChange) {
                     toggle()
                     true
                 }
@@ -949,6 +999,7 @@ private fun AdjustmentSliders(
     adjustments: com.example.data.model.PrayerAdjustments,
     onChange: (com.example.data.model.PrayerAdjustments) -> Unit
 ) {
+    val strings = LocalStrings.current
     data class Binding(
         val prayer: Prayer,
         val current: Int
@@ -965,7 +1016,7 @@ private fun AdjustmentSliders(
 
     bindings.forEach { binding ->
         LabeledSlider(
-            label = binding.prayer.englishName,
+            label = strings.prayerName(binding.prayer),
             valueText = if (binding.current >= 0) "+${binding.current}" else "${binding.current}",
             value = binding.current.toFloat(),
             onValueChange = { value ->

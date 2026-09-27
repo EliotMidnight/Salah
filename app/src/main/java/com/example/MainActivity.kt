@@ -1,6 +1,7 @@
 package com.example
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -15,9 +16,12 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -31,21 +35,28 @@ import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -71,6 +82,7 @@ import com.example.ui.settings.SettingsScreen
 import com.example.ui.theme.Motion
 import com.example.ui.theme.SalahReduceMotion
 import com.example.ui.theme.SalahTheme
+import com.example.ui.theme.Space
 import com.example.ui.theme.screenEnterBack
 import com.example.ui.theme.screenEnterForward
 import com.example.ui.theme.screenExitBack
@@ -146,13 +158,36 @@ private fun SalahApp(viewModel: SalahViewModel) {
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
-    ) { }
+    ) { granted ->
+        // Remember the answer either way. If the user declines we must not ask
+        // again on the next cold start - only the system prompt is limited to
+        // two attempts, and our own rationale must not become a nag.
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_ASKED_NOTIFICATIONS, true)
+            .putBoolean(KEY_NOTIFICATIONS_GRANTED, granted)
+            .apply()
+    }
 
-    LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
+    // The permission is no longer requested blind on the first frame.
+    //
+    // It used to fire from LaunchedEffect(Unit), so a first-time user met a
+    // system dialog for notifications before they had seen the app, understood
+    // that it is a prayer app, or been given any reason to say yes. Android's
+    // own guidance and the Material permission pattern both ask for the
+    // rationale first and in context.
+    //
+    // Nothing else in the app requested this permission, so simply deleting the
+    // effect would have meant notifications were never asked for and the adhan
+    // feature failed silently. The rationale below is what replaced it.
+    val askNotifications = remember {
+        !context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_ASKED_NOTIFICATIONS, false)
+    }
+    var showNotificationRationale by rememberSaveable { mutableStateOf(askNotifications) }
+
+    val requestNotifications = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
@@ -279,6 +314,85 @@ private fun SalahApp(viewModel: SalahViewModel) {
                         onLivingSkyChange = viewModel::setLivingSkyEnabled
                     )
                 }
+            }
+        }
+    }
+
+    if (showNotificationRationale) {
+        NotificationRationaleSheet(
+            onAllow = {
+                showNotificationRationale = false
+                requestNotifications()
+            },
+            onDismiss = {
+                showNotificationRationale = false
+                context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean(KEY_ASKED_NOTIFICATIONS, true)
+                    .apply()
+            }
+        )
+    }
+}
+
+private const val PREFS = "salah_permission_state"
+private const val KEY_ASKED_NOTIFICATIONS = "asked_post_notifications"
+private const val KEY_NOTIFICATIONS_GRANTED = "post_notifications_granted"
+
+/**
+ * Explains why notifications are wanted before the system prompt appears.
+ *
+ * Three lines, one decision, and an honest Not now: the adhan is the app's
+ * reason to exist, so silently never asking would have been worse, and asking
+ * blind would have been colder. The prayer times themselves are always visible
+ * on Today, so declining costs nothing, and the setting stays reachable in
+ * Settings > Notifications.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NotificationRationaleSheet(
+    onAllow: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val space = Space.current
+    val strings = LocalStrings.current
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = space.lg)
+                .padding(bottom = space.xxxl),
+            verticalArrangement = Arrangement.spacedBy(space.md)
+        ) {
+            Text(
+                text = strings.more.allowNotificationsTitle,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = strings.more.allowNotificationsMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(
+                onClick = onAllow,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(strings.more.allowNotificationsAction)
+            }
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = strings.more.notNow,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

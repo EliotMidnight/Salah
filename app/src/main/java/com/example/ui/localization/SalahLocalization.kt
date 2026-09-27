@@ -426,6 +426,23 @@ data class UiStringsMore(
         "Nothing matched. Try a different spelling, or a shorter query.",
     val searchJuz: String = "Jump to juz number",
     val searchHizb: String = "Jump to hizb number",
+    val alertAdhan: String = "Adhan",
+    val alertTakbeer: String = "Takbeer",
+    val alertChime: String = "Chime",
+    val alertVibrate: String = "Vibrate",
+    val alertSilent: String = "Silent",
+    val alertSilentReminder: String = "Silent reminder",
+    val stateOn: String = "On",
+    val stateOff: String = "Off",
+    val actionChange: String = "Change",
+    val changeAlertMode: String = "Change alert",
+    val allowNotificationsTitle: String = "Let Salah alert you",
+    val allowNotificationsMessage: String =
+        "Salah needs permission to show notifications so it can call you at prayer " +
+            "times. Prayer times stay on the Today screen either way, and you can " +
+            "turn alerts on later in Settings.",
+    val allowNotificationsAction: String = "Allow notifications",
+    val notNow: String = "Not now",
     val juzLabel: String = "Juz\u2019",
     val selectLayoutTitle: String = "Reading layout",
     val selectLayoutSubtitle: String = "Per verse suits study; continuous suits reading straight through.",
@@ -1709,6 +1726,28 @@ fun UiStrings.prayerName(prayer: com.example.data.model.Prayer): String {
         com.example.data.model.Prayer.MAGHRIB -> maghrib
         com.example.data.model.Prayer.ISHA -> isha
     }
+}
+
+/**
+ * The display label for a stored prayer-alert mode.
+ *
+ * The five mode strings are **persisted preference keys**, not copy. They are
+ * compared by name in AdhanAudioSynthesizer, PrayerNotificationManager,
+ * PrayerAlertService and SalahViewModel, and they are already written into
+ * existing users' SharedPreferences. They must stay English and stable.
+ *
+ * What was missing was a display layer: Home and Settings both rendered these
+ * keys straight to the screen, so in Arabic, Urdu and the other ten languages
+ * every prayer row showed an English word. This maps the key to a label without
+ * touching storage, which is why it is safe to add.
+ */
+fun UiStringsMore.alertModeLabel(storedValue: String): String = when (storedValue) {
+    "Full Adhan" -> alertAdhan
+    "Takbeer Only" -> alertTakbeer
+    "Gentle Chime" -> alertChime
+    "Vibrate Only" -> alertVibrate
+    "Silent Reminder" -> alertSilentReminder
+    else -> alertSilent
 }
 
 /**

@@ -109,7 +109,10 @@ fun ActionRow(
                     role = Role.Button,
                     onClick = onClick
                 )
-                .padding(vertical = space.md, horizontal = space.sm),
+                // space.md, not space.sm: inside a SectionGroup this row sat at
+                // 24dp from the screen edge while ToggleRow sat at 28dp, so
+                // titles and right-hand controls in the same card zig-zagged.
+                .padding(vertical = space.md, horizontal = space.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (icon != null) {
