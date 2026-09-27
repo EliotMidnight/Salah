@@ -287,7 +287,11 @@ fun PrayerScreen(
                             Prayer.MAGHRIB to state.adjustments.maghrib,
                             Prayer.ISHA to state.adjustments.isha
                         ).joinToString(", ") { (prayer, minutes) ->
-                            "${prayer.englishName} ${signed(minutes)}"
+                            // Localized name, not prayer.englishName. This is the
+                            // "source / method" summary, so an Arabic or Urdu user
+                            // was reading English prayer names inside an otherwise
+                            // localized screen.
+                            "${strings.prayerName(prayer)} ${signed(minutes)}"
                         }
                     )
                     RowDivider()
@@ -468,6 +472,14 @@ private fun MonthTable(
             Spacer(Modifier.width(40.dp))
             fard.forEach { prayer ->
                 Text(
+                    // Deliberately the Latin abbreviation rather than
+                    // strings.prayerName(prayer).take(3): truncating a
+                    // non-Latin script to three characters produces an
+                    // unreadable fragment, which is worse than a stable
+                    // abbreviation in a five-column numeric table. These
+                    // headings are cleared from the accessibility tree, and the
+                    // rows carry the full name. Fixing this properly means
+                    // adding a short-form to the prayer-name dictionary.
                     text = prayer.englishName.take(3),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
