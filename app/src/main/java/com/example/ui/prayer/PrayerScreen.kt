@@ -111,9 +111,11 @@ fun PrayerScreen(
 
     val hijri = remember(selectedDate) { HijriCalendarEngine.getHijriDate(selectedDate) }
 
+    // No header. The bottom navigation already says "Prayer", and the method it
+    // used to carry in the subtitle is shown as a labelled row further down this
+    // same screen, so nothing is lost.
     ScreenScaffold(
-        title = strings.more.prayerTimesTitle,
-        subtitle = "${strings.more.methodology}: ${state.method.title}",
+        title = null,
         onBack = null,
         modifier = modifier
     ) { _ ->
@@ -171,12 +173,17 @@ fun PrayerScreen(
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            Text(
-                                text = arabic,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = ArabicFamily,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            // Once the UI language is Arabic, `label` is already the
+                            // Arabic term, so this second line rendered the same
+                            // word twice in the same row. Skip it when they agree.
+                            if (arabic != label) {
+                                Text(
+                                    text = arabic,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = ArabicFamily,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                         Text(
                             text = time?.format(timeFormatter) ?: "--:--",

@@ -50,11 +50,15 @@ import com.example.ui.theme.layoutMetrics
  *
  * @param onBack when non-null, shows a back affordance and the screen is treated
  *   as a pushed destination. Top-level tabs pass null.
+ * @param title pass null to drop the top bar entirely. The status-bar inset is
+ *   still applied, so content does not slide under the clock - only the title
+ *   row goes. Used by the two screens whose heading merely repeated the bottom
+ *   navigation label.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScreenScaffold(
-    title: String,
+    title: String?,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     onBack: (() -> Unit)? = null,
@@ -69,12 +73,18 @@ fun ScreenScaffold(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        ScreenTopBar(
-            title = title,
-            subtitle = subtitle,
-            onBack = onBack,
-            actions = actions
-        )
+        if (title != null) {
+            ScreenTopBar(
+                title = title,
+                subtitle = subtitle,
+                onBack = onBack,
+                actions = actions
+            )
+        } else {
+            Spacer(
+                Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
+            )
+        }
 
         Box(
             modifier = Modifier

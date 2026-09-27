@@ -406,6 +406,14 @@ data class UiStringsMore(
     val isFacingQibla: String = "You are facing the Qibla",
     val rightOfQibla: String = "to the right",
     val leftOfQibla: String = "to the left",
+    /** %1$s is a formatted angle such as "12°", %2$s a direction phrase. */
+    val turnBy: String = "Turn %1\$s %2\$s",
+    val alignedWithQibla: String = "Aligned with the Qibla",
+    val locateMe: String = "Locate",
+    val gpsCached: String = "GPS cached",
+    val selectedCity: String = "Selected city",
+    val coordinatesCachedOffline: String =
+        "Coordinates cached offline. Calculations run entirely on this device.",
     val juzWord: String = "Juz’",
     val pageWord: String = "Page",
     val privacyNote: String = "Prayer times, the Qibla direction and the Quran are all calculated on this device. Nothing is uploaded.",

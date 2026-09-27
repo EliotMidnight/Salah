@@ -1,6 +1,7 @@
 package com.example
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -60,11 +61,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -124,6 +127,23 @@ class MainActivity : ComponentActivity() {
                 "Dark Mode (OLED)" -> true
                 "Clean Light" -> false
                 else -> androidx.compose.foundation.isSystemInDarkTheme()
+            }
+
+            // Status bar icon appearance was never set anywhere in the app.
+            // enableEdgeToEdge() makes the bar transparent and the platform
+            // default is light icons, so in the light theme white icons sat on
+            // the #F6F8FA page and were effectively invisible - the clock and
+            // battery could not be read at all. The dark theme happened to match
+            // the default, which is why only light mode looked broken.
+            val view = LocalView.current
+            if (!view.isInEditMode) {
+                SideEffect {
+                    val window = (view.context as? Activity)?.window ?: return@SideEffect
+                    WindowCompat.getInsetsController(window, view).apply {
+                        isAppearanceLightStatusBars = !darkTheme
+                        isAppearanceLightNavigationBars = !darkTheme
+                    }
+                }
             }
 
             val reduceMotion = SalahReduceMotion.remember()

@@ -479,20 +479,32 @@ private fun NextPrayerBlock(
             return@Column
         }
 
-        Row(verticalAlignment = Alignment.Bottom) {
+        // Arabic only when the UI language is not already Arabic; otherwise the
+        // pair rendered the same word twice, side by side.
+        val localised = strings.prayerName(next.prayer)
+        if (next.prayer.arabicName.isNotBlank() && next.prayer.arabicName != localised) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = next.prayer.arabicName,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontFamily = ArabicFamily,
+                    color = contentColor
+                )
+                Spacer(Modifier.width(space.sm))
+                Text(
+                    text = localised,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = contentColor,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+            }
+        } else {
             Text(
-                text = next.prayer.arabicName,
-                style = MaterialTheme.typography.headlineSmall,
-                fontFamily = ArabicFamily,
-                color = contentColor
-            )
-            Spacer(Modifier.width(space.sm))
-            Text(
-                text = strings.prayerName(next.prayer),
+                text = localised,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = contentColor,
-                modifier = Modifier.padding(bottom = 2.dp)
+                color = contentColor
             )
         }
 
@@ -695,21 +707,28 @@ private fun PrayerRow(
                             MaterialTheme.colorScheme.onSurface
                         }
                     )
+                    // A dot, not the words "Next prayer". This row is a schedule;
+                    // the label repeated the countdown block's own heading two
+                    // screens up and made the row the loudest thing on the card.
+                    // The dot matches how the same prayer is marked on the Prayer
+                    // screen's "today's times" list.
                     if (isNext) {
                         Spacer(Modifier.width(space.sm))
-                        Text(
-                            text = strings.nextPrayerLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        StatusDot(color = MaterialTheme.colorScheme.primary)
                     }
                 }
-                Text(
-                    text = prayer.arabicName,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = ArabicFamily,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                // The Arabic name is a second line of the same word once the UI is
+                // Arabic: prayerName() then returns the Arabic name too, so the row
+                // rendered "الفجر" twice. Comparing the two is self-correcting and
+                // needs no language plumbing.
+                if (prayer.arabicName.isNotBlank() && prayer.arabicName != strings.prayerName(prayer)) {
+                    Text(
+                        text = prayer.arabicName,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = ArabicFamily,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
             }
 
             Text(

@@ -247,24 +247,13 @@ private fun SurahList(
             }
         }
 
-        item(key = "popular_header") {
-            SectionLabel(strings.more.popularSurahsLabel)
-        }
-
-        items(POPULAR_SURAHS, key = { "pop$it" }) { number ->
-            QuranDataSource.getSurahByNumber(number)?.let { surah ->
-                SurahRow(
-                    surah = surah,
-                    selected = state.selectedSurah.number == surah.number,
-                    onClick = {
-                        onSelect(surah.number)
-                        onOpenReader()
-                    }
-                )
-                RowDivider()
-            }
-        }
-
+        // The "Popular surahs" block is gone. It listed Al-Fatihah, Yasin, Al-Kahf,
+        // Al-Mulk, Ar-Rahman and An-Nas, and every one of them also appeared in
+        // the full list immediately below with an identical row and no marker to
+        // tell the two apart - so six of the first rows were duplicates. On a
+        // fresh install Al-Fatihah appeared three times on one screen, because it
+        // is also what the Continue Reading hero resolves to by default. Search
+        // and the alphabetical list already cover the need.
         item(key = "all_header") {
             SectionLabel(strings.more.allSurahsLabel)
         }
@@ -282,9 +271,6 @@ private fun SurahList(
         }
     }
 }
-
-/** The six surahs offered before any search. */
-private val POPULAR_SURAHS = listOf(1, 36, 18, 67, 55, 56)
 
 /**
  * The one accent-filled block on the library page.

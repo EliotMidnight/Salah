@@ -94,7 +94,16 @@ fun QiblaScreen(
     }
 }
 
-/** The bearing, and whether you are facing it. */
+/**
+ * The bearing to the Kaaba, and whether you are facing it.
+ *
+ * The big number is the *destination* bearing, not a live compass heading: it
+ * depends only on where you are, so it holds still while you turn. It used to be
+ * rendered with no label at all, sitting directly above the dial, where it read
+ * as a heading that had frozen - which is precisely the question it cannot
+ * answer. The label now sits above it, and the true/magnetic north reference
+ * reads as a caption instead of a second value.
+ */
 @Composable
 private fun QiblaHeader(
     bearing: Float,
@@ -103,23 +112,32 @@ private fun QiblaHeader(
     isTrueNorth: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val space = Space.current
     val strings = LocalStrings.current
     val semantic = com.example.ui.theme.Tonal.colors
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
+            text = strings.more.qiblaBearing,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(space.xxs))
+        Text(
             text = String.format(java.util.Locale.getDefault(), "%.0f°", bearing),
             style = MaterialTheme.typography.displayMedium,
             color = if (isFacing) semantic.success else MaterialTheme.colorScheme.onSurface
         )
+        Spacer(Modifier.height(space.xs))
         Text(
             text = if (isFacing) {
                 strings.more.isFacingQibla
             } else {
-                String.format(
-                    java.util.Locale.getDefault(),
-                    "%.0f° %s",
-                    abs(delta),
+                // Localized direction words. This used to be built inline in
+                // English, which is how an Arabic or Urdu user ended up reading
+                // English guidance on an otherwise localized screen.
+                strings.more.turnBy.format(
+                    String.format(java.util.Locale.getDefault(), "%.0f°", abs(delta)),
                     if (delta >= 0) strings.more.rightOfQibla else strings.more.leftOfQibla
                 )
             },
@@ -127,9 +145,7 @@ private fun QiblaHeader(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-            text = "${strings.more.qiblaBearing} · ${
-                if (isTrueNorth) strings.trueNorth else strings.magneticNorth
-            }",
+            text = if (isTrueNorth) strings.trueNorth else strings.magneticNorth,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

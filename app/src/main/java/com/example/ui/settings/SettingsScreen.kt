@@ -172,8 +172,10 @@ fun SettingsScreen(
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     var cityQuery by rememberSaveable { mutableStateOf("") }
 
+    // No header. The bottom navigation already says "Settings", so the top bar
+    // repeated it and spent ~64dp saying so.
     ScreenScaffold(
-        title = strings.settingsTitle,
+        title = null,
         modifier = modifier
     ) { _ ->
         Column {

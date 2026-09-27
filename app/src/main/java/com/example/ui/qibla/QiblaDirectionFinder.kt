@@ -50,7 +50,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -105,9 +109,26 @@ fun QiblaDirectionFinder(
     val onSurfaceVariant = colorScheme.onSurfaceVariant
     val outlineVariantColor = colorScheme.outlineVariant
 
-    // Smooth spring rotation for heading
+    // Smooth spring rotation for heading.
+    //
+    // A compass heading is a circle, not a line. `compassAzimuth` is a raw
+    // sensor value in [0, 360), so crossing north reports 359.8 then 0.2.
+    // Handing that straight to animateFloatAsState makes the spring interpolate
+    // the long way round - 359.8 -> 180 -> 0.2 - and the whole bezel spins a
+    // full turn instead of advancing half a degree.
+    //
+    // So the target is unwrapped first: each reading is converted to the angle
+    // nearest the current one and accumulated without bound. The spring then
+    // always takes the short path, and `rotate` is unaffected because rotation
+    // is only ever interpreted modulo 360.
+    var unwrappedHeading by remember { mutableFloatStateOf(state.compassAzimuth) }
+    LaunchedEffect(state.compassAzimuth) {
+        // Signed shortest angular distance from current to target, in (-180, 180].
+        val step = ((state.compassAzimuth - unwrappedHeading + 540f) % 360f) - 180f
+        unwrappedHeading += step
+    }
     val animatedHeading by animateFloatAsState(
-        targetValue = state.compassAzimuth,
+        targetValue = unwrappedHeading,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "animatedHeading"
     )
@@ -641,22 +662,32 @@ private fun QiblaGuidanceBanner(
     val isFacing = state.isFacingQibla
     val successColors = Tonal.colors
     val colorScheme = MaterialTheme.colorScheme
+    val strings = LocalStrings.current
 
     val (bannerColor, contentColor, guidanceText) = when {
         isFacing -> Triple(
             successColors.success,
             successColors.onSuccess,
-            "✦ ALIGNED WITH THE KAABA 🕋 ✦"
+            // Localized. All three of these were built inline in English, so
+            // they stayed English in all twelve languages - which is how an
+            // Arabic or Urdu user got English guidance above a localized dial.
+            strings.more.alignedWithQibla
         )
         relativeAngle > 0 -> Triple(
             colorScheme.primaryContainer,
             colorScheme.onPrimaryContainer,
-            "Turn ${abs(relativeAngle).toInt()}° Right  ➔"
+            strings.more.turnBy.format(
+                String.format(Locale.getDefault(), "%.0f°", abs(relativeAngle)),
+                strings.more.rightOfQibla
+            )
         )
         else -> Triple(
             colorScheme.primaryContainer,
             colorScheme.onPrimaryContainer,
-            "⬅  Turn ${abs(relativeAngle).toInt()}° Left"
+            strings.more.turnBy.format(
+                String.format(Locale.getDefault(), "%.0f°", abs(relativeAngle)),
+                strings.more.leftOfQibla
+            )
         )
     }
 
@@ -703,6 +734,7 @@ private fun LocationStatusCard(
     modifier: Modifier = Modifier
 ) {
     val successColors = Tonal.colors
+    val strings = LocalStrings.current
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
@@ -739,7 +771,7 @@ private fun LocationStatusCard(
                                 "%.4f° N, %.4f° E · %s",
                                 state.location.latitude,
                                 state.location.longitude,
-                                if (state.location.isGps) "GPS Cached" else "Selected City"
+                                if (state.location.isGps) strings.more.gpsCached else strings.more.selectedCity
                             ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -774,11 +806,11 @@ private fun LocationStatusCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.MyLocation,
-                                contentDescription = "Locate",
+                                contentDescription = strings.more.locateMe,
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "Locate",
+                                text = strings.more.locateMe,
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -800,7 +832,7 @@ private fun LocationStatusCard(
                     modifier = Modifier.size(14.dp)
                 )
                 Text(
-                    text = "Coordinates cached offline. Calculations run 100% on-device.",
+                    text = strings.more.coordinatesCachedOffline,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
