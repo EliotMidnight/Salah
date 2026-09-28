@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
@@ -31,7 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
@@ -39,8 +39,6 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -66,7 +64,6 @@ import com.example.ui.components.SearchInput
 import com.example.ui.components.SectionGroup
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.SegmentedOptions
-import com.example.R
 import com.example.data.model.PrayerAdjustments
 import com.example.ui.localization.AppLanguage
 import com.example.ui.localization.LocalStrings
@@ -74,6 +71,7 @@ import com.example.ui.localization.UiStrings
 import com.example.ui.localization.alertModeLabel
 import com.example.ui.localization.prayerName
 import com.example.ui.theme.IconSize
+import com.example.ui.theme.Tonal
 import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
 import androidx.compose.material3.OutlinedTextField
@@ -157,6 +155,37 @@ private fun PlayPreviewButton(
 }
 
 /**
+ * One line in the privacy card: a check and a fact.
+ *
+ * The card states what the app does not do, which is the whole of its privacy
+ * stance - there is no server, account or SDK to describe. A check reads as an
+ * assurance; the text carries the fact.
+ */
+@Composable
+private fun PrivacyFact(text: String) {
+    val space = Space.current
+    Row(
+        modifier = Modifier.padding(vertical = space.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.CheckCircle,
+            contentDescription = null,
+            tint = Tonal.colors.success,
+            modifier = Modifier
+                .size(IconSize.sm)
+                .clearAndSetSemantics { }
+        )
+        Spacer(Modifier.width(space.sm))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+/**
  * Settings.
  *
  * Every one of the twenty settings the app had is still here, with the same
@@ -206,7 +235,6 @@ fun SettingsScreen(
 ) {
     val space = Space.current
     val strings = LocalStrings.current
-    val context = LocalContext.current
 
     // One enum instead of eighteen booleans, so only one sheet can ever be open and
     // its open/close is a single state change.
@@ -448,16 +476,25 @@ fun SettingsScreen(
                     }
                 )
                 RowDivider()
-                ActionRow(
-                    title = strings.more.privacyPolicy,
-                    onClick = {
-                        runCatching {
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(context.getString(R.string.privacy_policy_url)))
-                            )
-                        }
-                    }
-                )
+                SectionGroup {
+                    Text(
+                        text = strings.privacyPhilosophyTitle,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(space.xs))
+                    Text(
+                        text = strings.more.privacyNote,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(space.md))
+                    PrivacyFact(strings.more.privacyOffline)
+                    PrivacyFact(strings.more.privacyNoAds)
+                    PrivacyFact(strings.more.privacyNoAnalytics)
+                    PrivacyFact(strings.more.privacyNoAccount)
+                    PrivacyFact(strings.more.privacyFree)
+                }
                 RowDivider()
                 ActionRow(
                     title = strings.more.resetAllLabel,
