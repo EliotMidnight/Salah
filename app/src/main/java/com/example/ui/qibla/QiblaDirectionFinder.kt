@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CompassCalibration
@@ -44,14 +43,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.testTag
@@ -76,11 +76,6 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
-/**
- * Material 3 Expressive Qibla Direction Finder Component.
- * Integrates real-time device magnetometer and accelerometer sensor telemetry
- * to guide users accurately toward the Holy Kaaba in Mecca.
- */
 @Composable
 fun QiblaDirectionFinder(
     state: SalahUiState,
@@ -98,26 +93,12 @@ fun QiblaDirectionFinder(
     val primaryColor = colorScheme.primary
     val tertiaryColor = colorScheme.tertiary
     val errorColor = colorScheme.error
-    val surfaceColor = colorScheme.surface
     val onSurfaceColor = colorScheme.onSurface
     val onSurfaceVariant = colorScheme.onSurfaceVariant
     val outlineVariantColor = colorScheme.outlineVariant
 
-    // Smooth spring rotation for heading.
-    //
-    // A compass heading is a circle, not a line. `compassAzimuth` is a raw
-    // sensor value in [0, 360), so crossing north reports 359.8 then 0.2.
-    // Handing that straight to animateFloatAsState makes the spring interpolate
-    // the long way round - 359.8 -> 180 -> 0.2 - and the whole bezel spins a
-    // full turn instead of advancing half a degree.
-    //
-    // So the target is unwrapped first: each reading is converted to the angle
-    // nearest the current one and accumulated without bound. The spring then
-    // always takes the short path, and `rotate` is unaffected because rotation
-    // is only ever interpreted modulo 360.
     var unwrappedHeading by remember { mutableFloatStateOf(state.compassAzimuth) }
     LaunchedEffect(state.compassAzimuth) {
-        // Signed shortest angular distance from current to target, in (-180, 180].
         val step = ((state.compassAzimuth - unwrappedHeading + 540f) % 360f) - 180f
         unwrappedHeading += step
     }
@@ -127,7 +108,6 @@ fun QiblaDirectionFinder(
         label = "animatedHeading"
     )
 
-    // Smooth color change when locked on Kaaba (theme-aware success)
     val alignedSuccess = successColors.success
     val alignedGold = tertiaryColor
     val dialRingColor by animateColorAsState(
@@ -141,7 +121,6 @@ fun QiblaDirectionFinder(
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Guidance Direction Banner
         QiblaGuidanceBanner(
             state = state,
             onShowCalibrationTip = onShowCalibrationTip,
@@ -150,19 +129,6 @@ fun QiblaDirectionFinder(
 
         Spacer(modifier = Modifier.height(space.md))
 
-        // The dial below used to be preceded by two more big numbers - the Qibla
-        // bearing again, which the header already states, and the live heading as
-        // text. The heading is what the dial *is*: the bezel turns with the phone
-        // and the arrow at the top marks where you are pointing, so the number was
-        // a second readout of the same fact competing with the instrument. It is
-        // now carried in the dial's accessibility description instead, where it is
-        // still reachable but no longer shouts over the compass.
-
-        // Interactive 2D Sensor Compass Dial (responsive: fills width, capped for tablets).
-        //
-        // The one non-visual fact the dial carries is the live heading, so it is
-        // published to the accessibility tree here rather than as a second big
-        // number on screen.
         val headingText = "${state.compassAzimuth.toInt()}° " +
             getCardinalDirection(state.compassAzimuth)
         Box(
@@ -183,12 +149,11 @@ fun QiblaDirectionFinder(
                 val center = Offset(size.width / 2f, size.height / 2f)
                 val outerRadius = (size.width / 2f) - 20f
 
-                // Alignment halo: soft success glow behind the dial when locked on
                 if (isFacing) {
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                alignedSuccess.copy(alpha = 0.22f),
+                                alignedSuccess.copy(alpha = 0.20f),
                                 Color.Transparent
                             ),
                             center = center,
@@ -199,241 +164,126 @@ fun QiblaDirectionFinder(
                     )
                 }
 
-                // Outer Dial Background
-                drawCircle(
-                    color = surfaceColor,
-                    radius = outerRadius,
-                    center = center
-                )
-
-                // Bezel: hairline outer ring plus the expressive state ring
                 drawCircle(
                     color = outlineVariantColor,
                     radius = outerRadius,
                     center = center,
                     style = Stroke(width = 1.dp.toPx())
                 )
+
                 drawCircle(
                     color = dialRingColor,
                     radius = outerRadius - 5.dp.toPx(),
                     center = center,
-                    style = Stroke(width = if (isFacing) 5.dp.toPx() else 2.5.dp.toPx(), cap = StrokeCap.Round)
+                    style = Stroke(
+                        width = if (isFacing) 4.dp.toPx() else 2.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
                 )
 
-                // Subtly shaded compass track
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            surfaceColor.copy(alpha = 0.5f),
-                            dialRingColor.copy(alpha = if (isFacing) 0.15f else 0.06f)
-                        ),
-                        center = center,
-                        radius = outerRadius
-                    ),
-                    radius = outerRadius - 4.dp.toPx(),
-                    center = center
-                )
-
-                // Rotating bezel: ticks, degree numerals and cardinal letters
                 rotate(degrees = -animatedHeading, pivot = center) {
-                    val numeralPaint = android.graphics.Paint().apply {
-                        isAntiAlias = true
-                        textSize = 10.sp.toPx()
-                        textAlign = android.graphics.Paint.Align.CENTER
-                        typeface = android.graphics.Typeface.DEFAULT
-                    }
                     val cardinalPaint = android.graphics.Paint().apply {
                         isAntiAlias = true
-                        textSize = 17.sp.toPx()
+                        textSize = 14.sp.toPx()
                         textAlign = android.graphics.Paint.Align.CENTER
                         typeface = android.graphics.Typeface.DEFAULT_BOLD
                     }
 
-                    for (i in 0 until 72) {
-                        val angle = i * 5.0
-                        val angleRad = Math.toRadians(angle)
-                        val isCardinal = i % 18 == 0
-                        val isMajor = i % 6 == 0
-                        val tickOuter = outerRadius - 10.dp.toPx()
-                        val tickLen = when {
-                            isCardinal -> 14.dp.toPx()
-                            isMajor -> 9.dp.toPx()
-                            else -> 4.5.dp.toPx()
-                        }
-                        val strokeWidth = if (isCardinal) 2.4.dp.toPx() else 1.dp.toPx()
-
-                        val startX = (center.x + (tickOuter - tickLen) * sin(angleRad)).toFloat()
-                        val startY = (center.y - (tickOuter - tickLen) * cos(angleRad)).toFloat()
-                        val endX = (center.x + tickOuter * sin(angleRad)).toFloat()
-                        val endY = (center.y - tickOuter * cos(angleRad)).toFloat()
-
-                        drawLine(
-                            color = when {
-                                angle == 0.0 -> errorColor // North
-                                isCardinal -> primaryColor
-                                else -> dialRingColor
-                            },
-                            start = Offset(startX, startY),
-                            end = Offset(endX, endY),
-                            strokeWidth = strokeWidth,
-                            cap = StrokeCap.Round
-                        )
-                    }
-
-                    // Degree numerals every 30° (cardinal slots carry letters instead)
-                    numeralPaint.color = onSurfaceVariant.toArgb()
-                    numeralPaint.alpha = 204
-                    for (deg in 0 until 360 step 30) {
-                        if (deg % 90 == 0) continue
-                        val rad = Math.toRadians(deg.toDouble())
-                        val r = outerRadius - 32.dp.toPx()
-                        val x = (center.x + r * sin(rad)).toFloat()
-                        val y = (center.y - r * cos(rad)).toFloat() + (numeralPaint.textSize / 3)
-                        drawContext.canvas.nativeCanvas.drawText("$deg", x, y, numeralPaint)
-                    }
-
-                    // Cardinal letters
                     listOf(0 to "N", 90 to "E", 180 to "S", 270 to "W").forEach { (deg, label) ->
                         val rad = Math.toRadians(deg.toDouble())
+                        val isNorth = deg == 0
+                        val tickOuter = outerRadius - 14.dp.toPx()
+                        val tickLen = if (isNorth) 14.dp.toPx() else 9.dp.toPx()
+                        val startX = center.x + (tickOuter - tickLen) * sin(rad).toFloat()
+                        val startY = center.y - (tickOuter - tickLen) * cos(rad).toFloat()
+                        val endX = center.x + tickOuter * sin(rad).toFloat()
+                        val endY = center.y - tickOuter * cos(rad).toFloat()
+                        drawLine(
+                            color = if (isNorth) errorColor else onSurfaceVariant,
+                            start = Offset(startX, startY),
+                            end = Offset(endX, endY),
+                            strokeWidth = if (isNorth) 2.dp.toPx() else 1.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+
                         cardinalPaint.color =
-                            if (deg == 0) errorColor.toArgb() else onSurfaceColor.toArgb()
-                        val r = outerRadius - 32.dp.toPx()
-                        val x = (center.x + r * sin(rad)).toFloat()
-                        val y = (center.y - r * cos(rad)).toFloat() + (cardinalPaint.textSize / 3)
+                            if (isNorth) errorColor.toArgb() else onSurfaceColor.toArgb()
+                        val r = outerRadius - 36.dp.toPx()
+                        val x = center.x + r * sin(rad).toFloat()
+                        val y = center.y - r * cos(rad).toFloat() + (cardinalPaint.textSize / 3f)
                         drawContext.canvas.nativeCanvas.drawText(label, x, y, cardinalPaint)
                     }
 
-                    // Tapered Qibla needle towards the Kaaba
                     val qiblaRad = Math.toRadians(state.qiblaBearing.toDouble())
                     val dirX = sin(qiblaRad).toFloat()
                     val dirY = (-cos(qiblaRad)).toFloat()
-                    val needleReach = outerRadius - 56.dp.toPx()
-                    val tipX = center.x + dirX * needleReach
-                    val tipY = center.y + dirY * needleReach
-                    val baseDist = 30.dp.toPx()
-                    val baseX = center.x - dirX * baseDist
-                    val baseY = center.y - dirY * baseDist
-                    val halfWidth = 6.5.dp.toPx()
                     val perpX = -dirY
                     val perpY = dirX
-                    val needlePath = Path().apply {
-                        moveTo(tipX, tipY)
-                        lineTo(baseX + perpX * halfWidth, baseY + perpY * halfWidth)
-                        lineTo(baseX - perpX * halfWidth, baseY - perpY * halfWidth)
+
+                    val kaabaDist = outerRadius - 16.dp.toPx()
+                    val kaabaCenter = Offset(center.x + dirX * kaabaDist, center.y + dirY * kaabaDist)
+                    val kaabaHalf = 7.dp.toPx()
+                    drawRect(
+                        color = if (isFacing) alignedSuccess else alignedGold,
+                        topLeft = Offset(kaabaCenter.x - kaabaHalf, kaabaCenter.y - kaabaHalf),
+                        size = Size(kaabaHalf * 2, kaabaHalf * 2),
+                        style = Stroke(width = 1.5.dp.toPx())
+                    )
+
+                    val tipDist = outerRadius - 30.dp.toPx()
+                    val halfWidth = 3.dp.toPx()
+                    val tip = Offset(center.x + dirX * tipDist, center.y + dirY * tipDist)
+                    val needle = Path().apply {
+                        moveTo(tip.x, tip.y)
+                        lineTo(center.x + perpX * halfWidth, center.y + perpY * halfWidth)
+                        lineTo(center.x - perpX * halfWidth, center.y - perpY * halfWidth)
                         close()
                     }
                     drawPath(
-                        path = needlePath,
+                        path = needle,
                         brush = Brush.linearGradient(
                             colors = listOf(
                                 if (isFacing) alignedSuccess else primaryColor,
                                 if (isFacing) alignedSuccess else alignedGold
                             ),
-                            start = Offset(baseX, baseY),
-                            end = Offset(tipX, tipY)
+                            start = center,
+                            end = tip
                         ),
                         style = Fill
                     )
-
-                    // Kaaba target disc with halo ring
-                    val discCenter = Offset(tipX, tipY)
-                    drawCircle(
-                        color = (if (isFacing) alignedSuccess else alignedGold).copy(alpha = 0.25f),
-                        radius = 19.dp.toPx(),
-                        center = discCenter
-                    )
-                    drawCircle(
-                        color = if (isFacing) alignedSuccess else alignedGold,
-                        radius = 13.dp.toPx(),
-                        center = discCenter
-                    )
-                    drawCircle(
-                        color = if (isFacing) successColors.onSuccess else colorScheme.onTertiary,
-                        radius = 4.dp.toPx(),
-                        center = discCenter
-                    )
                 }
 
-                // Top Device Sighting Arrow (Static reference pointing forward)
                 val arrowTipY = center.y - outerRadius - 10.dp.toPx()
-                val arrowPath = Path().apply {
+                val arrow = Path().apply {
                     moveTo(center.x, arrowTipY)
-                    lineTo(center.x - 7.dp.toPx(), arrowTipY + 12.dp.toPx())
-                    lineTo(center.x + 7.dp.toPx(), arrowTipY + 12.dp.toPx())
+                    lineTo(center.x - 6.dp.toPx(), arrowTipY + 10.dp.toPx())
+                    lineTo(center.x + 6.dp.toPx(), arrowTipY + 10.dp.toPx())
                     close()
                 }
                 drawPath(
-                    path = arrowPath,
+                    path = arrow,
                     color = if (isFacing) alignedSuccess else primaryColor,
                     style = Fill
                 )
 
-                // 2D Spirit Bubble Level in center (Accelerometer Sensor)
-                val levelRingRadius = 24.dp.toPx()
-                drawCircle(
-                    color = if (state.isDeviceLevel) alignedSuccess.copy(alpha = 0.25f) else outlineVariantColor.copy(alpha = 0.35f),
-                    radius = levelRingRadius,
-                    center = center
-                )
-                drawCircle(
-                    color = if (state.isDeviceLevel) alignedSuccess else outlineVariantColor,
-                    radius = levelRingRadius,
-                    center = center,
-                    style = Stroke(width = 1.5.dp.toPx())
-                )
-
-                // Accelerometer Bubble
-                val maxBubbleDisplacement = levelRingRadius - 6.dp.toPx()
-                val bubbleOffsetX = (state.rollDegrees / 45f).coerceIn(-1f, 1f) * maxBubbleDisplacement
-                val bubbleOffsetY = (-state.pitchDegrees / 45f).coerceIn(-1f, 1f) * maxBubbleDisplacement
-                val bubbleCenter = Offset(center.x + bubbleOffsetX, center.y + bubbleOffsetY)
-
-                drawCircle(
-                    color = if (state.isDeviceLevel) alignedSuccess else alignedGold,
-                    radius = 5.5.dp.toPx(),
-                    center = bubbleCenter
-                )
-            }
-
-            // Central Icon (Kaaba indicator) with expressive spring pop
-            val badgeScale by animateFloatAsState(
-                targetValue = if (isFacing) 1f else 0f,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessMedium
-                ),
-                label = "badge_scale"
-            )
-            if (badgeScale > 0.02f) {
-                Surface(
-                    shape = CircleShape,
-                    color = alignedSuccess,
-                    contentColor = successColors.onSuccess,
-                    modifier = Modifier
-                        .size(28.dp)
-                        .graphicsLayer {
-                            scaleX = badgeScale
-                            scaleY = badgeScale
-                            alpha = badgeScale.coerceIn(0f, 1f)
-                        }
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(18.dp)
-                                .clearAndSetSemantics { }
-                        )
+                if (isFacing) {
+                    drawCircle(color = alignedSuccess, radius = 15.dp.toPx(), center = center)
+                    val check = Path().apply {
+                        moveTo(center.x - 6.dp.toPx(), center.y)
+                        lineTo(center.x - 1.5.dp.toPx(), center.y + 4.5.dp.toPx())
+                        lineTo(center.x + 6.5.dp.toPx(), center.y - 4.5.dp.toPx())
                     }
+                    drawPath(
+                        path = check,
+                        color = successColors.onSuccess,
+                        style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                    )
+                } else {
+                    drawCircle(color = onSurfaceVariant, radius = 2.5.dp.toPx(), center = center)
                 }
             }
         }
 
-        // Tilt reminder. The heading is only trustworthy with the phone flat, so
-        // this is an instruction rather than a status line, and it is localized -
-        // it was the last hardcoded English sentence on this screen.
         AnimatedVisibility(
             visible = !state.isDeviceLevel,
             enter = fadeIn(tween(150)),
@@ -462,16 +312,7 @@ fun QiblaDirectionFinder(
 
         Spacer(modifier = Modifier.height(space.md))
 
-        // The facts, and the two tools that are used occasionally, as one quiet
-        // group of rows.
-        //
-        // This replaces four bordered cards plus two bordered buttons stacked
-        // under the dial, each with its own 14dp padding and its own idea of a
-        // corner radius: six competing frames around the one instrument this
-        // screen exists for. These are the row shapes Settings and Prayer
-        // already use, so the same kind of thing looks the same everywhere.
         SectionGroup {
-            // Distance is a fact, not a control, so it is a labelled value.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -493,9 +334,6 @@ fun QiblaDirectionFinder(
 
             RowDivider()
 
-            // North reference: two exclusive options, so it is a segmented
-            // control rather than a card captioned "Tap to switch" - which told
-            // you that something would happen without saying what.
             Column(modifier = Modifier.padding(vertical = space.md)) {
                 Text(
                     text = strings.more.northReferenceLabel,
@@ -515,8 +353,6 @@ fun QiblaDirectionFinder(
 
             RowDivider()
 
-            // Locate: the title is the action and the subtitle is what it will
-            // change, which is the same shape as every other action row in the app.
             ActionRow(
                 title = strings.more.locateMe,
                 subtitle = "${state.location.name}, ${state.location.country} · " +
@@ -537,10 +373,6 @@ fun QiblaDirectionFinder(
 
             RowDivider()
 
-            // Two tools, both used occasionally: cross-check the bearing against
-            // the sun, or recalibrate the magnetometer. They were half-width
-            // buttons captioned with raw sensor telemetry ("46 µT · Status"),
-            // which read as a status readout rather than as something pressable.
             ActionRow(
                 title = strings.more.solarReferenceTitle,
                 icon = Icons.Default.WbSunny,
@@ -562,9 +394,6 @@ fun QiblaDirectionFinder(
     }
 }
 
-/**
- * Visual Guidance Banner telling the user exactly how many degrees to turn.
- */
 @Composable
 private fun QiblaGuidanceBanner(
     state: SalahUiState,
@@ -582,9 +411,6 @@ private fun QiblaGuidanceBanner(
         isFacing -> Triple(
             successColors.success,
             successColors.onSuccess,
-            // Localized. All three of these were built inline in English, so
-            // they stayed English in all twelve languages - which is how an
-            // Arabic or Urdu user got English guidance above a localized dial.
             strings.more.alignedWithQibla
         )
         relativeAngle > 0 -> Triple(
@@ -605,10 +431,6 @@ private fun QiblaGuidanceBanner(
         )
     }
 
-    // The banner is only a button when it does something: it opens the
-    // calibration tip, and only when the magnetometer is being interfered with
-    // and the user is therefore not aligned. Attaching clickable unconditionally
-    // gave a ripple to a surface that mostly does nothing when tapped.
     val actionable = !isFacing && state.magneticStatus == MagneticFieldStatus.INTERFERENCE
 
     Surface(
