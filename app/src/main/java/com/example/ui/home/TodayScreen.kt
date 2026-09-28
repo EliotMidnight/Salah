@@ -553,10 +553,11 @@ private fun LinkRow(
  */
 @Composable
 private fun CountdownRule(accent: Color, countdown: String, modifier: Modifier = Modifier) {
+    val space = Space.current
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalArrangement = Arrangement.spacedBy(space.lg)
     ) {
         RuleSegment(accent, Modifier.weight(1f))
         Text(
