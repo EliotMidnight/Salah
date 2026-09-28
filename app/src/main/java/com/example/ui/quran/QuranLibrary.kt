@@ -7,7 +7,6 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.ui.theme.Motion
 import androidx.compose.foundation.clickable
@@ -72,9 +71,13 @@ import com.example.data.model.Surah
 import com.example.data.quran.QuranDataSource
 import com.example.ui.SalahUiState
 import com.example.ui.components.EmptyState
-import com.example.ui.components.PillTabBarHeight
-import com.example.ui.components.PillTabRow
+import com.example.ui.components.RowDivider
 import com.example.ui.components.SearchInput
+import com.example.ui.components.SectionHeader
+import com.example.ui.components.StatusDot
+import com.example.ui.components.statusBarInset
+import com.example.ui.theme.DotShape
+import com.example.ui.theme.IconSize
 import com.example.ui.localization.LocalStrings
 import com.example.ui.theme.ArabicFamily
 import com.example.ui.theme.QuranShape
@@ -82,8 +85,23 @@ import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
 import kotlinx.coroutines.delay
 
+/** Diameter of the count badge on the floating bookmark control. */
+private val CountBadgeSize = 18.dp
+
+/** Thickness of the reading-progress track. */
+private val ProgressTrackHeight = 4.dp
+
+/** Width of the day/numeral column, shared by the surah tile and the reference row. */
+private val NumberColumnWidth = 40.dp
+
+/** Room the collapsed floating controls reserve at the top of a list. */
+private val CollapsedControlsReserve = 60.dp
+
+/** Room the open search bar (field + filter chips) reserves. */
+private val ExpandedControlsReserve = 108.dp
+
 /** What the library is showing. The pills are gone; this is now all there is. */
-private enum class LibraryView { SURAHS, SEARCH, SAVED }
+private enum class LibraryView { SURAHS, SAVED }
 
 /** Which numbering scheme the reference filters are browsing. */
 private enum class ReferenceKind { PAGE, JUZ, HIZB }
@@ -249,14 +267,7 @@ fun QuranLibrary(
 
 /** Status bar plus any display cutout, so the floating controls clear both. */
 @Composable
-private fun topInset(): Dp {
-    val density = LocalDensity.current
-    val top = maxOf(
-        WindowInsets.statusBars.getTop(density),
-        WindowInsets.displayCutout.getTop(density)
-    )
-    return with(density) { top.toDp() } + Space.current.sm
-}
+private fun topInset(): Dp = statusBarInset() + Space.current.sm
 
 /**
  * A circular floating control, with an optional count badge.
@@ -287,10 +298,10 @@ private fun FloatingCircleButton(
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
             },
-            shape = CircleShape,
+            shape = QuranShape.pill,
             modifier = Modifier
-                .size(48.dp)
-                .clickable(onClick = onClick)
+                .size(MaterialTheme.layoutMetrics.minTouchTarget)
+                .clickable(role = Role.Button, onClick = onClick)
                 .testTag(testTag)
                 .semantics {
                     this.contentDescription = contentDescription
@@ -304,8 +315,8 @@ private fun FloatingCircleButton(
         if (badge > 0) {
             Box(
                 modifier = Modifier
-                    .size(18.dp)
-                    .clip(CircleShape)
+                    .size(CountBadgeSize)
+                    .clip(DotShape)
                     .background(MaterialTheme.colorScheme.primary)
                     .clearAndSetSemantics { },
                 contentAlignment = Alignment.Center
@@ -404,6 +415,8 @@ private fun ExpandedSearchBar(
 
 @Composable
 private fun ReferenceChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val space = Space.current
+    val strings = LocalStrings.current
     Surface(
         color = if (selected) {
             MaterialTheme.colorScheme.primaryContainer
@@ -417,11 +430,12 @@ private fun ReferenceChip(label: String, selected: Boolean, onClick: () -> Unit)
         },
         shape = QuranShape.pill,
         modifier = Modifier
-            .heightIn(min = 36.dp)
-            .clickable(onClick = onClick)
+            .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+            .clickable(role = Role.RadioButton, onClick = onClick)
+            .semantics { stateDescription = if (selected) strings.more.selected else strings.more.notSelected }
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = space.md, vertical = space.sm),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -444,7 +458,7 @@ private fun ReferenceChip(label: String, selected: Boolean, onClick: () -> Unit)
  */
 @Composable
 private fun contentTopInset(searchOpen: Boolean): Dp =
-    topInset() + if (searchOpen) 108.dp else 60.dp
+    topInset() + if (searchOpen) ExpandedControlsReserve else CollapsedControlsReserve
 
 @Composable
 private fun SurahList(
@@ -487,7 +501,7 @@ private fun SurahList(
         // is also what the Continue Reading hero resolves to by default. Search
         // and the alphabetical list already cover the need.
         item(key = "all_header") {
-            SectionLabel(strings.more.allSurahsLabel)
+            SectionHeader(strings.more.allSurahsLabel)
         }
 
         items(QuranDataSource.SURAHS, key = { it.number }) { surah ->
@@ -540,7 +554,6 @@ private fun ContinueReadingHero(
             Text(
                 text = surahName,
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -572,7 +585,7 @@ private fun ReadingProgress(reference: String, modifier: Modifier = Modifier) {
             trackColor = MaterialTheme.colorScheme.surface,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(4.dp)
+                .height(ProgressTrackHeight)
                 .clearAndSetSemantics { }
         )
         Spacer(Modifier.height(space.xs))
@@ -679,18 +692,6 @@ private fun SurahRow(
     }
 }
 
-@Composable
-private fun SectionLabel(text: String, modifier: Modifier = Modifier) {
-    val space = Space.current
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = modifier
-            .padding(start = space.lg, top = space.lg, bottom = space.sm)
-    )
-}
-
 // ---------------------------------------------------------------------------
 // Reference: page / juz / hizb
 // ---------------------------------------------------------------------------
@@ -724,7 +725,7 @@ private fun ReferenceList(
         // second set of chips on the page.
         Spacer(Modifier.height(contentTopInset))
 
-        SectionLabel(
+        SectionHeader(
             when (kind) {
                 ReferenceKind.PAGE -> strings.more.searchPages
                 ReferenceKind.JUZ -> strings.more.searchJuz
@@ -812,7 +813,7 @@ private fun ReferenceRow(
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
             textAlign = TextAlign.Center,
-            modifier = Modifier.width(40.dp)
+            modifier = Modifier.width(NumberColumnWidth)
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -899,7 +900,7 @@ private fun SearchResults(
         LazyColumn(contentPadding = PaddingValues(bottom = space.xxxl)) {
             if (matching.isNotEmpty()) {
                 item(key = "surahs") {
-                    SectionLabel(strings.more.surahsFound.format(matching.size))
+                    SectionHeader(strings.more.surahsFound.format(matching.size))
                 }
                 items(matching, key = { "s${it.number}" }) { surah ->
                     SurahRow(
@@ -916,7 +917,7 @@ private fun SearchResults(
 
             if (results.isNotEmpty()) {
                 item(key = "verses") {
-                    SectionLabel(strings.more.versesFound.format(results.size))
+                    SectionHeader(strings.more.versesFound.format(results.size))
                 }
                 items(results, key = { "v${it.surahNumber}_${it.ayahNumber}" }) { ayah ->
                     VerseResultCard(
@@ -1069,11 +1070,3 @@ private fun Modifier.clickableHero(
 ): Modifier = this
     .clip(shape)
     .clickable(role = Role.Button, onClick = onClick)
-
-@Composable
-private fun RowDivider() {
-    HorizontalDivider(
-        thickness = 1.dp,
-        color = MaterialTheme.colorScheme.outlineVariant
-    )
-}

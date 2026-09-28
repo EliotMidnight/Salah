@@ -2,6 +2,8 @@ package com.example.ui.prayer
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,14 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,12 +27,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,6 +48,9 @@ import com.example.engine.HijriCalendarEngine
 import com.example.engine.PrayerCalculationEngine
 import com.example.ui.SalahUiState
 import com.example.ui.components.ActionRow
+import com.example.ui.components.DetailList
+import com.example.ui.components.StatusDot
+import com.example.ui.components.OptionRow
 import com.example.ui.components.DetailRow
 import com.example.ui.components.OptionSheet
 import com.example.ui.components.RowDivider
@@ -60,6 +61,7 @@ import com.example.ui.components.SectionHeader
 import com.example.ui.localization.LocalStrings
 import com.example.ui.localization.prayerName
 import com.example.ui.theme.ArabicFamily
+import com.example.ui.theme.IconSize
 import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
 import java.time.LocalDate
@@ -240,6 +242,7 @@ fun PrayerScreen(
                 method = state.method,
                 madhhab = state.madhhab,
                 adjustments = state.adjustments,
+                timeFormatter = timeFormatter,
                 onSelectDate = onSelectDate
             )
         }
@@ -250,13 +253,12 @@ fun PrayerScreen(
             title = strings.more.chooseMethod,
             onDismiss = { showMethodSheet = false }
         ) {
-            CalculationMethod.entries.forEach { method ->
-                androidx.compose.material3.HorizontalDivider()
-                ActionRow(
+            CalculationMethod.entries.forEachIndexed { index, method ->
+                if (index > 0) RowDivider()
+                OptionRow(
                     title = method.title,
-                    subtitle = method.description,
-                    showChevron = false,
-                    isSelected = method == state.method,
+                    description = method.description,
+                    selected = method == state.method,
                     onClick = {
                         onMethodChange(method)
                         showMethodSheet = false
@@ -277,44 +279,30 @@ fun PrayerScreen(
                 shape = MaterialTheme.shapes.small,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(space.lg)) {
-                    DetailRow(
-                        strings.more.methodology,
-                        if (state.method.isMoroccoNationalTable) {
+                DetailList(
+                    items = listOf(
+                        strings.more.methodology to if (state.method.isMoroccoNationalTable) {
                             "Kingdom of Morocco National Habous table"
                         } else {
                             "Fajr ${state.method.fajrAngle}° · Isha ${
                                 if (state.method.ishaAngle > 0) "${state.method.ishaAngle}°" else "90 min"
                             }"
-                        }
-                    )
-                    RowDivider()
-                    DetailRow(
-                        strings.more.madhhabLabelShort,
-                        "${state.madhhab.title} (${state.madhhab.shadowFactor}x)"
-                    )
-                    RowDivider()
-                    DetailRow(
-                        strings.more.appliedAdjustments,
-                        listOf(
+                        },
+                        strings.more.madhhabLabelShort to "${state.madhhab.title} (${state.madhhab.shadowFactor}x)",
+                        strings.more.appliedAdjustments to listOf(
                             Prayer.FAJR to state.adjustments.fajr,
                             Prayer.DHUHR to state.adjustments.dhuhr,
                             Prayer.ASR to state.adjustments.asr,
                             Prayer.MAGHRIB to state.adjustments.maghrib,
                             Prayer.ISHA to state.adjustments.isha
                         ).joinToString(", ") { (prayer, minutes) ->
-                            // Localized name, not prayer.englishName. This is the
-                            // "source / method" summary, so an Arabic or Urdu user
-                            // was reading English prayer names inside an otherwise
-                            // localized screen.
                             "${strings.prayerName(prayer)} ${signed(minutes)}"
-                        }
-                    )
-                    RowDivider()
-                    DetailRow(strings.offlineStatus, strings.more.computedOnDevice)
-                    RowDivider()
-                    DetailRow(strings.more.lastVerified, state.lastChecked)
-                }
+                        },
+                        strings.offlineStatus to strings.more.computedOnDevice,
+                        strings.more.lastVerified to state.lastChecked
+                    ),
+                    modifier = Modifier.padding(space.lg)
+                )
             }
         }
     }
@@ -351,7 +339,7 @@ private fun PrayerTimeRow(
             },
             modifier = Modifier
                 .padding(end = space.md)
-                .size(26.dp)
+                .size(IconSize.xxl)
                 .clearAndSetSemantics { }
         )
         Column(modifier = Modifier.weight(1f)) {
@@ -359,12 +347,12 @@ private fun PrayerTimeRow(
                 Text(
                     text = strings.prayerName(prayerTime.prayer),
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = if (isNext) FontWeight.Bold else FontWeight.Medium,
+                    fontWeight = if (isNext) FontWeight.SemiBold else FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 if (isNext) {
                     Spacer(Modifier.width(space.sm))
-                    com.example.ui.components.StatusDot(color = MaterialTheme.colorScheme.primary)
+                    StatusDot(color = MaterialTheme.colorScheme.primary)
                 }
             }
             Text(
@@ -377,7 +365,7 @@ private fun PrayerTimeRow(
         Text(
             text = time,
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = if (isNext) FontWeight.Bold else FontWeight.Medium,
+            fontWeight = if (isNext) FontWeight.SemiBold else FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface
         )
     }
@@ -404,6 +392,7 @@ private fun MonthTable(
     method: CalculationMethod,
     madhhab: Madhhab,
     adjustments: com.example.data.model.PrayerAdjustments,
+    timeFormatter: DateTimeFormatter,
     onSelectDate: (LocalDate) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -413,7 +402,6 @@ private fun MonthTable(
     val daysInMonth = month.length(selectedDate.isLeapYear)
 
     val fard = listOf(Prayer.FAJR, Prayer.DHUHR, Prayer.ASR, Prayer.MAGHRIB, Prayer.ISHA)
-    val timePattern = remember { DateTimeFormatter.ofPattern("HH:mm") }
 
     // day of month -> prayer -> time.
     val monthTimes: Map<Int, Map<Prayer, PrayerTime>> = remember(
@@ -436,16 +424,14 @@ private fun MonthTable(
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = "${month.name.lowercase().replaceFirstChar { it.uppercase() }} ${selectedDate.year}",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface
+        SectionHeader(
+            selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
         )
         Spacer(Modifier.height(space.sm))
 
         // Column headings, so the five numbers per row are not unlabelled.
         Row(modifier = Modifier.fillMaxWidth()) {
-            Spacer(Modifier.width(40.dp))
+            Spacer(Modifier.width(space.huge))
             fard.forEach { prayer ->
                 Text(
                     // Deliberately the Latin abbreviation rather than
@@ -480,16 +466,20 @@ private fun MonthTable(
                     .fillMaxWidth()
                     .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
                     .clip(MaterialTheme.shapes.extraSmall)
-                    .clickable { onSelectDate(date) }
+                    .selectable(
+                        selected = isSelected,
+                        role = Role.RadioButton,
+                        onClick = { onSelectDate(date) }
+                    )
                     .background(
                         if (isSelected) {
                             MaterialTheme.colorScheme.primaryContainer
                         } else {
-                            androidx.compose.ui.graphics.Color.Transparent
+                            Color.Transparent
                         }
                     )
                     .padding(vertical = space.xs, horizontal = space.xs)
-                    .semantics { selected = isSelected },
+                    .semantics { stateDescription = if (isSelected) strings.more.selected else strings.more.notSelected },
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -500,11 +490,11 @@ private fun MonthTable(
                     } else {
                         MaterialTheme.colorScheme.onSurface
                     },
-                    modifier = Modifier.width(40.dp)
+                    modifier = Modifier.width(space.huge)
                 )
                 fard.forEach { prayer ->
                     Text(
-                        text = byPrayer[prayer]?.time?.format(timePattern) ?: "--:--",
+                        text = byPrayer[prayer]?.time?.format(timeFormatter) ?: "--:--",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isSelected) {
                             MaterialTheme.colorScheme.onPrimaryContainer
@@ -518,12 +508,7 @@ private fun MonthTable(
                 }
             }
 
-            if (day < daysInMonth) {
-                HorizontalDivider(
-                    thickness = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant
-                )
-            }
+            if (day < daysInMonth) RowDivider()
         }
 
         Spacer(Modifier.height(space.md))

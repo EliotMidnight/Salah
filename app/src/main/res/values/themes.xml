@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.MyApplication" parent="android:Theme.DeviceDefault.NoActionBar" />
+    <!--
+      Material 3, so the platform chrome (dialogs, permission prompts, the status
+      bar the activity draws behind Compose) matches the Material 3 surface the
+      Compose UI is set in. The previous parent was the legacy DeviceDefault,
+      which rendered those elements with a pre-Material look.
+    -->
+    <style name="Theme.MyApplication" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">?android:attr/colorBackground</item>
+    </style>
 </resources>

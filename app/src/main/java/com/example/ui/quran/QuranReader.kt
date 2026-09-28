@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -68,11 +69,12 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.geometry.Offset
@@ -93,6 +95,10 @@ import com.example.data.model.Surah
 import com.example.data.quran.QuranDataSource
 import com.example.ui.SalahUiState
 import com.example.ui.components.EmptyState
+import com.example.ui.components.LabeledSlider
+import com.example.ui.components.SearchInput
+import com.example.ui.components.StatusBanner
+import com.example.ui.components.statusBarInset
 import com.example.ui.components.OptionSheet
 import com.example.ui.components.OptionRow
 import com.example.ui.components.SegmentedOptions
@@ -100,6 +106,7 @@ import com.example.ui.components.StatusDot
 import com.example.ui.localization.LocalStrings
 import com.example.ui.theme.ArabicFamily
 import com.example.ui.theme.QuranShape
+import com.example.ui.theme.IconSize
 import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
 import kotlinx.coroutines.FlowPreview
@@ -107,7 +114,26 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 /** How the text of a surah is presented. */
-enum class QuranReadingLayout { PER_VERSE, CONTINUOUS }
+private enum class QuranReadingLayout { PER_VERSE, CONTINUOUS }
+
+/**
+ * The Arabic text the mushaf is set in.
+ *
+ * One base, because the same 24sp Arabic was being set with three different
+ * line heights on the same screen - 1.9x on the continuous page, 1.8x per verse
+ * and a flat 32sp in the inspector - so the three surfaces disagreed about the
+ * leading of identical text. The scale still applies per call site; only the
+ * base and the multiplier live here.
+ */
+private val QuranArabicStyle = TextStyle(
+    fontFamily = ArabicFamily,
+    fontSize = 24.sp,
+    lineHeight = 24.sp * 1.9f,
+    textDirection = TextDirection.Rtl
+)
+
+/** Height of the small reference chip that carries a "1:1" marker. */
+private val ChipHeight = 28.dp
 
 /**
  * Reading.
@@ -361,7 +387,7 @@ private fun ReaderBar(
                 modifier = Modifier
                     .weight(1f)
                     .clip(QuranShape.pill)
-                    .clickable(onClick = onOpenSurahPicker)
+                    .clickable(role = Role.Button, onClick = onOpenSurahPicker)
                     .padding(horizontal = space.sm, vertical = space.xs)
                     .semantics {
                         contentDescription =
@@ -374,7 +400,8 @@ private fun ReaderBar(
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { heading() }
                 )
                 Text(
                     text = surah.arabicName,
@@ -415,7 +442,7 @@ private fun ReaderBar(
                     painter = painterResource(R.drawable.salah_quran_mushaf),
                     contentDescription = strings.more.readingOptions,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(IconSize.xl)
                 )
             }
         }
@@ -424,14 +451,7 @@ private fun ReaderBar(
 }
 
 @Composable
-private fun topInset(): Dp {
-    val density = LocalDensity.current
-    val top = maxOf(
-        WindowInsets.statusBars.getTop(density),
-        WindowInsets.displayCutout.getTop(density)
-    )
-    return with(density) { top.toDp() }
-}
+private fun topInset(): Dp = statusBarInset()
 
 // ---------------------------------------------------------------------------
 // Surah heading
@@ -583,11 +603,9 @@ private fun ContinuousReading(
                 Text(
                     text = page.text,
                     onTextLayout = { layout = it },
-                    style = TextStyle(
-                        fontFamily = ArabicFamily,
+                    style = QuranArabicStyle.copy(
                         fontSize = (24 * scale).sp,
                         lineHeight = (24 * scale * 1.9f).sp,
-                        textDirection = TextDirection.Rtl,
                         color = MaterialTheme.colorScheme.onSurface
                     ),
                     modifier = Modifier
@@ -675,8 +693,8 @@ private fun buildContinuousPage(
     ayahs: List<Ayah>,
     selectedAyah: Int,
     scale: Float,
-    highlight: androidx.compose.ui.graphics.Color,
-    accent: androidx.compose.ui.graphics.Color
+    highlight: Color,
+    accent: Color,
 ): ContinuousPage {
     val spans = ArrayList<IntRange>(ayahs.size)
     val text = buildAnnotatedString {
@@ -760,7 +778,7 @@ private fun VerseInspector(
         shape = QuranShape.card,
         // The one 2dp accent border in the app: selection is expressed as a
         // thicker accent edge rather than a fill change or a shadow.
-        border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
+        border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
         modifier = modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(space.lg)) {
@@ -779,7 +797,7 @@ private fun VerseInspector(
                         imageVector = Icons.Default.Close,
                         contentDescription = strings.more.actionClose,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(IconSize.md)
                     )
                 }
             }
@@ -788,13 +806,11 @@ private fun VerseInspector(
 
             Text(
                 text = "${ayah.textArabic} ۝${QuranDataSource.toArabicDigits(ayah.ayahNumber)}",
-                // The same base size and line height the mushaf uses, so the
-                // inspector tracks the Text Size slider. It was pinned at 19sp
-                // while the page it quotes ran 17-38sp, which meant the setting
-                // silently did nothing here and 19sp sat off the type scale.
-                style = MaterialTheme.typography.bodyLarge.copy(
+                // The same base and leading as the page, so the inspector tracks
+                // the Text Size slider.
+                style = QuranArabicStyle.copy(
                     fontSize = (24 * fontScale).sp,
-                    lineHeight = (32 * fontScale).sp
+                    lineHeight = (24 * fontScale * 1.9f).sp
                 ),
                 fontFamily = ArabicFamily,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -835,7 +851,7 @@ private fun VerseInspector(
                             strings.more.playVerse
                         },
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(IconSize.lg)
                     )
                 }
                 VerseTextAction(
@@ -963,7 +979,7 @@ private fun VerseBlock(
                 color = MaterialTheme.colorScheme.primaryContainer,
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 shape = QuranShape.pill,
-                modifier = Modifier.heightIn(min = 28.dp)
+                modifier = Modifier.heightIn(min = ChipHeight)
             ) {
                 Text(
                     text = "${ayah.surahNumber}:${ayah.ayahNumber}",
@@ -990,7 +1006,7 @@ private fun VerseBlock(
                     imageVector = Icons.Default.PlayArrow,
                     contentDescription = if (isPlaying) strings.more.pauseVerse else strings.more.playVerse,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(IconSize.lg)
                 )
             }
             VerseTextAction(
@@ -1027,11 +1043,9 @@ private fun VerseBlock(
 
         Text(
             text = "${ayah.textArabic} ۝${QuranDataSource.toArabicDigits(ayah.ayahNumber)}",
-            style = TextStyle(
-                fontFamily = ArabicFamily,
+            style = QuranArabicStyle.copy(
                 fontSize = (24 * scale).sp,
-                lineHeight = (24 * scale * 1.8f).sp,
-                textDirection = TextDirection.Rtl,
+                lineHeight = (24 * scale * 1.9f).sp,
                 color = MaterialTheme.colorScheme.onSurface
             ),
             modifier = Modifier.fillMaxWidth()
@@ -1063,7 +1077,8 @@ private fun TranslationToggle(count: Int, shown: Boolean, onToggle: () -> Unit) 
             .fillMaxWidth()
             .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
             .clip(QuranShape.pill)
-            .clickable(onClick = onToggle)
+            .clickable(role = Role.Button, onClick = onToggle)
+            .semantics { stateDescription = if (shown) strings.more.hideTranslation else strings.more.showTranslation }
             .padding(horizontal = space.lg, vertical = space.sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -1145,7 +1160,7 @@ private fun PagerButton(
         modifier = modifier
             .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
             .clip(QuranShape.pill)
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
     ) {
         Box(
             modifier = Modifier.padding(vertical = space.md, horizontal = space.sm),
@@ -1181,7 +1196,7 @@ private fun VerseTextAction(
             imageVector = icon,
             contentDescription = label,
             tint = tint,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(IconSize.lg)
         )
     }
 }
@@ -1189,34 +1204,13 @@ private fun VerseTextAction(
 @Composable
 private fun TextSizeRow(scale: Float, onScaleChange: (Float) -> Unit) {
     val strings = LocalStrings.current
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = strings.more.textSize,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Spacer(Modifier.width(Space.current.md))
-        Slider(
-            value = scale,
-            onValueChange = onScaleChange,
-            valueRange = QuranScaleRange,
-            modifier = Modifier
-                .weight(1f)
-                .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
-                .semantics {
-                    contentDescription = strings.more.textSize
-                    stateDescription = "${(scale * 100).toInt()}%"
-                }
-        )
-        Text(
-            text = "${(scale * 100).toInt()}%",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary
-        )
-    }
+    LabeledSlider(
+        label = strings.more.textSize,
+        valueText = "${(scale * 100).toInt()}%",
+        value = scale,
+        onValueChange = onScaleChange,
+        valueRange = QuranScaleRange
+    )
 }
 
 @Composable
@@ -1230,47 +1224,28 @@ private fun AudioStrip(
     val space = Space.current
     val strings = LocalStrings.current
 
-    Surface(color = MaterialTheme.colorScheme.surface) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = space.lg, vertical = space.sm),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "${strings.more.recitingLabel} $surahName · " +
-                        strings.more.verseReference.format(surahNumber, ayahNumber),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = reciter,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+    StatusBanner(
+        message = "${strings.more.recitingLabel} $surahName · " +
+            strings.more.verseReference.format(surahNumber, ayahNumber) + " · $reciter",
+        icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.MenuBook,
+        action = {
             Surface(
                 color = MaterialTheme.colorScheme.primaryContainer,
                 shape = QuranShape.pill,
                 modifier = Modifier
                     .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
                     .clip(QuranShape.pill)
-                    .clickable(onClick = onStop)
+                    .clickable(role = Role.Button, onClick = onStop)
             ) {
                 Text(
-                    text = strings.more.stopAudio,
+                    text = "${strings.more.stopAudio}: $surahName",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.padding(horizontal = space.lg, vertical = space.sm)
                 )
             }
         }
-    }
+    )
 }
 
 @Composable
@@ -1295,7 +1270,7 @@ private fun SurahPicker(current: Int, onSelect: (Int) -> Unit, onDismiss: () -> 
         subtitle = strings.more.corpusSummary,
         onDismiss = onDismiss
     ) {
-        com.example.ui.components.SearchInput(
+        SearchInput(
             value = query,
             onValueChange = { query = it },
             onClear = { query = "" },

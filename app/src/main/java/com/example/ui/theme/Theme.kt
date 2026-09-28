@@ -167,6 +167,25 @@ object Tonal {
 }
 
 // ---------------------------------------------------------------------------
+// Icon sizes - one set, so a "play" triangle is the same size on every screen.
+//
+// The app had drifted to a dozen ad-hoc icon sizes (14, 16, 18, 20, 22, 24,
+// 26, 28, 32dp) chosen per call site, so the same affordance rendered at two
+// sizes on adjacent screens. These are the sizes the product actually uses.
+// ---------------------------------------------------------------------------
+
+object IconSize {
+    val xs = 14.dp
+    val sm = 16.dp
+    val md = 18.dp
+    val lg = 20.dp
+    val xl = 22.dp
+    val xxl = 24.dp
+    val xxxl = 28.dp
+    val huge = 32.dp
+}
+
+// ---------------------------------------------------------------------------
 // Layout - one content measure, reused by every screen so nothing drifts.
 // ---------------------------------------------------------------------------
 

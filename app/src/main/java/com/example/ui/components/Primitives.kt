@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.ui.localization.LocalStrings
 import com.example.ui.theme.DotShape
+import com.example.ui.theme.IconSize
 import com.example.ui.theme.Space
 import com.example.ui.theme.QuranShape
 import com.example.ui.theme.Tonal
@@ -121,7 +122,7 @@ fun ActionRow(
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
-                        .size(22.dp)
+                        .size(IconSize.xl)
                         .clearAndSetSemantics { }
                 )
                 Spacer(Modifier.width(space.md))
@@ -177,7 +178,7 @@ fun ActionRow(
                     // chevrons with onSurfaceVariant for the same reason.
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
-                        .size(20.dp)
+                        .size(IconSize.lg)
                         .clearAndSetSemantics { }
                 )
             }
@@ -247,7 +248,7 @@ fun EmptyState(
     ) {
         if (icon != null || painter != null) {
             val iconModifier = Modifier
-                .size(32.dp)
+                .size(IconSize.huge)
                 .clearAndSetSemantics { }
             val iconTint = MaterialTheme.colorScheme.onSurfaceVariant
             val vector = icon
@@ -339,7 +340,7 @@ fun StatusBanner(
                     contentDescription = null,
                     tint = content,
                     modifier = Modifier
-                        .size(18.dp)
+                        .size(IconSize.md)
                         .clearAndSetSemantics { }
                 )
                 Spacer(Modifier.width(space.sm))
@@ -483,7 +484,7 @@ fun OptionRow(
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
-                        .size(20.dp)
+                        .size(IconSize.lg)
                         .clearAndSetSemantics { }
                 )
             }
@@ -677,7 +678,7 @@ fun SearchInput(
         },
         singleLine = true,
         leadingIcon = {
-            Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(IconSize.lg))
         },
         trailingIcon = {
             if (onClear != null && value.isNotEmpty()) {
@@ -685,7 +686,7 @@ fun SearchInput(
                     Icon(
                         Icons.Default.Close,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(IconSize.md)
                     )
                 }
             }

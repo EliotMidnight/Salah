@@ -34,3 +34,22 @@ fun CameraHoleSpacer(
         )
     )
 }
+
+/**
+ * The status-bar / cutout inset as a [Dp], for callers that need to reserve the
+ * space rather than draw a spacer (a list's top content padding, say).
+ *
+ * One implementation, because the same computation had been copy-pasted into
+ * the Quran library, the Quran reader and the Today screen, and the copies had
+ * drifted: the library's added a gap the others did not, so the two screens
+ * disagreed about where their content started.
+ */
+@Composable
+fun statusBarInset(): Dp {
+    val density = LocalDensity.current
+    val top = maxOf(
+        WindowInsets.statusBars.getTop(density),
+        WindowInsets.displayCutout.getTop(density)
+    )
+    return with(density) { top.toDp() }
+}

@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">SALAH</string>
+    <!--
+      Play Console requires a privacy policy URL for any app that handles personal
+      data (this one uses location). Replace with the real address before release.
+    -->
+    <string name="privacy_policy_url">https://example.org/salah-privacy</string>
 </resources>

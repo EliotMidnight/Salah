@@ -31,24 +31,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.unit.dp
 import com.example.data.model.CalculationMethod
 import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
 import com.example.data.model.UserLocation
 import com.example.ui.SalahUiState
 import com.example.ui.components.ActionRow
+import com.example.ui.components.EmptyState
+import com.example.ui.components.StatusBanner
 import com.example.ui.components.ChipRow
 import com.example.ui.components.ConfirmDialog
 import com.example.ui.components.DetailList
@@ -62,9 +66,14 @@ import com.example.ui.components.SearchInput
 import com.example.ui.components.SectionGroup
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.SegmentedOptions
+import com.example.R
+import com.example.data.model.PrayerAdjustments
+import com.example.ui.localization.AppLanguage
 import com.example.ui.localization.LocalStrings
+import com.example.ui.localization.UiStrings
 import com.example.ui.localization.alertModeLabel
 import com.example.ui.localization.prayerName
+import com.example.ui.theme.IconSize
 import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
 import androidx.compose.material3.OutlinedTextField
@@ -115,6 +124,38 @@ private val THEMES = listOf("System Default", "Dark Mode (OLED)", "Clean Light")
 private val HIJRI_OFFSETS = listOf(-2, -1, 0, 1, 2)
 private val PRE_PRAYER_OFFSETS = listOf(5, 10, 15, 20, 30)
 
+/** Height of the scrollable country-capital list inside the location sheet. */
+private val CapitalsListMaxHeight = 360.dp
+
+/**
+ * The play/stop control on an audio option.
+ *
+ * It was copy-pasted into three sheets, and the copies had drifted: one played a
+ * fixed icon, two toggled, and the icon was 20dp in two places and 16dp in the
+ * third. One composable, one icon size, and a label that names the thing it
+ * previews - six identical "Test sound" buttons in a row were indistinguishable
+ * to a screen reader.
+ */
+@Composable
+private fun PlayPreviewButton(
+    label: String,
+    isPlaying: Boolean,
+    onToggle: () -> Unit
+) {
+    val strings = LocalStrings.current
+    IconButton(
+        onClick = onToggle,
+        modifier = Modifier.size(MaterialTheme.layoutMetrics.minTouchTarget)
+    ) {
+        Icon(
+            imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+            contentDescription = label,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(IconSize.lg)
+        )
+    }
+}
+
 /**
  * Settings.
  *
@@ -134,7 +175,7 @@ fun SettingsScreen(
     onLocationSelect: (UserLocation) -> Unit,
     onMethodSelect: (CalculationMethod) -> Unit,
     onMadhhabSelect: (Madhhab) -> Unit,
-    onAdjustmentsChange: (com.example.data.model.PrayerAdjustments) -> Unit,
+    onAdjustmentsChange: (PrayerAdjustments) -> Unit,
     onAdhanToggle: (Boolean) -> Unit,
     onPrePrayerToggle: (Boolean) -> Unit,
     onVibrateOnlyToggle: (Boolean) -> Unit,
@@ -165,6 +206,7 @@ fun SettingsScreen(
 ) {
     val space = Space.current
     val strings = LocalStrings.current
+    val context = LocalContext.current
 
     // One enum instead of eighteen booleans, so only one sheet can ever be open and
     // its open/close is a single state change.
@@ -216,33 +258,22 @@ fun SettingsScreen(
                     onClick = { sheet = Sheet.LOCATION }
                 )
                 if (state.isLocating) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = space.md, vertical = space.sm),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = strings.more.loading,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.width(space.sm))
-                        OutlinedButton(
-                            onClick = onFetchLocation,
-                            modifier = Modifier.heightIn(
-                                min = MaterialTheme.layoutMetrics.minTouchTarget
-                            )
-                        ) {
-                            Text(strings.more.useGps, style = MaterialTheme.typography.labelLarge)
+                    StatusBanner(
+                        message = strings.more.loading,
+                        action = {
+                            OutlinedButton(
+                                onClick = onFetchLocation,
+                                modifier = Modifier.heightIn(
+                                    min = MaterialTheme.layoutMetrics.minTouchTarget
+                                )
+                            ) {
+                                Text(strings.more.useGps, style = MaterialTheme.typography.labelLarge)
+                            }
                         }
-                    }
+                    )
                 }
                 state.locationStatusMessage?.let { message ->
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = space.md, vertical = space.sm)
-                    )
+                    StatusBanner(message = message)
                 }
                 RowDivider()
                 ActionRow(
@@ -341,7 +372,7 @@ fun SettingsScreen(
                         )
                         Spacer(Modifier.height(space.sm))
                         SegmentedOptions(
-                            options = AUTO_SILENCE_OPTIONS.map { "$it" },
+                            options = AUTO_SILENCE_OPTIONS.map { "$it ${strings.more.minutesShort}" },
                             selectedIndex = AUTO_SILENCE_OPTIONS.indexOf(state.autoSilentDurationMinutes)
                                 .coerceAtLeast(0),
                             onSelect = { onAutoSilentDurationChange(AUTO_SILENCE_OPTIONS[it]) }
@@ -383,7 +414,6 @@ fun SettingsScreen(
                         valueText = "${(state.quranFontScale * 100).toInt()}%",
                         value = state.quranFontScale,
                         onValueChange = onFontScaleChange,
-                        onValueChangeFinished = null,
                         valueRange = 0.8f..1.5f,
                         steps = 6
                     )
@@ -419,6 +449,17 @@ fun SettingsScreen(
                 )
                 RowDivider()
                 ActionRow(
+                    title = strings.more.privacyPolicy,
+                    onClick = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(context.getString(R.string.privacy_policy_url)))
+                            )
+                        }
+                    }
+                )
+                RowDivider()
+                ActionRow(
                     title = strings.more.resetAllLabel,
                     onClick = { confirmReset = true }
                 )
@@ -441,7 +482,7 @@ fun SettingsScreen(
             title = strings.more.chooseLanguage,
             onDismiss = { sheet = null }
         ) {
-            com.example.ui.localization.AppLanguage.entries.forEach { language ->
+            AppLanguage.entries.forEach { language ->
                 OptionRow(
                     title = language.nativeName,
                     description = language.englishName,
@@ -517,15 +558,10 @@ fun SettingsScreen(
             SectionHeader(strings.more.allCountriesTitle)
             val capitals = remember(cityQuery) { CapitalLocations.search(cityQuery) }
             if (capitals.isEmpty()) {
-                Text(
-                    text = strings.more.noSearchResults,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = space.md)
-                )
+                EmptyState(title = strings.more.noSearchResults)
             } else {
                 LazyColumn(
-                    modifier = Modifier.heightIn(max = 360.dp),
+                    modifier = Modifier.heightIn(max = CapitalsListMaxHeight),
                     verticalArrangement = Arrangement.spacedBy(space.xs)
                 ) {
                     items(capitals, key = { it.country }) { entry ->
@@ -679,7 +715,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(space.md))
             Row(horizontalArrangement = Arrangement.spacedBy(space.sm)) {
                 OutlinedButton(
-                    onClick = { onAdjustmentsChange(com.example.data.model.PrayerAdjustments()) },
+                    onClick = { onAdjustmentsChange(PrayerAdjustments()) },
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
@@ -767,17 +803,11 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f)
                         )
-                        IconButton(
-                            onClick = { onPlayAudioPreview(current) },
-                            modifier = Modifier.size(MaterialTheme.layoutMetrics.minTouchTarget)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = strings.more.testSound,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        PlayPreviewButton(
+                            label = "${strings.more.testSound}: ${strings.prayerName(prayer)}",
+                            isPlaying = state.audioPreviewPlaying == current,
+                            onToggle = { onPlayAudioPreview(current) }
+                        )
                     }
                     Spacer(Modifier.height(space.sm))
                     ChipRow(
@@ -804,27 +834,14 @@ fun SettingsScreen(
                     selected = sound == state.adhanSound,
                     onClick = { onAdhanSoundSelect(sound) },
                     trailing = {
-                        IconButton(
-                            onClick = {
-                                if (state.audioPreviewPlaying == sound) {
-                                    onStopAudioPreview()
-                                } else {
-                                    onPlayAudioPreview(sound)
-                                }
-                            },
-                            modifier = Modifier.size(MaterialTheme.layoutMetrics.minTouchTarget)
-                        ) {
-                            Icon(
-                                imageVector = if (state.audioPreviewPlaying == sound) {
-                                    Icons.Default.Stop
-                                } else {
-                                    Icons.Default.PlayArrow
-                                },
-                                contentDescription = strings.more.testSound,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        PlayPreviewButton(
+                            label = "${strings.more.testSound}: $sound",
+                            isPlaying = state.audioPreviewPlaying == sound,
+                            onToggle = {
+                                if (state.audioPreviewPlaying == sound) onStopAudioPreview()
+                                else onPlayAudioPreview(sound)
+                            }
+                        )
                     }
                 )
             }
@@ -840,27 +857,14 @@ fun SettingsScreen(
                     selected = reciter == state.reciter,
                     onClick = { onReciterSelect(reciter) },
                     trailing = {
-                        IconButton(
-                            onClick = {
-                                if (state.audioPreviewPlaying == reciter) {
-                                    onStopAudioPreview()
-                                } else {
-                                    onPlayAudioPreview(reciter)
-                                }
-                            },
-                            modifier = Modifier.size(MaterialTheme.layoutMetrics.minTouchTarget)
-                        ) {
-                            Icon(
-                                imageVector = if (state.audioPreviewPlaying == reciter) {
-                                    Icons.Default.Stop
-                                } else {
-                                    Icons.Default.PlayArrow
-                                },
-                                contentDescription = strings.more.testSound,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        PlayPreviewButton(
+                            label = "${strings.more.testSound}: $reciter",
+                            isPlaying = state.audioPreviewPlaying == reciter,
+                            onToggle = {
+                                if (state.audioPreviewPlaying == reciter) onStopAudioPreview()
+                                else onPlayAudioPreview(reciter)
+                            }
+                        )
                     }
                 )
             }
@@ -932,7 +936,7 @@ fun SettingsScreen(
                         .weight(1f)
                         .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(IconSize.sm))
                     Spacer(Modifier.width(space.xs))
                     Text(strings.more.testSound, style = MaterialTheme.typography.labelLarge)
                 }
@@ -1070,7 +1074,6 @@ private fun ToggleRow(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
-            .clip(MaterialTheme.shapes.small)
             .clickable(onClick = toggle)
             .then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
             .padding(horizontal = space.md, vertical = space.sm)
@@ -1113,8 +1116,8 @@ private fun ToggleRow(
 /** Per-prayer minute offsets, -15..+15. */
 @Composable
 private fun AdjustmentSliders(
-    adjustments: com.example.data.model.PrayerAdjustments,
-    onChange: (com.example.data.model.PrayerAdjustments) -> Unit
+    adjustments: PrayerAdjustments,
+    onChange: (PrayerAdjustments) -> Unit
 ) {
     val strings = LocalStrings.current
     data class Binding(
@@ -1170,7 +1173,7 @@ private fun hijriSummary(offset: Int): String =
     if (offset == 0) "±0" else if (offset > 0) "+$offset" else "$offset"
 
 /** Human label for a stored theme preference, which is persisted as a raw string. */
-private fun com.example.ui.localization.UiStrings.themeLabel(theme: String): String = when (theme) {
+private fun UiStrings.themeLabel(theme: String): String = when (theme) {
     "Dark Mode (OLED)" -> more.themeDark
     "Clean Light" -> more.themeLight
     else -> more.themeSystem

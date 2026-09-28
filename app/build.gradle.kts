@@ -73,35 +73,48 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
+  // A release build is signed with the upload keystore, and only ever that.
+  //
+  // The previous version fell back to the *debug* keystore when the credentials
+  // were absent and logged a warning. That is a release-blocking bug, not a
+  // convenience: a debug-signed APK is rejected by the Play Store, the fallback
+  // was silent enough to miss in a CI log, and "assembleRelease" still produced
+  // a green build. The check below runs only when a release task is actually in
+  // the graph, so `assembleDebug` and the compile tasks still work locally.
+  //
+  //   KEYSTORE_PATH  path to the upload .keystore / .jks
+  //   STORE_PASSWORD keystore password
+  //   KEY_ALIAS      key alias (defaults to "upload")
+  //   KEY_PASSWORD   key password
+  val uploadKeystore = System.getenv("KEYSTORE_PATH")?.let { file(it) }?.takeIf { it.exists() }
+  val storePasswordEnv = System.getenv("STORE_PASSWORD")
+  val hasReleaseCreds = uploadKeystore != null && !storePasswordEnv.isNullOrEmpty()
+
   signingConfigs {
-    // Release signing uses env-provided credentials when available. Without an
-    // upload keystore (no KEYSTORE_PATH file and no STORE_PASSWORD), release
-    // builds fall back to the debug keystore so `assembleRelease` still works
-    // for local verification. CI/production must provide a real keystore:
-    //   KEYSTORE_PATH, STORE_PASSWORD, KEY_ALIAS (default "upload"), KEY_PASSWORD
-    val uploadKeystore = System.getenv("KEYSTORE_PATH")?.let { file(it) }?.takeIf { it.exists() }
-    val hasReleaseCreds = uploadKeystore != null && !System.getenv("STORE_PASSWORD").isNullOrEmpty()
-    if (!hasReleaseCreds) {
-      logger.warn("SALAH: no upload keystore configured; release builds will use the debug keystore (not for production).")
-    }
     create("release") {
-      if (hasReleaseCreds) {
-        storeFile = uploadKeystore
-        storePassword = System.getenv("STORE_PASSWORD")
-        keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
-        keyPassword = System.getenv("KEY_PASSWORD")
-      } else {
-        storeFile = file("${rootDir}/debug.keystore")
-        storePassword = "android"
-        keyAlias = "androiddebugkey"
-        keyPassword = "android"
-      }
+      storeFile = uploadKeystore ?: file("${rootDir}/debug.keystore")
+      storePassword = storePasswordEnv ?: "android"
+      keyAlias = System.getenv("KEY_ALIAS") ?: "androiddebugkey"
+      keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
     }
     create("debugConfig") {
       storeFile = file("${rootDir}/debug.keystore")
       storePassword = "android"
       keyAlias = "androiddebugkey"
       keyPassword = "android"
+    }
+  }
+
+  gradle.taskGraph.whenReady {
+    val buildingRelease = allTasks.any {
+      it.name == "assembleRelease" || it.name == "bundleRelease"
+    }
+    if (buildingRelease && !hasReleaseCreds) {
+      throw GradleException(
+        "Release signing credentials are missing. Set KEYSTORE_PATH, STORE_PASSWORD " +
+          "(and KEY_ALIAS / KEY_PASSWORD if they differ from the defaults). A release " +
+          "build is never signed with the debug keystore - the Play Store rejects it."
+      )
     }
   }
 
@@ -148,6 +161,7 @@ dependencies {
   implementation(libs.androidx.compose.ui.graphics)
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.core.ktx)
+  implementation(libs.material)
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.lifecycle.viewmodel.compose)

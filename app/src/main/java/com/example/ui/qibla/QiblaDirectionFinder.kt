@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -65,16 +66,22 @@ import androidx.compose.ui.unit.sp
 import com.example.engine.MagneticFieldStatus
 import com.example.ui.SalahUiState
 import com.example.ui.components.ActionRow
+import com.example.ui.components.DetailList
 import com.example.ui.components.RowDivider
 import com.example.ui.components.SectionGroup
 import com.example.ui.components.SegmentedOptions
 import com.example.ui.localization.LocalStrings
+import com.example.ui.theme.IconSize
 import com.example.ui.theme.Space
 import com.example.ui.theme.Tonal
 import java.util.Locale
+
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
+
+/** The compass dial is the largest single instrument, so it gets its own measure. */
+private val CompassDialMaxWidth = 420.dp
 
 @Composable
 fun QiblaDirectionFinder(
@@ -118,7 +125,7 @@ fun QiblaDirectionFinder(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = space.sm),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         QiblaGuidanceBanner(
@@ -134,7 +141,7 @@ fun QiblaDirectionFinder(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 420.dp)
+                .widthIn(max = CompassDialMaxWidth)
                 .aspectRatio(1f)
                 .testTag("qibla_sensor_compass_dial")
                 .semantics(mergeDescendants = true) {
@@ -299,7 +306,7 @@ fun QiblaDirectionFinder(
                     contentDescription = null,
                     tint = alignedGold,
                     modifier = Modifier
-                        .size(14.dp)
+                        .size(IconSize.xs)
                         .clearAndSetSemantics { }
                 )
                 Text(
@@ -441,7 +448,7 @@ private fun QiblaGuidanceBanner(
             .testTag("qibla_guidance_banner")
             .then(
                 if (actionable) {
-                    Modifier.clickable(onClick = onShowCalibrationTip)
+                    Modifier.clickable(role = Role.Button, onClick = onShowCalibrationTip)
                 } else {
                     Modifier
                 }
@@ -456,14 +463,13 @@ private fun QiblaGuidanceBanner(
                 imageVector = if (isFacing) Icons.Default.CheckCircle else Icons.Default.NearMe,
                 contentDescription = null,
                 modifier = Modifier
-                    .size(16.dp)
+                    .size(IconSize.sm)
                     .clearAndSetSemantics { }
             )
             Spacer(Modifier.width(space.sm))
             Text(
                 text = guidanceText,
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center
             )
         }
