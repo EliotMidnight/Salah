@@ -265,6 +265,7 @@ data class ReaderStrings(
     /** Opens the surah / saved / search index. */
     val openIndex: String = "Open the index",
     val immersiveMode: String = "Immersive mode",
+    val exitImmersive: String = "Leave immersive mode",
     val showControls: String = "Show controls",
     val saveThisLocation: String = "Save this verse",
     val layoutPerAyah: String = "Per ayah",

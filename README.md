@@ -258,9 +258,42 @@ size the reader chose, not at whatever magnification was left behind.
 
 Hides the status bar and the dock, and takes the control pill with them. It is
 persisted, because the reason to want it is not something people flip on once by
-accident. While the controls are hidden the first tap anywhere on the page brings
-them back and does *not* select a verse - layered over the page on purpose, so
-"reveal the UI" and "select this ayah" can never fire from the same touch.
+accident.
+
+The immersive button is *not* in the control row. It is pinned to the top-trailing
+corner and stays visible in both states, faint when active, because a button that
+disappears when you need it is a trap - "out of the way" and "no way back" are
+different things. Nothing at all overlays the reading surface while immersive, so
+swiping and tapping the page work exactly as they do outside it.
+
+### Per-ayah, both ways
+
+Per-ayah is one vertical stack of verses on either axis. Turning it sideways used
+to produce a carousel with a single verse filling the screen, which is a
+slideshow rather than a page of reading.
+
+### Turning a page
+
+In the paged layouts the page can be turned by swiping, or by tapping either
+margin. The tap zones are 48dp strips in the gutter *beside* the text rather
+than a full-width tap handler, because the text already claims taps to select a
+verse; a parent that consumed them would make turning the page and reading a
+verse mutually exclusive. They carry no visible chevrons on purpose - a reader
+who can see the affordance stops reading and starts swiping.
+
+A page can also be taller than the screen, since the Arabic is sized by the
+reader and not by the page. The paged surface scrolls vertically inside the
+horizontal pager rather than clipping, so no line is ever lost off the bottom.
+
+### Panning while zoomed
+
+With pinch set to *Zoom the view*, the magnified surface can be dragged with one
+finger. `panZoomLock` is released above 1x, because a magnified view that cannot
+be moved is one you have cropped yourself out of. At 1x the lock stays on, so a
+one-finger drag is still an ordinary scroll and the two gestures never fight.
+The offset is clamped to the surplus the scale actually created and re-centres on
+the way back to 1x, so dragging can never leave a strip of empty paper beside the
+text.
 
 ### Quran fonts
 

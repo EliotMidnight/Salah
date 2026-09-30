@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -34,8 +35,9 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -46,6 +48,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -55,6 +58,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -71,6 +75,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Ayah
@@ -170,12 +175,14 @@ fun QuranReader(
     var pageCursor by rememberSaveable(anchorPage) { mutableIntStateOf(anchorPage) }
 
     val (viewScale, setViewScale) = rememberViewScale("${options.layout}-${options.scroll}")
+    // The magnified view can be dragged around. Only meaningful while
+    // VIEW_SCALE is the pinch target and the scale is above 1 - `readerPinch`
+    // decides when to forward a drag, and `rememberPan` clamps it to the
+    // surplus the scale actually created.
+    var readingSize by remember { mutableStateOf(IntSize.Zero) }
+    val (pan, setPan) = rememberPan(viewScale, readingSize)
 
     val listState = rememberLazyListState()
-    val ayahPager = rememberPagerState(
-        initialPage = (state.activeReadingAyahNumber - 1).coerceAtLeast(0),
-        pageCount = { ayahs.size.coerceAtLeast(1) }
-    )
     val pagePager = rememberPagerState(
         initialPage = (pageCursor - 1).coerceIn(0, TotalPages - 1),
         pageCount = { TotalPages }
@@ -185,17 +192,9 @@ fun QuranReader(
     // layout lands on the verse you were reading rather than the top.
     LaunchedEffect(surah.number, options.layout, options.scroll) {
         val target = state.activeReadingAyahNumber.coerceIn(1, ayahs.size.coerceAtLeast(1))
-        when (options.layout) {
-            QuranReadingLayout.PER_AYAH -> {
-                val index = ayahs.indexOfFirst { it.ayahNumber == target }.coerceAtLeast(0)
-                if (options.scroll == QuranScrollDirection.VERTICAL) {
-                    listState.scrollToItem(index)
-                } else {
-                    ayahPager.scrollToPage(index)
-                }
-            }
-
-            else -> Unit
+        if (options.layout == QuranReadingLayout.PER_AYAH) {
+            val index = ayahs.indexOfFirst { it.ayahNumber == target }.coerceAtLeast(0)
+            listState.scrollToItem(index)
         }
         selectedAyah = if (options.layout == QuranReadingLayout.CONTINUOUS) target else 0
     }
@@ -214,14 +213,6 @@ fun QuranReader(
     // recorded more precisely than a verse.
     LaunchedEffect(listState, options.layout, options.scroll) {
         if (options.layout == QuranReadingLayout.PER_PAGE) return@LaunchedEffect
-        if (options.layout == QuranReadingLayout.PER_AYAH &&
-            options.scroll == QuranScrollDirection.HORIZONTAL
-        ) {
-            snapshotFlow { ayahPager.currentPage }
-                .debounce(400)
-                .collect { page -> ayahs.getOrNull(page)?.let(onAyahViewed) }
-            return@LaunchedEffect
-        }
         snapshotFlow { listState.firstVisibleItemIndex }
             .debounce(400)
             .collect { index -> ayahs.getOrNull(index)?.let(onAyahViewed) }
@@ -260,15 +251,24 @@ fun QuranReader(
                         arabicScale = options.arabicScale,
                         onArabicScaleChange = { onOptionsChange(options.copy(arabicScale = it)) },
                         viewScale = viewScale,
-                        onViewScaleChange = setViewScale
+                        onViewScaleChange = setViewScale,
+                        pan = pan,
+                        onPanChange = setPan
                     )
-                    // The view scale magnifies the reading surface only. It is
-                    // applied above the scroll container so it zooms the text
-                    // without dragging the gesture surfaces along with it.
+                    // The view scale magnifies the reading surface and can then
+                    // be dragged around. It is applied above the scroll
+                    // container so it zooms the text without dragging the
+                    // gesture surfaces along with it. `clip = false` keeps a
+                    // magnified line from being cut off at the page edge while
+                    // it is being dragged into view.
                     .graphicsLayer {
                         scaleX = viewScale
                         scaleY = viewScale
+                        translationX = pan.x
+                        translationY = pan.y
+                        clip = false
                     }
+                    .onSizeChanged { readingSize = it }
 
                 val verticalSwipe = if (options.isPaged) {
                     Modifier
@@ -292,8 +292,12 @@ fun QuranReader(
                         modifier = gesture.then(verticalSwipe).fillMaxSize()
                     )
 
-                    options.layout == QuranReadingLayout.PER_AYAH &&
-                        options.scroll == QuranScrollDirection.VERTICAL -> PerAyahList(
+                    // Per ayah is one column either way. A horizontal pager here
+                    // put a single verse on the whole screen and turned the
+                    // rest of the surah into a carousel, which is a slideshow
+                    // and not a page of reading - so both axes now render the
+                    // same stack of verses, filling the page.
+                    options.layout == QuranReadingLayout.PER_AYAH -> PerAyahList(
                         surah = surah,
                         ayahs = ayahs,
                         listState = listState,
@@ -305,20 +309,6 @@ fun QuranReader(
                         onToggleBookmark = onToggleBookmark,
                         onTogglePlayAyah = onTogglePlayAyah,
                         modifier = gesture.then(verticalSwipe).fillMaxSize()
-                    )
-
-                    options.layout == QuranReadingLayout.PER_AYAH -> PerAyahPager(
-                        surah = surah,
-                        ayahs = ayahs,
-                        pagerState = ayahPager,
-                        options = options,
-                        ink = ink,
-                        accent = accent,
-                        muted = muted,
-                        state = state,
-                        onToggleBookmark = onToggleBookmark,
-                        onTogglePlayAyah = onTogglePlayAyah,
-                        modifier = gesture.fillMaxSize()
                     )
 
                     options.scroll == QuranScrollDirection.HORIZONTAL -> MushafPager(
@@ -343,22 +333,15 @@ fun QuranReader(
                 }
             }
 
-            // In immersive mode the controls are gone, and the first thing a
-            // tap does is bring them back rather than select a verse. Layered
-            // over the page on purpose: it consumes the tap so "reveal the UI"
-            // and "select this ayah" can never fire from the same touch.
-            if (immersive) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clickable(
-                            onClickLabel = strings.more.reader.showControls,
-                            role = androidx.compose.ui.semantics.Role.Button,
-                            onClick = { onImmersiveChange(false) }
-                        )
-                        .testTag("reader_restore_controls")
-                )
-            }
+            // In immersive mode the *controls row* goes, but the reading surface
+            // is left completely alone. An earlier version put a full-screen
+            // click target here to bring the controls back, and it ate every
+            // gesture on the page: swiping turned nothing and tapping did not
+            // turn the page, so immersive mode became a place you could get into
+            // and not navigate out of.
+            //
+            // Nothing overlays the page now, and the exit is the immersive
+            // button itself, which stays visible in both states.
 
             ReaderControls(
                 surah = surah,
@@ -374,7 +357,6 @@ fun QuranReader(
                 },
                 visible = !immersive,
                 onOpenIndex = onOpenIndex,
-                onToggleImmersive = { onImmersiveChange(true) },
                 onOpenOptions = onOpenOptions,
                 onSaveCurrentLocation = {
                     QuranDataSource.resolveAyah(surah.number, state.activeReadingAyahNumber)
@@ -384,6 +366,27 @@ fun QuranReader(
                 // function's own body is not inside the Box's scope, so an
                 // `align` modifier written in here does not resolve.
                 modifier = Modifier.align(Alignment.TopCenter)
+            )
+
+            // The one control that both enters and leaves immersive mode, and
+            // the only chrome that survives inside it.
+            //
+            // It is in its own row pinned to the top-trailing corner rather than
+            // in the controls row, because the controls row is hidden in
+            // immersive mode - a button that disappears when you need it is a
+            // trap. It stays on screen, half-transparent so it reads as
+            // background rather than as a control the reader has to look at,
+            // and it is a full 48dp touch target at all times, so there is
+            // always exactly one tap between the reader and getting out.
+            ImmersiveToggle(
+                isImmersive = immersive,
+                ink = ink,
+                muted = muted,
+                onToggle = { onImmersiveChange(!immersive) },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = statusBarInset() + Space.current.xs)
+                    .padding(end = Space.current.lg)
             )
 
             if (state.isAudioPlaying) {
@@ -428,16 +431,15 @@ private const val TotalPages = 604
 // ---------------------------------------------------------------------------
 
 /**
- * The whole chrome: one pill and three round buttons, in a single row.
+ * The whole chrome: one pill and two round buttons, in a single row.
  *
  * The pill is leading - top-left in LTR, top-right in RTL, without a single
  * conditional, because [Row] mirrors with the layout direction. It carries the
  * reader's location, so the one thing you always want is the thing that is
  * always there, and it doubles as the way into the index.
  *
- * The three buttons are trailing and equal in weight. Immersive comes before
- * options because it is the one a reader reaches for most: it is the control
- * that makes the rest of this row go away.
+ * The immersive control is deliberately **not** in this row. It lives in its own
+ * corner, above, visible in both states - see [ImmersiveToggle] for why.
  */
 @Composable
 private fun ReaderControls(
@@ -451,7 +453,6 @@ private fun ReaderControls(
     isBookmarked: Boolean,
     visible: Boolean,
     onOpenIndex: () -> Unit,
-    onToggleImmersive: () -> Unit,
     onOpenOptions: () -> Unit,
     onSaveCurrentLocation: () -> Unit,
     modifier: Modifier = Modifier
@@ -470,7 +471,16 @@ private fun ReaderControls(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = Space.current.lg),
+                    .padding(start = Space.current.lg)
+                    // Room for the immersive control, which now lives in its own
+                    // top-trailing corner and is drawn over this row in the
+                    // non-immersive state too. Without this reserve the last
+                    // circle button sat exactly underneath it, and only the
+                    // top one was reachable.
+                    .padding(
+                        end = MaterialTheme.layoutMetrics.minTouchTarget +
+                            Space.current.xs + Space.current.lg
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Space.current.xs)
             ) {
@@ -496,13 +506,6 @@ private fun ReaderControls(
                     testTag = "reader_save_location"
                 )
                 CircleControl(
-                    icon = Icons.Default.TextFields,
-                    contentDescription = strings.more.reader.immersiveMode,
-                    tint = muted,
-                    onClick = onToggleImmersive,
-                    testTag = "reader_immersive"
-                )
-                CircleControl(
                     icon = Icons.Default.MenuBook,
                     contentDescription = strings.more.readingOptions,
                     tint = muted,
@@ -515,12 +518,81 @@ private fun ReaderControls(
 }
 
 /**
+ * The enter/exit control for immersive mode.
+ *
+ * One control, both directions, and it never leaves. It is deliberately drawn
+ * faintly in immersive mode rather than hidden: the whole point of immersive
+ * mode is that the chrome gets out of the way, but "out of the way" and "no way
+ * back" are different things, and a reader who cannot find the exit reads the
+ * absence as a bug.
+ *
+ * The label flips with the state so the button always answers "what will this
+ * do" rather than "what is currently true".
+ */
+@Composable
+private fun ImmersiveToggle(
+    isImmersive: Boolean,
+    ink: Color,
+    muted: Color,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val strings = LocalStrings.current
+
+    Surface(
+        // Faint when immersive so the reader stops noticing it, but never so
+        // faint that the target is unclear.
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
+            alpha = if (isImmersive) 0.55f else 0.94f
+        ),
+        shape = QuranShape.pill,
+        modifier = modifier
+            .size(MaterialTheme.layoutMetrics.minTouchTarget)
+            .clip(QuranShape.pill)
+            .clickable(
+                onClickLabel = if (isImmersive) {
+                    strings.more.reader.exitImmersive
+                } else {
+                    strings.more.reader.immersiveMode
+                },
+                role = androidx.compose.ui.semantics.Role.Button,
+                onClick = onToggle
+            )
+            .testTag("reader_immersive")
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = if (isImmersive) {
+                    Icons.Default.FullscreenExit
+                } else {
+                    Icons.Default.Fullscreen
+                },
+                contentDescription = if (isImmersive) {
+                    strings.more.reader.exitImmersive
+                } else {
+                    strings.more.reader.immersiveMode
+                },
+                tint = if (isImmersive) ink else muted,
+                modifier = Modifier.size(IconSize.lg)
+            )
+        }
+    }
+}
+
+/**
  * The location, as one thin pill, and the way into the index.
  *
  * Thin because it sits over text: a full-height bar here would be a header
  * again, which is the thing this screen exists not to be. The surah name leads
- * and the reference follows, because the name is what you recognise and the
- * number is what you check.
+ * and the count follows, because the name is what you recognise and the number
+ * is what you check.
+ *
+ * The trailing number is the **verse count** in the surah-scoped layouts, not
+ * the surah's position in the mushaf. The surah's order number was the one
+ * thing on this pill that answered a question the reader had already answered
+ * by choosing the surah, while the verse count is the fact that actually
+ * describes what is on screen. Page mode keeps showing the page, which is the
+ * only number that can be lost there.
  */
 @Composable
 private fun IndexPill(
@@ -549,7 +621,8 @@ private fun IndexPill(
                 contentDescription = if (showPage) {
                     "${strings.more.pageWord} $page"
                 } else {
-                    "${strings.more.selectSurah}: ${surah.englishName}"
+                    "${strings.more.selectSurah}: ${surah.englishName}. " +
+                        strings.more.verseCount.format(surah.totalVerses)
                 }
             }
     ) {
@@ -577,7 +650,7 @@ private fun IndexPill(
                 text = if (showPage) {
                     "${strings.more.pageWord} $page"
                 } else {
-                    surah.number.toString()
+                    surah.totalVerses.toString()
                 },
                 style = MaterialTheme.typography.labelMedium,
                 color = muted,
@@ -1009,62 +1082,6 @@ private fun PerAyahList(
     }
 }
 
-/** One verse per screen, turned sideways. Reading a passage beat by beat. */
-@Composable
-private fun PerAyahPager(
-    surah: Surah,
-    ayahs: List<Ayah>,
-    pagerState: androidx.compose.foundation.pager.PagerState,
-    options: QuranReadingOptions,
-    ink: Color,
-    accent: Color,
-    muted: Color,
-    state: SalahUiState,
-    onToggleBookmark: (Ayah) -> Unit,
-    onTogglePlayAyah: (Ayah) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val space = Space.current
-
-    HorizontalPager(
-        state = pagerState,
-        modifier = modifier,
-        pageSpacing = space.lg,
-        contentPadding = PaddingValues(horizontal = space.lg, vertical = space.md)
-    ) { page ->
-        val ayah = ayahs.getOrNull(page)
-        if (ayah == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Spacer(Modifier.height(space.lg)) }
-            return@HorizontalPager
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Spacer(Modifier.height(space.lg))
-            VerseReferenceChip("${surah.number}:${ayah.ayahNumber}")
-            Spacer(Modifier.height(space.lg))
-            VerseBlock(
-                ayah = ayah,
-                actions = VerseActions(
-                    ayah = ayah,
-                    isBookmarked = state.isBookmarked(ayah),
-                    isPlaying = state.isAudioPlaying && state.currentAudioAyah == ayah.ayahNumber,
-                    onToggleBookmark = { onToggleBookmark(ayah) },
-                    onTogglePlay = { onTogglePlayAyah(ayah) }
-                ),
-                options = options,
-                ink = ink,
-                muted = muted,
-                showTranslation = options.showTranslation,
-                fillMaxWidth = false
-            )
-        }
-    }
-}
-
 /** The real mushaf, turned sideways: one canonical page per swipe. */
 @Composable
 private fun MushafPager(
@@ -1077,28 +1094,103 @@ private fun MushafPager(
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
+    val strings = LocalStrings.current
+
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.currentPage }.collect { onPageShown(it) }
+    }
+
+    val turn: (Int) -> Unit = { delta ->
+        val next = (pagerState.currentPage + delta).coerceIn(0, pagerState.pageCount - 1)
+        scope.launch { pagerState.animateScrollToPage(next) }
     }
 
     HorizontalPager(
         state = pagerState,
         modifier = modifier,
         pageSpacing = space.lg,
-        contentPadding = PaddingValues(horizontal = space.lg, vertical = space.md)
+        contentPadding = PaddingValues(vertical = space.md)
     ) { page ->
-        MushafPage(
-            pageNumber = page + 1,
-            options = options,
-            ink = ink,
-            accent = accent,
-            muted = muted,
-            selectedAyah = 0,
-            onSelectAyah = {},
-            modifier = Modifier.fillMaxSize()
-        )
+        // `scrollable = true` because a page has to be able to be taller than
+        // the screen. The Arabic is sized by the reader, not by the page, so a
+        // generous text size on a dense page overflows - and with nothing to
+        // scroll it, the overflow was clipped and the last lines of the page
+        // were simply gone. The page scrolls now.
+        //
+        // The two axes are different, so the parent keeps the horizontal drag:
+        // the pager turns the page, this column scrolls within it.
+        Row(Modifier.fillMaxSize()) {
+            // Tap-to-turn, as two gutters flanking the page.
+            //
+            // Deliberately *not* a full-width tap handler on the page: the text
+            // already claims taps to select a verse, and a parent that consumed
+            // them would either break verse selection or make turning the page
+            // and selecting a verse mutually exclusive. These sit in the margin
+            // where there is no text to select, so turning and reading coexist.
+            //
+            // A full 48dp each, so neither is a target you have to aim at.
+            TapZone(
+                onTap = { turn(-1) },
+                enabled = page > 0,
+                contentDescription = strings.more.previousSurahLabel,
+                modifier = Modifier.width(TapGutterWidth)
+            )
+
+            MushafPage(
+                pageNumber = page + 1,
+                options = options,
+                ink = ink,
+                accent = accent,
+                muted = muted,
+                selectedAyah = 0,
+                onSelectAyah = {},
+                scrollable = true,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+            )
+
+            TapZone(
+                onTap = { turn(1) },
+                enabled = page < TotalPages - 1,
+                contentDescription = strings.more.nextSurahLabel,
+                modifier = Modifier.width(TapGutterWidth)
+            )
+        }
     }
+}
+
+/** Width of the tap-to-turn gutters either side of a paged page. */
+private val TapGutterWidth = 48.dp
+
+/**
+ * One tap-to-turn gutter.
+ *
+ * Invisible: it is a target, not a control. A reader who can see chevrons at
+ * the edges of every page stops reading and starts swiping. It still carries an
+ * accessible name and a role, because a screen-reader user turning pages by
+ * swipe has no other route to the next one.
+ */
+@Composable
+private fun TapZone(
+    onTap: () -> Unit,
+    enabled: Boolean,
+    contentDescription: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .clickable(
+                enabled = enabled,
+                onClickLabel = contentDescription,
+                role = androidx.compose.ui.semantics.Role.Button,
+                onClick = onTap
+            )
+            .semantics { this.contentDescription = contentDescription }
+    )
 }
 
 /** The real mushaf, scrolled vertically: one canonical page per row. */
@@ -1148,6 +1240,12 @@ private fun MushafList(
  * this resolves its own verses from the corpus rather than being handed the
  * current surah's. The running head names the surah the page opens in, which is
  * what the printed page does and what a reader checks when they turn back.
+ *
+ * [scrollable] is true in the horizontal pager and false in the vertical list,
+ * and the difference matters. In the list each page is already a row of a
+ * scrolling parent, so an inner scroll would be a second vertical drag
+ * competing with it. In the pager the page owns its own height, so without this
+ * flag a page taller than the screen had nowhere to go but the clip.
  */
 @Composable
 private fun MushafPage(
@@ -1158,7 +1256,8 @@ private fun MushafPage(
     muted: Color,
     selectedAyah: Int,
     onSelectAyah: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    scrollable: Boolean = false
 ) {
     val space = Space.current
     val strings = LocalStrings.current
@@ -1168,7 +1267,11 @@ private fun MushafPage(
 
     val openingSurah = remember(pageNumber) { QuranDataSource.getSurahByNumber(ayahs.first().surahNumber) }
 
-    Column(modifier = modifier) {
+    Column(
+        modifier = modifier.then(
+            if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier
+        )
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
