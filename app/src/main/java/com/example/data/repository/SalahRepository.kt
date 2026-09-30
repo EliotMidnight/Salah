@@ -17,6 +17,12 @@ import com.example.data.model.CalculationMethod
 import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
 import com.example.data.model.PrayerAdjustments
+import com.example.data.model.QuranFontFace
+import com.example.data.model.QuranPaperTone
+import com.example.data.model.QuranPinchTarget
+import com.example.data.model.QuranReadingLayout
+import com.example.data.model.QuranReadingOptions
+import com.example.data.model.QuranScrollDirection
 import com.example.data.model.UserLocation
 import com.example.engine.AdhanAudioSynthesizer
 import com.example.service.PrayerAlarmScheduler
@@ -68,9 +74,20 @@ class SalahRepository(
     private val _vibrateOnlyFlow = MutableStateFlow(prefs.getBoolean("pref_vibrate_only", false))
     val vibrateOnlyFlow: StateFlow<Boolean> = _vibrateOnlyFlow.asStateFlow()
 
-    private val _quranFontScaleFlow = MutableStateFlow(prefs.getFloat("pref_quran_scale", 1.0f))
-    val quranFontScaleFlow: StateFlow<Float> = _quranFontScaleFlow.asStateFlow()
+    private val _quranReadingOptions = MutableStateFlow(loadQuranReadingOptions())
+    val quranReadingOptions: StateFlow<QuranReadingOptions> = _quranReadingOptions.asStateFlow()
 
+    private companion object Keys {
+        const val KEY_QURAN_LAYOUT = "pref_quran_layout"
+        const val KEY_QURAN_SCROLL = "pref_quran_scroll"
+        const val KEY_QURAN_PINCH = "pref_quran_pinch_target"
+        const val KEY_QURAN_PAPER = "pref_quran_paper"
+        const val KEY_QURAN_FONT = "pref_quran_font"
+        const val KEY_QURAN_ARABIC_SCALE = "pref_quran_arabic_scale"
+        const val KEY_QURAN_TRANSLATION_SCALE = "pref_quran_translation_scale"
+        const val KEY_QURAN_SHOW_TRANSLATION = "pref_quran_show_translation"
+        const val KEY_QURAN_IMMERSIVE = "pref_quran_immersive"
+    }
     private val _lastCheckedFlow = MutableStateFlow(
         prefs.getString("pref_last_checked", "Today · Just now") ?: "Today · Just now"
     )
@@ -291,10 +308,66 @@ class SalahRepository(
         PrayerAlarmScheduler.scheduleAllPrayers(context)
     }
 
-    fun setQuranFontScale(scale: Float) {
-        prefs.edit().putFloat("pref_quran_scale", scale).apply()
-        _quranFontScaleFlow.value = scale
+    // -------------------------------------------------------------------------
+    // Quran reading options
+    //
+    // One value, persisted key by key. Grouping them in a single data class
+    // ([QuranReadingOptions]) means the reader is handed a coherent set rather
+    // than seven independent flows that can disagree with each other - and
+    // [saveQuranReadingOptions] is the only writer, so the invariant repairs in
+    // `withLayout` / `withScroll` cannot be bypassed by a caller that forgets.
+    // -------------------------------------------------------------------------
+
+    private fun loadQuranReadingOptions(): QuranReadingOptions = QuranReadingOptions.normalise(
+        QuranReadingOptions(
+            layout = QuranReadingLayout.fromKey(prefs.getString(KEY_QURAN_LAYOUT, null)),
+            scroll = QuranScrollDirection.fromKey(prefs.getString(KEY_QURAN_SCROLL, null)),
+            pinchTarget = QuranPinchTarget.fromKey(prefs.getString(KEY_QURAN_PINCH, null)),
+            paper = QuranPaperTone.fromKey(prefs.getString(KEY_QURAN_PAPER, null)),
+            font = QuranFontFace.fromKey(prefs.getString(KEY_QURAN_FONT, null)),
+            // Migrated, not shared. The reader's Arabic size used to live in
+            // `pref_quran_scale`; it now lives with the rest of the reading
+            // options. Reading the old key on the way in means someone who set
+            // 130% before this change keeps 130% instead of silently snapping
+            // back to 100%. The two are then independent, and the old slider in
+            // Settings is a summary rather than a second writer.
+            arabicScale = if (prefs.contains(KEY_QURAN_ARABIC_SCALE)) {
+                prefs.getFloat(KEY_QURAN_ARABIC_SCALE, 1f)
+            } else {
+                prefs.getFloat("pref_quran_scale", 1f)
+            },
+            translationScale = prefs.getFloat(KEY_QURAN_TRANSLATION_SCALE, 1f),
+            showTranslation = prefs.getBoolean(KEY_QURAN_SHOW_TRANSLATION, false)
+        )
+    )
+
+    fun saveQuranReadingOptions(options: QuranReadingOptions) {
+        // Normalised on the way in as well as on the way out. A value that
+        // cannot be re-read back identically is not a saved preference.
+        val safe = QuranReadingOptions.normalise(options)
+        prefs.edit()
+            .putString(KEY_QURAN_LAYOUT, safe.layout.key)
+            .putString(KEY_QURAN_SCROLL, safe.scroll.key)
+            .putString(KEY_QURAN_PINCH, safe.pinchTarget.key)
+            .putString(KEY_QURAN_PAPER, safe.paper.key)
+            .putString(KEY_QURAN_FONT, safe.font.key)
+            .putFloat(KEY_QURAN_ARABIC_SCALE, safe.arabicScale)
+            .putFloat(KEY_QURAN_TRANSLATION_SCALE, safe.translationScale)
+            .putBoolean(KEY_QURAN_SHOW_TRANSLATION, safe.showTranslation)
+            .apply()
+        _quranReadingOptions.value = safe
     }
+
+    /**
+     * The reader's own immersive flag, kept apart from [QuranReadingOptions].
+     *
+     * Not a reading preference: it is a view state that [MainActivity] has to
+     * read from outside the Quran destination to hide the dock, so it lives
+     * beside the reader's state rather than inside the sheet-backed set.
+     */
+    var quranImmersive: Boolean
+        get() = prefs.getBoolean(KEY_QURAN_IMMERSIVE, false)
+        set(value) = prefs.edit().putBoolean(KEY_QURAN_IMMERSIVE, value).apply()
 
     fun setLanguage(language: String) {
         prefs.edit().putString("pref_language", language).apply()

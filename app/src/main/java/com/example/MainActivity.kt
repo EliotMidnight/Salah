@@ -68,6 +68,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -152,12 +154,27 @@ class MainActivity : ComponentActivity() {
             // battery could not be read at all. The dark theme happened to match
             // the default, which is why only light mode looked broken.
             val view = LocalView.current
+            // The reader's immersive mode is the only thing in the app that
+            // hides the status bar, so it is read here rather than inside the
+            // reader: the bar belongs to the window, not to one composable, and
+            // setting it from a screen that gets navigated away from would leave
+            // it hidden on Today.
+            val immersive = uiState.isQuranImmersive
             if (!view.isInEditMode) {
                 SideEffect {
                     val window = (view.context as? Activity)?.window ?: return@SideEffect
-                    WindowCompat.getInsetsController(window, view).apply {
-                        isAppearanceLightStatusBars = !darkTheme
-                        isAppearanceLightNavigationBars = !darkTheme
+                    val controller = WindowCompat.getInsetsController(window, view)
+                    controller.isAppearanceLightStatusBars = !darkTheme
+                    controller.isAppearanceLightNavigationBars = !darkTheme
+                    if (immersive) {
+                        controller.hide(WindowInsetsCompat.Type.statusBars())
+                        // Swipe it back rather than never showing it again: a bar
+                        // the user cannot summon with a gesture is a bar they will
+                        // assume the app got stuck behind.
+                        controller.systemBarsBehavior =
+                            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    } else {
+                        controller.show(WindowInsetsCompat.Type.statusBars())
                     }
                 }
             }
@@ -238,15 +255,25 @@ private fun SalahApp(viewModel: SalahViewModel) {
         }
     }
 
+    // The dock is hidden while the reader is immersive. Not just made transparent:
+    // the reader's own controls are already off the top of the screen at that
+    // point, so leaving a navigation bar under a full page of Arabic would be
+    // the one piece of chrome the reader could not dismiss.
+    val immersive = uiState.isQuranImmersive
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0.dp),
-        bottomBar = { SalahNavigationBar(navController = navController, currentRoute = currentRoute) }
+        bottomBar = {
+            if (!immersive) {
+                SalahNavigationBar(navController = navController, currentRoute = currentRoute)
+            }
+        }
     ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = innerPadding.calculateBottomPadding())
+                .padding(bottom = if (immersive) 0.dp else innerPadding.calculateBottomPadding())
         ) {
             // Each destination owns its own top bar, so the title always answers
             // "where am I?" on every screen instead of only on some of them.
@@ -283,14 +310,13 @@ private fun SalahApp(viewModel: SalahViewModel) {
                     QuranScreen(
                         state = uiState,
                         onSurahSelected = viewModel::selectSurah,
+                        onSurahAyahSelected = viewModel::selectSurah,
                         onAyahViewed = viewModel::onAyahViewed,
                         onToggleBookmark = viewModel::toggleBookmark,
                         onTogglePlayAyah = viewModel::togglePlayAyah,
                         onStopAudio = viewModel::stopAudio,
-                        onFontScaleChange = viewModel::setQuranFontScale,
-                        onPageSelected = viewModel::selectPage,
-                        onJuzSelected = viewModel::selectJuz,
-                        onHizbSelected = viewModel::selectHizb
+                        onOptionsChange = viewModel::setQuranReadingOptions,
+                        onImmersiveChange = viewModel::setQuranImmersive
                     )
                 }
 
@@ -330,7 +356,6 @@ private fun SalahApp(viewModel: SalahViewModel) {
                         onAdhanSoundSelect = viewModel::setAdhanSound,
                         onHijriAdjustmentChange = viewModel::setHijriAdjustment,
                         onReciterSelect = viewModel::setReciter,
-                        onFontScaleChange = viewModel::setQuranFontScale,
                         onRefreshClick = viewModel::refreshData,
                         onPrePrayerOffsetChange = viewModel::setPrePrayerOffsetMinutes,
                         onAdhanVolumeChange = viewModel::setAdhanVolume,

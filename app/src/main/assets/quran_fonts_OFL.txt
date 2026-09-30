@@ -1,0 +1,59 @@
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+
+The bundled Quran fonts in this directory are licensed under the SIL Open Font
+License, Version 1.1. The full, canonical text of the OFL is published at
+https://scripts.sil.org/OFL and is reproduced below verbatim.
+
+  quran_amiri.ttf   Amiri
+                   Copyright (c) 2010, 2012, Khaled Hosny
+                   <khaledhosny@eglug.org>, with Reserved Font Name "Amiri".
+                   Author: Khaled Hosny.  Licensed under the SIL Open Font
+                   License, Version 1.1.
+
+  quran_lateef.ttf  Lateef
+                   Copyright (c) 1994-2008, SIL International
+                   (http://www.sil.org/).  Licensed under the SIL Open Font
+                   License, Version 1.1, with Reserved Font Name "Lateef".
+
+  kalam_regular.ttf / kalam_bold.ttf
+                   Kalam is also under the SIL Open Font License. Its licence
+                   file is kept alongside it at app/src/main/assets/kalam_OFL.txt.
+
+Why these two
+-------------
+The reading-options sheet offers five Quran fonts. Only faces whose licence
+permits redistribution inside an Apache-2.0 application are bundled. The
+SIL OFL grants exactly that: the fonts may be used, studied, modified and
+redistributed, including commercially, provided they are not sold on their
+own and any derivative keeps the licence.
+
+The other three faces offered in the picker (KFGQ, MeQuran and Naskh
+Nastaleeq / Noorani Quran) are NOT bundled, because their own licences do not
+allow it:
+
+  KFGQPC Uthmanic Script HAFS
+      "All rights reserved. This Font is the property of King Fahd Glorious
+       Quran Printing Complex, and may not be reproduced..." (EULA, (c) 2010)
+
+  me_quran
+      "Typeface and data (c) 2005, Meor Ridzuan. Free for non commercial use."
+
+  AlQuran IndoPak / Naskh Nastaleeq
+      Custom end-user terms, (c) Ayman Siddiqui / QuranWBW.com, all rights
+      reserved.
+
+Relicensing this application does not change any of the above: those terms are
+granted by the font's own copyright holder, not by this project's licence.
+
+Adding one of them later
+------------------------
+QuranFonts in ui/theme/QuranFonts.kt resolves each slot by resource name and
+falls back cleanly when the file is absent, so enabling a face you have
+permission for is a two-step change:
+
+  1. Drop the .ttf / .otf into this directory, e.g. quran_kfgqpc.otf
+  2. Point the matching QuranFontFace entry at it:
+
+         val fontRes = R.font.quran_kfgqpc
+
+No other file needs to change, and the picker entry starts working.

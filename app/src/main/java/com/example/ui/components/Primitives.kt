@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -49,6 +50,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
@@ -610,6 +613,82 @@ fun LabeledSlider(
                 .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
                 .semantics { contentDescription = label }
         )
+    }
+}
+
+/**
+ * A label, an optional subtitle, and a switch whose whole row is the target.
+ *
+ * Promoted out of Settings so the reading-options sheet and Settings do not
+ * each carry their own: the reader needed a switch and the obvious move was to
+ * copy one, which is how two rows end up disagreeing about padding and about
+ * whether the switch itself is in the accessibility tree.
+ *
+ * The switch is deliberately decorative ([Switch]'s own onCheckedChange is
+ * null and its semantics are cleared): the row carries the click and the
+ * semantics, so exposing the switch as well would double-announce every toggle
+ * on both screens.
+ *
+ * [role] is a parameter because a row that *opens a picker* is not a switch -
+ * Settings' pre-prayer row does that, and announcing "switch, double tap to
+ * activate" before showing a sheet is a lie about what the tap will do.
+ */
+@Composable
+fun ToggleRow(
+    title: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    onClick: (() -> Unit)? = null,
+    testTag: String? = null,
+    role: Role = Role.Switch
+) {
+    val space = Space.current
+    val strings = LocalStrings.current
+
+    val toggle: () -> Unit = onClick ?: { onCheckedChange(!checked) }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+            .clickable(onClick = toggle)
+            .then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
+            .padding(horizontal = space.md, vertical = space.sm)
+            .semantics(mergeDescendants = true) {
+                this.role = role
+                stateDescription = if (role == Role.Switch) {
+                    if (checked) strings.more.stateOn else strings.more.stateOff
+                } else {
+                    ""
+                }
+                onClick(label = if (role == Role.Switch) null else strings.more.actionChange) {
+                    toggle()
+                    true
+                }
+            },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (subtitle != null) {
+                Spacer(Modifier.height(space.xxs))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Spacer(Modifier.width(space.md))
+        // The switch is decorative here: the row carries the click and the
+        // semantics, so exposing it as a second focus stop would double-announce.
+        Switch(checked = checked, onCheckedChange = null, modifier = Modifier.clearAndSetSemantics { })
     }
 }
 

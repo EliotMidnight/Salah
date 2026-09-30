@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -136,6 +137,24 @@ fun QiblaDirectionFinder(
 
         Spacer(modifier = Modifier.height(space.md))
 
+        // Heading and Qibla bearing, side by side.
+        //
+        // Two numbers is the whole instrument, and putting them in one row lets
+        // the eye compare them without the dial in between. They are labelled
+        // because "95°" above a compass answers "which way am I facing" and the
+        // same digits below it answer "which way is the Kaaba" - identical
+        // numerals, opposite questions.
+        DialReadout(
+            heading = state.compassAzimuth,
+            bearing = state.qiblaBearing,
+            isFacing = isFacing,
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = CompassDialMaxWidth)
+        )
+
+        Spacer(modifier = Modifier.height(space.md))
+
         val headingText = "${state.compassAzimuth.toInt()}° " +
             getCardinalDirection(state.compassAzimuth)
         Box(
@@ -196,26 +215,87 @@ fun QiblaDirectionFinder(
                         typeface = android.graphics.Typeface.DEFAULT_BOLD
                     }
 
+                    // The graduated scale.
+                    //
+                    // A tick every 2 degrees, so the dial reads as an instrument
+                    // rather than four cardinal marks with a marker between
+                    // them; 30 and 90 carry the weight so the eye still finds
+                    // the quarters without reading anything.
+                    //
+                    // Every endpoint uses the same `sin / -cos` parameterisation
+                    // as the cardinals and the needle below. Mixing `+cos` here
+                    // with `-cos` there mirrors the whole scale through the
+                    // centre while leaving its 90-degree symmetry perfectly
+                    // intact - so the ticks look correct and the needle ends up
+                    // pointing directly *away* from the Kaaba at the exact
+                    // moment of alignment.
+                    val tickOuter = outerRadius - 4.dp.toPx()
+                    for (deg in 0 until 360 step 2) {
+                        val rad = Math.toRadians(deg.toDouble())
+                        val is30 = deg % 30 == 0
+                        val is90 = deg % 90 == 0
+                        val length = when {
+                            is90 -> 16.dp.toPx()
+                            is30 -> 10.dp.toPx()
+                            else -> 4.dp.toPx()
+                        }
+                        val colour = when {
+                            is90 -> primaryColor
+                            is30 -> primaryColor.copy(alpha = 0.75f)
+                            else -> onSurfaceVariant.copy(alpha = 0.45f)
+                        }
+                        drawLine(
+                            color = colour,
+                            start = Offset(
+                                center.x + (tickOuter - length) * sin(rad).toFloat(),
+                                center.y - (tickOuter - length) * cos(rad).toFloat()
+                            ),
+                            end = Offset(
+                                center.x + tickOuter * sin(rad).toFloat(),
+                                center.y - tickOuter * cos(rad).toFloat()
+                            ),
+                            strokeWidth = when {
+                                is90 -> 2.dp.toPx()
+                                is30 -> 1.5.dp.toPx()
+                                else -> 1.dp.toPx()
+                            },
+                            cap = StrokeCap.Round
+                        )
+                    }
+
+                    // The degree numerals, every 30 degrees. Drawn upright and
+                    // not counter-rotated, so they stay readable as the card
+                    // turns rather than spinning with it.
+                    val degreePaint = android.graphics.Paint().apply {
+                        isAntiAlias = true
+                        textAlign = android.graphics.Paint.Align.CENTER
+                    }
+                    val labelRadius = outerRadius - 27.dp.toPx()
+                    for (deg in 0 until 360 step 30) {
+                        val rad = Math.toRadians(deg.toDouble())
+                        val is90 = deg % 90 == 0
+                        degreePaint.textSize = (if (is90) 11.sp else 9.sp).toPx()
+                        degreePaint.color = if (is90) {
+                            onSurfaceColor.copy(alpha = 0.5f).toArgb()
+                        } else {
+                            onSurfaceVariant.copy(alpha = 0.4f).toArgb()
+                        }
+                        degreePaint.typeface = if (is90) {
+                            android.graphics.Typeface.DEFAULT_BOLD
+                        } else {
+                            android.graphics.Typeface.DEFAULT
+                        }
+                        val x = center.x + labelRadius * sin(rad).toFloat()
+                        val y = center.y - labelRadius * cos(rad).toFloat() + (degreePaint.textSize / 3f)
+                        drawContext.canvas.nativeCanvas.drawText("$deg", x, y, degreePaint)
+                    }
+
                     listOf(0 to "N", 90 to "E", 180 to "S", 270 to "W").forEach { (deg, label) ->
                         val rad = Math.toRadians(deg.toDouble())
                         val isNorth = deg == 0
-                        val tickOuter = outerRadius - 14.dp.toPx()
-                        val tickLen = if (isNorth) 14.dp.toPx() else 9.dp.toPx()
-                        val startX = center.x + (tickOuter - tickLen) * sin(rad).toFloat()
-                        val startY = center.y - (tickOuter - tickLen) * cos(rad).toFloat()
-                        val endX = center.x + tickOuter * sin(rad).toFloat()
-                        val endY = center.y - tickOuter * cos(rad).toFloat()
-                        drawLine(
-                            color = if (isNorth) errorColor else onSurfaceVariant,
-                            start = Offset(startX, startY),
-                            end = Offset(endX, endY),
-                            strokeWidth = if (isNorth) 2.dp.toPx() else 1.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-
                         cardinalPaint.color =
                             if (isNorth) errorColor.toArgb() else onSurfaceColor.toArgb()
-                        val r = outerRadius - 36.dp.toPx()
+                        val r = outerRadius - 44.dp.toPx()
                         val x = center.x + r * sin(rad).toFloat()
                         val y = center.y - r * cos(rad).toFloat() + (cardinalPaint.textSize / 3f)
                         drawContext.canvas.nativeCanvas.drawText(label, x, y, cardinalPaint)
@@ -398,6 +478,96 @@ fun QiblaDirectionFinder(
                 testTag = "sensor_calibration_button"
             )
         }
+    }
+}
+
+/**
+ * Heading and Qibla bearing, as two labelled figures in one row.
+ *
+ * The bearing takes the accent and the heading the plain text colour, because
+ * the bearing is the one the user is trying to match - it is the fixed value
+ * they are turning towards, and the heading is what moves.
+ */
+@Composable
+private fun DialReadout(
+    heading: Float,
+    bearing: Float,
+    isFacing: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val strings = LocalStrings.current
+    val space = Space.current
+    val success = Tonal.colors.success
+
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.large,
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = space.lg, vertical = space.md),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ReadoutFigure(
+                label = strings.more.reader.headingLabel,
+                value = "${heading.toInt()}°",
+                caption = getCardinalDirection(heading),
+                captionColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                valueColor = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(38.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant)
+            )
+            ReadoutFigure(
+                label = strings.more.qiblaBearing,
+                value = "${bearing.toInt()}°",
+                caption = strings.more.reader.mushaf,
+                captionColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                valueColor = if (isFacing) success else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+/** One labelled figure: a quiet label, the number, and a caption under it. */
+@Composable
+private fun ReadoutFigure(
+    label: String,
+    value: String,
+    caption: String,
+    valueColor: Color,
+    captionColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val space = Space.current
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = label.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1
+        )
+        Spacer(Modifier.height(space.xxs))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.displaySmall,
+            color = valueColor,
+            maxLines = 1
+        )
+        Text(
+            text = caption,
+            style = MaterialTheme.typography.bodySmall,
+            color = captionColor,
+            maxLines = 1
+        )
     }
 }
 

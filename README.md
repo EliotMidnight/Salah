@@ -7,8 +7,8 @@ Built with Kotlin and Jetpack Compose (Material 3). No account, no tracking, wor
 
 - **Today dashboard** — next prayer countdown, live astronomical sky indicator, Hijri date, prayer checklist, continue-reading shortcut.
 - **Prayer times** — 8 calculation methods (Morocco Ministry/Habous default, MWL, ISNA, Egypt, Umm Al-Qura, Karachi, Dubai, France 12°), Standard/Hanafi Asr jurisprudence, per-prayer minute adjustments, monthly calendar, Imsak / Islamic midnight / last-third-of-night vigils.
-- **Quran reader** — all 114 surahs with verified Uthmani Arabic and full Saheeh International English, bundled offline (6,236 verses). Cards and continuous-text modes, tap-to-inspect verses, verse-level search in Arabic or English, bookmarks, continue-reading with progress, copy/share, per-verse audio recitation (Mishary Alafasy via everyayah.com, streamed).
-- **Qibla compass** — sensor-fused bearing with true/magnetic north, distance to the Kaaba, magnetic-interference diagnostics, device-level indicator, vibration on alignment.
+- **Quran reader** — opens straight into the text at your last position (Al-Fatihah on a first run). Three layouts (per ayah, per page, continuous surah), vertical or horizontal, the real 604-page mushaf partition, seven washed-out papers with light/dark treatment, Arabic and translation size, five named Quran fonts (two bundled), pinch as zoom or as text size, and immersive mode that clears the status bar and the dock. All 114 surahs with verified Uthmani Arabic and full Saheeh International English, bundled offline (6,236 verses). Verse-level search in Arabic or English with page/juz'/hizb quick filters, bookmarks, copy/share, per-verse audio recitation (Mishary Alafasy via everyayah.com, streamed).
+- **Qibla compass** — sensor-fused bearing with true/magnetic north, distance to the Kaaba, magnetic-interference diagnostics, device-level indicator, vibration on alignment. Graduated dial: tick every 2°, numerals every 30°, heading and Qibla bearing side by side.
 - **Adhan & alerts** — full Adhan, Takbeer-only, chime, vibration or silent per prayer; pre-prayer reminders; global silent and auto masjid-silence mode during prayer windows.
 - **Localization** — full UI in 11 languages (English, Arabic, French, Indonesian, Turkish, Urdu, Malay, Bengali, Russian, German, Spanish) with RTL support.
 - **Offline-first & private** — prayer math runs on-device; location stays on the device; the only network use is verse audio streaming.
@@ -208,10 +208,77 @@ The Hijri month sheet pages by whole Hijri months, walking outward and asking th
 engine where each day lands rather than stepping 29 or 30 days - either of those
 drifts, and lands in the wrong month within a year.
 
-The Quran library has no top bar and no tab row. Two floating controls sit in the
-top-right corner: search, which expands in place into a field carrying the
-Verses/Page/Juz'/Hizb filters, and bookmarks. Prayer is not in the bottom dock -
-four tabs, and the Prayer screen is reached from Settings.
+The Quran library has no top bar and no tab row, and there is no library screen
+at all: opening Quran opens the text, at the last place it was left. The browse
+affordances - surahs, saved verses, search, page/juz'/hizb - live in one sheet
+that is a tap away from the reading surface and dismisses back onto it, rather
+than being a screen you have to pass *through* to reach the book.
+
+- `ui/quran/QuranReader.kt` - the reader, all four layouts, and the control pill.
+- `ui/quran/QuranIndexSheet.kt` - surahs / saved / search in one sheet.
+- `ui/quran/ReadingOptionsSheet.kt` - layout, axis, paper, typeface, pinch.
+- `ui/quran/VerseCards.kt` - the verse block, translation card and inspector.
+- `ui/theme/QuranFonts.kt`, `ui/theme/QuranPaper.kt` - typeface registry and the
+  seven-colour mushaf paper, both contrast-checked in `QuranPaperContrastTest`.
+
+### The one thing worth knowing about the reader
+
+Every layout reads from the *same* anchor - a `(surah, ayah)` pair - and each
+layout knows how to resolve that anchor into its own coordinates: an index into a
+surah for the scrolling layouts, a page number for the mushaf layouts. That is
+what makes switching layout keep your place instead of throwing you to the top
+of the surah, and it is why there is no second "where am I" cursor anywhere.
+
+Per-page mode follows the canonical 604-page partition from the bundled corpus,
+so a page boundary is where the printed page actually breaks and a page can
+begin in one surah and end in the next. That is also why page mode carries its
+own cursor: no single verse stands for "page 300", so the cursor is the page and
+it is written back into the anchor on every turn, which keeps Continue Reading
+and bookmarks truthful.
+
+Two invariants live in `QuranReadingOptions` rather than at the call sites, and
+are unit-tested:
+
+- **Continuous text cannot scroll sideways.** It has no page boundaries, so
+  asking for it while horizontal pulls the axis back to vertical. The sheet does
+  not hide the scroll control - it explains it, because a control that vanishes
+  is worse than one that says why.
+- **A pinch cannot leave a size the slider cannot express.** Both scales are
+  clamped to the slider's range on the way in *and* on the way out, so a stored
+  value from an older build cannot restore a size nothing can undo.
+
+Pinch does two things that look identical and are not - it can change the type
+(the line rewraps, the preference matches the screen) or magnify the view
+(nothing about the reading changes, only how much of it fits). The reader asks
+which, rather than picking one and leaving half the users frustrated. The view
+scale is deliberately *not* persisted: reopening should show the reading at the
+size the reader chose, not at whatever magnification was left behind.
+
+### Immersive mode
+
+Hides the status bar and the dock, and takes the control pill with them. It is
+persisted, because the reason to want it is not something people flip on once by
+accident. While the controls are hidden the first tap anywhere on the page brings
+them back and does *not* select a verse - layered over the page on purpose, so
+"reveal the UI" and "select this ayah" can never fire from the same touch.
+
+### Quran fonts
+
+Five faces are offered by name and two ship with the APK. `res/font` could only
+take OFL faces: **Amiri** and **Lateef** are SIL Open Font License and freely
+redistributable, and they carry the U+06DD ayah marker the corpus uses. The other
+five slots - KFGQ, MeQuran, Digital Khatt v2, Naskh Nastaleeq, Noorani Quran -
+resolve to the default face and are labelled *Not included yet*, because their
+own licences do not allow redistribution (KFGQPC is "all rights reserved",
+me_quran is "free for non commercial use", the rest are trademarked). Enabling
+one you hold permission for is a two-step change; see
+`app/src/main/assets/quran_fonts_OFL.txt`.
+
+Each face carries its own line-height multiplier rather than sharing one, because
+Nastaliq descenders need materially more room than a Naskh face and a Nastaliq
+set with Naskh leading looks like a mistake. The picker previews each face with
+real Quranic text, so the choice is made by looking rather than by reading a name.
+
 - `ui/compose/CelestialClock.kt` — the dial and its labels.
 
 The date lives in `SalahUiState.selectedDate` and is switched on the **Prayer**
@@ -224,7 +291,40 @@ reads from the app's Material light/dark scheme so it sits with every other
 screen, and the display serif is the system one. The webapp's own source is
 checked out alongside this project at `../athan-pwa` for reference.
 
-## Accessibility
+## Qibla
+
+The Qibla dial follows [al_quran_v3](https://github.com/IsmailHosenIsmailJames/al_quran_v3)
+- a graduated instrument, tick every 2° with 30° and 90° weighted, degree
+numerals every 30°, and heading and Qibla bearing side by side so the eye can
+compare them without the dial in between.
+
+Only the design and the interaction were ported. The maths was not: this app's
+`QiblaEngine` already computes the great-circle bearing, applies magnetic
+declination for true north, reports the distance to the Kaaba and diagnoses
+interference, none of which the reference has. Porting the reference's version
+would have been a downgrade wearing a port's clothes.
+
+Two defects in the reference were **not** carried across:
+
+- **The needle was 180° out of phase.** Its tick lines used `(sin θ, +cos θ)`
+  while its labels, cardinals and needle used `(sin θ, -cos θ)`. In a Y-down
+  canvas those are diametrically opposite, so the ticks looked perfect (their
+  style pattern has period 90°, which hides the mirror) while the needle pointed
+  *directly away* from the Kaaba at the moment of alignment. Every endpoint in
+  this app's dial uses the same `sin / -cos` parameterisation.
+- **Alignment was computed as a linear difference**, so heading 359° and Qibla
+  2° - two degrees apart in reality - compared as 357° apart and reported "not
+  aligned", while the guidance banner beside the dial correctly said "turn 2°
+  right". The two could contradict each other. `QiblaEngine.calculateRelativeAngle`
+  folds the difference circularly, so they cannot.
+
+The dial also unrolls its rotation: the target angle accumulates the shortest
+signed delta from the previous frame rather than being set from the raw heading,
+so crossing 359° → 0° continues the turn instead of spinning the card backwards
+through 360°. That is the single detail that makes the compass feel like an
+instrument rather than a spinning image.
+
+
 
 - **Reduced motion**: when the system animation scale is 0 (*Remove animations* /
   developer setting), the living sky renders the same scene statically — the

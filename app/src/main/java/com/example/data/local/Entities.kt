@@ -14,16 +14,25 @@ data class PrayerLogEntity(
     val ishaDone: Boolean = false
 )
 
+/**
+ * Where the reader was last left.
+ *
+ * The defaults are Al-Fatihah 1:1 rather than a mid-Baqarah placeholder,
+ * because this row is what a first run has: with no row in the table the app
+ * still has to answer "where was I?", and for someone who has never read in
+ * this app the honest answer is the opening surah rather than a random spot
+ * in the second one.
+ */
 @Entity(tableName = "continue_reading")
 data class ContinueReadingEntity(
     @PrimaryKey
     val id: Int = 1,
-    val surahNumber: Int = 2,
-    val ayahNumber: Int = 184,
-    val surahName: String = "Al-Baqarah",
-    val surahNameAr: String = "البقرة",
-    val pageNumber: Int = 28,
-    val snippetAr: String = "أَيَّامًا مَّعْدُودَاتٍ ۚ فَمَن كَانَ مِنكُم مَّرِيضًا أَوْ عَلَىٰ سَفَرٍ فَعِدَّةٌ مِّنْ أَيَّامٍ أُخَرَ",
+    val surahNumber: Int = 1,
+    val ayahNumber: Int = 1,
+    val surahName: String = "Al-Fatihah",
+    val surahNameAr: String = "الفاتحة",
+    val pageNumber: Int = 1,
+    val snippetAr: String = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ",
     val timestamp: Long = System.currentTimeMillis()
 )
 

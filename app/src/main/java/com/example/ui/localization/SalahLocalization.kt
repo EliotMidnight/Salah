@@ -254,6 +254,50 @@ data class UiStrings(
  * another screen's worth. A screen that needs its own copy should get its own
  * class rather than pushing the shared one over the edge.
  */
+/**
+ * The immersive reader's strings.
+ *
+ * Its own class so the reader's thirty-odd labels do not push [UiStringsMore]
+ * past the JVM's 255-parameter constructor limit - a failure that compiles fine
+ * and then throws `ClassFormatError` from the class loader at runtime.
+ */
+data class ReaderStrings(
+    /** Opens the surah / saved / search index. */
+    val openIndex: String = "Open the index",
+    val immersiveMode: String = "Immersive mode",
+    val showControls: String = "Show controls",
+    val saveThisLocation: String = "Save this verse",
+    val layoutPerAyah: String = "Per ayah",
+    val layoutPerPage: String = "Per page",
+    val layoutContinuousSurah: String = "Continuous surah",
+    val scrollDirection: String = "Scroll direction",
+    val scrollVertical: String = "Vertical",
+    val scrollHorizontal: String = "Horizontal",
+    val continuousNeedsVertical: String =
+        "Continuous text has no pages, so it always scrolls vertically.",
+    val backgroundColour: String = "Background",
+    val backgroundDefault: String = "App default",
+    val pinchBehaviour: String = "Pinch does",
+    val pinchZoomView: String = "Zoom the view",
+    val pinchTextSize: String = "Change text size",
+    val arabicTextSize: String = "Arabic size",
+    val translationSize: String = "Translation size",
+    val quranFont: String = "Quran font",
+    val fontNotBundled: String = "Not included yet",
+    val showTranslationLabelShort: String = "Show translation",
+    val indexSurahs: String = "Surahs",
+    val indexSaved: String = "Saved",
+    val indexSearch: String = "Search",
+    val emptySavedTitle: String = "Nothing saved yet",
+    val emptySavedMessage: String =
+        "Save a verse while reading and it will be waiting here.",
+    // --- The Qibla dial readouts --------------------------------------------
+    val headingLabel: String = "Heading",
+    val mushaf: String = "Mushaf",
+    /** Shown under the Settings summary row for a setting the reader owns. */
+    val changeInReader: String = "Change this in the reader\u2019s Reading options."
+)
+
 data class DateNavStrings(
     val nextPrayerPrefix: String = "Next",
     val fullHijriMonth: String = "Full Hijri month",
@@ -484,6 +528,17 @@ data class UiStringsMore(
     val juzLabel: String = "Juz\u2019",
     val selectLayoutTitle: String = "Reading layout",
     val selectLayoutSubtitle: String = "Per verse suits study; continuous suits reading straight through.",
+    /**
+     * Everything the immersive reader and its two sheets need.
+     *
+     * A nested class rather than thirty more fields on this one, because
+     * [UiStringsMore] was already at the JVM's limit: a data class with 256
+     * constructor parameters compiles cleanly and then fails at *runtime* with
+     * `ClassFormatError: Too many arguments in method signature`, raised by the
+     * class loader rather than the compiler - so it would only have surfaced in
+     * the Robolectric screenshot tests, never in a build.
+     */
+    val reader: ReaderStrings = ReaderStrings(),
     val layoutPerVerse: String = "Per verse",
     val layoutContinuous: String = "Continuous",
     val verseActionsLabel: String = "Verse actions",

@@ -26,6 +26,12 @@ import com.example.data.model.Prayer
 import com.example.data.model.PrayerAdjustments
 import com.example.data.model.PrayerTime
 import com.example.data.model.PrayerTimesDay
+import com.example.data.model.QuranFontFace
+import com.example.data.model.QuranPaperTone
+import com.example.data.model.QuranPinchTarget
+import com.example.data.model.QuranReadingLayout
+import com.example.data.model.QuranReadingOptions
+import com.example.data.model.QuranScrollDirection
 import com.example.data.model.Surah
 import com.example.data.model.UserLocation
 import com.example.data.quran.QuranDataSource
@@ -83,7 +89,6 @@ data class SalahUiState(
     val prayerLog: PrayerLogEntity = PrayerLogEntity(LocalDate.now().toString()),
     val continueReading: ContinueReadingEntity = ContinueReadingEntity(),
     val bookmarks: List<BookmarkEntity> = emptyList(),
-    val quranFontScale: Float = 1.0f,
     val adhanNotificationEnabled: Boolean = true,
     val prePrayerAlertEnabled: Boolean = true,
     val vibrateOnly: Boolean = false,
@@ -142,6 +147,23 @@ data class SalahUiState(
     val activeReadingAyahNumber: Int = 1,
     val isAudioPlaying: Boolean = false,
     val currentAudioAyah: Int = 1,
+    /**
+     * The reader's own preferences, as one value.
+     *
+     * Held here rather than in `rememberSaveable` so the reader's layout, paper
+     * and typefaces survive process death the same way every other setting in
+     * this app does, and so the reading surface never briefly renders with last
+     * session's values before remembering the right ones.
+     */
+    val quranReadingOptions: QuranReadingOptions = QuranReadingOptions(),
+    /**
+     * Whether the reader has taken over the whole screen.
+     *
+     * Read by [MainActivity] to hide the dock, which lives outside the Quran
+     * destination. It is a view state rather than a reading preference, which
+     * is why it is not part of [quranReadingOptions].
+     */
+    val isQuranImmersive: Boolean = false,
     // Calendar selected date inspection
     val calendarSelectedDate: LocalDate = LocalDate.now(),
     val calendarSelectedDayPrayers: PrayerTimesDay? = null
@@ -178,6 +200,15 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
     private var declCacheLon = Float.NaN
     private var declCacheValue = 0f
     private var declCacheAtMs = 0L
+
+    /**
+     * Set once the stored reading position has been applied for this launch.
+     *
+     * The continue-reading flow re-emits every time the reader records
+     * progress, so without this the resume would fight the user - pulling them
+     * back to where they started every time they scrolled a line.
+     */
+    private var readingPositionRestored = false
 
     private fun cachedDeclinationFor(lat: Float, lon: Float): Float {
         val now = System.currentTimeMillis()
@@ -296,12 +327,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         }
 
         viewModelScope.launch {
-            repository.quranFontScaleFlow.collectLatest { scale ->
-                _uiState.value = _uiState.value.copy(quranFontScale = scale)
-            }
-        }
-
-        viewModelScope.launch {
             repository.lastCheckedFlow.collectLatest { last ->
                 _uiState.value = _uiState.value.copy(lastChecked = last)
             }
@@ -379,7 +404,26 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             repository.getContinueReading().collectLatest { cont ->
                 if (cont != null) {
                     _uiState.value = _uiState.value.copy(continueReading = cont)
+                    // Resume, exactly once, the first time a stored position
+                    // arrives.
+                    //
+                    // This has to be guarded rather than run on every emission,
+                    // because this is also the flow the reader writes to as the
+                    // user scrolls: an unguarded restore would yank the reader
+                    // back to the opening ayah the instant they moved. The flag
+                    // means the stored position is applied once per launch and
+                    // never again.
+                    if (!readingPositionRestored && cont.surahNumber > 0) {
+                        readingPositionRestored = true
+                        selectSurah(cont.surahNumber, cont.ayahNumber)
+                    }
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            repository.quranReadingOptions.collectLatest { options ->
+                _uiState.value = _uiState.value.copy(quranReadingOptions = options)
             }
         }
 
@@ -399,8 +443,15 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             }
         }
 
-        // Initialize Quran default Surah
+        // Initialize Quran default Surah.
+        //
+        // Al-Fatihah, and deliberately overwritten a moment later by the stored
+        // reading position when there is one. It has to be selected eagerly
+        // because `currentSurahAyahs` starts empty and the reader renders its
+        // loading state until a surah is chosen; starting on nothing is what
+        // made the first frame of the reader a blank page.
         selectSurah(1)
+        _uiState.value = _uiState.value.copy(isQuranImmersive = repository.quranImmersive)
 
         // Start 1-second live ticker
         startLiveTicker()
@@ -643,8 +694,70 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         repository.setVibrateOnly(enabled)
     }
 
-    fun setQuranFontScale(scale: Float) {
-        repository.setQuranFontScale(scale)
+    // Quran reading options
+    //
+    // One setter rather than one per option, so every preference change is
+    // normalised and persisted through the same path. The repairs
+    // (continuous/horizontal, continuous/page) live in the model, which is the
+    // only place that knows the rules.
+
+    fun setQuranReadingOptions(options: QuranReadingOptions) {
+        repository.saveQuranReadingOptions(options)
+    }
+
+    /** Convenience for the segmented layout control. */
+    fun setQuranLayout(layout: QuranReadingLayout) {
+        setQuranReadingOptions(_uiState.value.quranReadingOptions.withLayout(layout))
+    }
+
+    /** Convenience for the segmented scroll control. */
+    fun setQuranScroll(direction: QuranScrollDirection) {
+        setQuranReadingOptions(_uiState.value.quranReadingOptions.withScroll(direction))
+    }
+
+    fun setQuranPinchTarget(target: QuranPinchTarget) {
+        setQuranReadingOptions(_uiState.value.quranReadingOptions.copy(pinchTarget = target))
+    }
+
+    fun setQuranPaper(tone: QuranPaperTone) {
+        setQuranReadingOptions(_uiState.value.quranReadingOptions.copy(paper = tone))
+    }
+
+    fun setQuranFont(face: QuranFontFace) {
+        setQuranReadingOptions(_uiState.value.quranReadingOptions.copy(font = face))
+    }
+
+    fun setQuranArabicScale(scale: Float) {
+        setQuranReadingOptions(
+            _uiState.value.quranReadingOptions.copy(
+                arabicScale = scale.coerceIn(QuranReadingOptions.ArabicScaleRange)
+            )
+        )
+    }
+
+    fun setQuranTranslationScale(scale: Float) {
+        setQuranReadingOptions(
+            _uiState.value.quranReadingOptions.copy(
+                translationScale = scale.coerceIn(QuranReadingOptions.TranslationScaleRange)
+            )
+        )
+    }
+
+    fun setQuranShowTranslation(show: Boolean) {
+        setQuranReadingOptions(_uiState.value.quranReadingOptions.copy(showTranslation = show))
+    }
+
+    /**
+     * Takes the reader over the whole screen, or gives the screen back.
+     *
+     * Persisted, because the reason to want it - reading with the dock and the
+     * status bar out of the way - is not something people flip on once by
+     * accident. Returns the new value so the caller can react without waiting
+     * for the state to round-trip.
+     */
+    fun setQuranImmersive(immersive: Boolean) {
+        repository.quranImmersive = immersive
+        _uiState.value = _uiState.value.copy(isQuranImmersive = immersive)
     }
 
     fun setLanguage(language: String) {
@@ -797,7 +910,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         setAdhanNotification(true)
         setPrePrayerAlert(true)
         setVibrateOnly(false)
-        setQuranFontScale(1.0f)
         setTimeFormat24h(true)
         setAppTheme("System Default")
         _uiState.value = _uiState.value.copy(

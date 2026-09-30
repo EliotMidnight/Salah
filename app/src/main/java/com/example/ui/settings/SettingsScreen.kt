@@ -51,6 +51,7 @@ import com.example.ui.SalahUiState
 import com.example.ui.components.ActionRow
 import com.example.ui.components.EmptyState
 import com.example.ui.components.StatusBanner
+import com.example.ui.components.ToggleRow
 import com.example.ui.components.ChipRow
 import com.example.ui.components.ConfirmDialog
 import com.example.ui.components.DetailList
@@ -219,7 +220,6 @@ fun SettingsScreen(
     onAdhanSoundSelect: (String) -> Unit = {},
     onHijriAdjustmentChange: (Int) -> Unit = {},
     onReciterSelect: (String) -> Unit = {},
-    onFontScaleChange: (Float) -> Unit = {},
     onRefreshClick: () -> Unit = {},
     onPrePrayerOffsetChange: (Int) -> Unit = {},
     onAdhanVolumeChange: (Float) -> Unit = {},
@@ -436,16 +436,23 @@ fun SettingsScreen(
                     onClick = { sheet = Sheet.TRANSLATION }
                 )
                 RowDivider()
-                Column(modifier = Modifier.padding(horizontal = space.md, vertical = space.sm)) {
-                    LabeledSlider(
-                        label = strings.arabicTextSizeLabel,
-                        valueText = "${(state.quranFontScale * 100).toInt()}%",
-                        value = state.quranFontScale,
-                        onValueChange = onFontScaleChange,
-                        valueRange = 0.8f..1.5f,
-                        steps = 6
-                    )
-                }
+                // A summary, not a second slider.
+                //
+                // This used to be a live Arabic-size slider bound to
+                // `quranFontScale`, which the reader no longer reads - so it
+                // looked like it worked and changed nothing. The reading
+                // appearance now has exactly one home, the reader's own Reading
+                // options, and this row reports the current value and says where
+                // to change it. Two controls writing the same preference is how
+                // they drift apart.
+                ActionRow(
+                    title = strings.arabicTextSizeLabel,
+                    value = "${(state.quranReadingOptions.arabicScale * 100).toInt()}%",
+                    subtitle = strings.more.reader.changeInReader,
+                    showChevron = false,
+                    enabled = false,
+                    onClick = {}
+                )
             }
 
             // -- Diagnostics ----------------------------------------------
@@ -1080,75 +1087,6 @@ private enum class Sheet {
     TRANSLATION, VOLUME, EPHEMERIS, STORAGE, COMPASS
 }
 
-/**
- * A row that toggles.
- *
- * The whole row is the target and the switch is the visible state, which is what
- * the accessibility guidance asks for. The previous version made the row
- * non-clickable and left the switch as a separate, unlabelled focus stop.
- */
-@Composable
-private fun ToggleRow(
-    title: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-    subtitle: String? = null,
-    onClick: (() -> Unit)? = null,
-    testTag: String? = null,
-    // A row that opens a picker is not a switch. The pre-prayer row passes an
-    // `onClick` that opens a bottom sheet, so it was announcing
-    // "Pre-prayer reminder, switch, on, double tap to activate" and then
-    // showing a sheet - role, state and behaviour all disagreeing.
-    role: Role = Role.Switch
-) {
-    val space = Space.current
-    val strings = LocalStrings.current
-
-    val toggle: () -> Unit = onClick ?: { onCheckedChange(!checked) }
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
-            .clickable(onClick = toggle)
-            .then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
-            .padding(horizontal = space.md, vertical = space.sm)
-            .semantics(mergeDescendants = true) {
-                this.role = role
-                stateDescription = if (role == Role.Switch) {
-                    if (checked) strings.more.stateOn else strings.more.stateOff
-                } else {
-                    ""
-                }
-                onClick(label = if (role == Role.Switch) null else strings.more.actionChange) {
-                    toggle()
-                    true
-                }
-            },
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            if (subtitle != null) {
-                Spacer(Modifier.height(space.xxs))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        Spacer(Modifier.width(space.md))
-        // The switch is decorative here: the row carries the click and the
-        // semantics, so exposing it as a second focus stop would double-announce.
-        Switch(checked = checked, onCheckedChange = null, modifier = Modifier.clearAndSetSemantics { })
-    }
-}
 
 /** Per-prayer minute offsets, -15..+15. */
 @Composable
