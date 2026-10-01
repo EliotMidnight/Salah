@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,6 +21,7 @@ import com.example.data.model.QuranReadingOptions
 import com.example.data.model.QuranRef
 import com.example.data.model.QuranScrollDirection
 import com.example.data.quran.QuranBrowse
+import kotlinx.coroutines.launch
 import com.example.ui.quran.VerseActions
 import com.example.ui.theme.Space
 
@@ -121,6 +123,17 @@ internal fun MushafPager(
         }
     }
 
+    val scope = rememberCoroutineScope()
+
+    // The one page turn, for the swipe and for the accessibility action alike.
+    // Two implementations of "turn a page" is how they end up disagreeing.
+    val turn: (Int) -> Unit = { delta ->
+        if (position.turnPage(delta)) {
+            val target = (position.page - 1).coerceIn(0, QuranBrowse.TOTAL_PAGES - 1)
+            scope.launch { pagerState.animateScrollToPage(target) }
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         if (orientation == QuranScrollDirection.HORIZONTAL) {
             HorizontalPager(
@@ -129,7 +142,7 @@ internal fun MushafPager(
                 pageSpacing = space.lg,
                 contentPadding = PaddingValues(horizontal = space.sm)
             ) { index ->
-                PageAt(index + 1, requestedScale, ink, accent, selected, onSelectVerse, topInset)
+                PageAt(index + 1, requestedScale, ink, accent, selected, onSelectVerse, topInset, turn)
             }
         } else {
             VerticalPager(
@@ -138,7 +151,7 @@ internal fun MushafPager(
                 pageSpacing = space.lg,
                 contentPadding = PaddingValues(vertical = space.sm)
             ) { index ->
-                PageAt(index + 1, requestedScale, ink, accent, selected, onSelectVerse, topInset)
+                PageAt(index + 1, requestedScale, ink, accent, selected, onSelectVerse, topInset, turn)
             }
         }
 
@@ -195,7 +208,8 @@ private fun PageAt(
     accent: Color,
     selected: QuranRef?,
     onSelectVerse: (QuranRef) -> Unit,
-    topInset: androidx.compose.ui.unit.Dp
+    topInset: androidx.compose.ui.unit.Dp,
+    onTurn: (Int) -> Unit
 ) {
     // A page's own surah, needed to resolve a tap into a full reference - and a
     // page can hold three surahs, so this cannot be read off the reader's position.
@@ -214,6 +228,10 @@ private fun PageAt(
         onSelectVerse = { ayahNumber ->
             onSelectVerse(QuranRef(firstSurah, ayahNumber, page))
         },
+        // The reader's one page turn, shared with the swipe. A second
+        // implementation of "turn a page" is how the two end up disagreeing about
+        // where the reader is - and about what happens at the ends of the book.
+        onTurn = onTurn,
         topInset = topInset,
         modifier = Modifier.fillMaxSize()
     )

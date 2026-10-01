@@ -24,7 +24,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextLayoutResult
@@ -94,6 +96,8 @@ internal fun MushafPage(
     ink: Color,
     accent: Color,
     onSelectVerse: (Int) -> Unit,
+    /** A page turn, for the accessibility action that has no gesture to hang on. */
+    onTurn: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
     onOverflowChange: (Boolean) -> Unit = {},
     /**
@@ -300,6 +304,54 @@ internal fun MushafPage(
                         .semantics {
                             contentDescription = describePage(pageNumber, ayahs)
                             stateDescription = strings.more.pageWord + " " + pageNumber
+                            customActions = buildList {
+                                // Page turns.
+                                //
+                                // The tap gutters these replaced cost 2 x 48dp of the
+                                // reading area and existed on the horizontal axis only,
+                                // so a screen-reader user had no route to the next page
+                                // at all. These are on the page's own node, so they are
+                                // available wherever the page is, on either axis, and
+                                // cost no space.
+                                if (pageNumber > 1) {
+                                    add(
+                                        CustomAccessibilityAction(
+                                            strings.more.reader.previousPage
+                                        ) {
+                                            onTurn(-1)
+                                            true
+                                        }
+                                    )
+                                }
+                                if (pageNumber < QuranBrowse.TOTAL_PAGES) {
+                                    add(
+                                        CustomAccessibilityAction(
+                                            strings.more.reader.nextPage
+                                        ) {
+                                            onTurn(1)
+                                            true
+                                        }
+                                    )
+                                }
+                                // And a way to select any verse on the page.
+                                //
+                                // The page is one semantics node - a screen reader
+                                // would otherwise stop at every one of its lines - so
+                                // the verses are reachable as numbered actions.
+                                // Without them a reader who has been told "page 604,
+                                // verses 112:1 to 114:6" has no way to act on any.
+                                ayahs.forEach { ayah ->
+                                    add(
+                                        CustomAccessibilityAction(
+                                            "${strings.more.selectVerse} " +
+                                                "${ayah.surahNumber}:${ayah.ayahNumber}"
+                                        ) {
+                                            onSelectVerse(ayah.ayahNumber)
+                                            true
+                                        }
+                                    )
+                                }
+                            }
                         }
                 )
             }
