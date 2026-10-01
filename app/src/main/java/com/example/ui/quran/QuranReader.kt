@@ -35,6 +35,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -53,6 +55,7 @@ import com.example.ui.SalahUiState
 import com.example.ui.components.EmptyState
 import com.example.ui.components.StatusBanner
 import com.example.ui.localization.LocalStrings
+import com.example.ui.quran.gesture.readerPinch
 import com.example.ui.quran.reader.ContinuousReader
 import com.example.ui.quran.reader.MushafPager
 import com.example.ui.quran.reader.ReaderPosition
@@ -160,6 +163,30 @@ fun QuranReader(
                     )
                 }
 
+                // **The gesture layer**, and the only gesture layer.
+                //
+                // It is attached *outside* the surface, so it sees the same pointer
+                // events the pager and the list do and can decide between them -
+                // rather than being a sibling that competes with them.
+                //
+                // A magnification also moves the whole surface with a graphics
+                // layer, applied above the scroll container so it zooms the text
+                // without dragging the gesture surfaces along with it.
+                // `clip = false` keeps a magnified line from being cut off at the
+                // page edge while it is being dragged into view.
+                //
+                // `appliedPan` is the reader's own pan plus the correction that
+                // keeps a pinch centred under the fingers, clamped as one value -
+                // see `ReaderPosition` for why clamping the sum rather than the
+                // parts is load-bearing.
+                fun Modifier.magnifying(): Modifier = graphicsLayer {
+                    scaleX = position.viewScale
+                    scaleY = position.viewScale
+                    translationX = position.appliedPan.x
+                    translationY = position.appliedPan.y
+                    clip = false
+                }
+
                 when (options.layout) {
                     QuranReadingLayout.PER_PAGE -> {
                         val pagerState = rememberPagerState(
@@ -175,7 +202,20 @@ fun QuranReader(
                             ink = ink,
                             accent = accent,
                             controlsVisible = !immersive,
-                            onSelectVerse = { ref -> position.toggleSelection(ref) }
+                            onSelectVerse = { ref -> position.toggleSelection(ref) },
+                            actionsFor = actionsFor,
+                            options = options,
+                            modifier = Modifier
+                                .readerPinch(
+                                    position = position,
+                                    target = options.pinchTarget,
+                                    arabicScale = options.arabicScale,
+                                    onArabicScaleChange = {
+                                        onOptionsChange(options.copy(arabicScale = it))
+                                    }
+                                )
+                                .magnifying()
+                                .onSizeChanged { position.surfaceMeasured(it) }
                         )
                     }
 
@@ -190,7 +230,18 @@ fun QuranReader(
                         muted = muted,
                         actionsFor = actionsFor,
                         onPositionSettled = { ref -> position.turnTo(ref) },
-                        controlsVisible = !immersive
+                        controlsVisible = !immersive,
+                        modifier = Modifier
+                            .readerPinch(
+                                position = position,
+                                target = options.pinchTarget,
+                                arabicScale = options.arabicScale,
+                                onArabicScaleChange = {
+                                    onOptionsChange(options.copy(arabicScale = it))
+                                }
+                            )
+                            .magnifying()
+                            .onSizeChanged { position.surfaceMeasured(it) }
                     )
                 }
             }

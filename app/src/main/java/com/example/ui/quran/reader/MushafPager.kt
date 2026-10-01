@@ -5,16 +5,22 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.example.data.model.Ayah
+import com.example.data.model.QuranReadingOptions
 import com.example.data.model.QuranRef
 import com.example.data.model.QuranScrollDirection
 import com.example.data.quran.QuranBrowse
+import com.example.ui.quran.VerseActions
 import com.example.ui.theme.Space
 
 /**
@@ -71,6 +77,8 @@ internal fun MushafPager(
     ink: Color,
     accent: Color,
     onSelectVerse: (QuranRef) -> Unit,
+    actionsFor: (Ayah) -> VerseActions,
+    options: QuranReadingOptions,
     modifier: Modifier = Modifier,
     /** Whether the reader's control row is on screen, and so taking page space. */
     controlsVisible: Boolean = true
@@ -87,6 +95,11 @@ internal fun MushafPager(
     // on *every* page rather than once here, because a selection on page 604 is not
     // a selection on page 603 - and ayah 1 exists on both.
     val selected = position.selection?.takeIf { it.page == position.page }
+
+    // The page the pager is *showing*, which during a drag is not the page it is
+    // turning to. The action bar follows the settled page rather than the position,
+    // so it does not appear on a page the reader is halfway through leaving.
+    val selectedPageNumber = pagerState.settledPage + 1
 
     // The pager writes the position. Keyed on the pager, so this is one collection
     // for the life of the surface rather than one per turn.
@@ -128,8 +141,50 @@ internal fun MushafPager(
                 PageAt(index + 1, requestedScale, ink, accent, selected, onSelectVerse, topInset)
             }
         }
+
+        // The selected verse's actions, over the foot of the page.
+        //
+        // A tap on a mushaf page *selects* a verse, and a selection that cannot be
+        // acted on is a dead end: the reader has no route to bookmark, copy, share or
+        // play from the text they are looking at. The previous mushaf surface had no
+        // actions at all - the row existed only in the continuous layouts - so
+        // selecting a verse on a page did nothing a reader could see.
+        //
+        // At the foot rather than beside the verse, and in the scroll container's
+        // coordinate space: a page is a fixed object, so there is no "below the
+        // verse" to put a panel in without either covering the text or pushing the
+        // page out of shape. The foot is the only place on a page that is not text.
+        //
+        // It is deliberately *not* pinned to the bottom of the viewport, because the
+        // pager is the parent: an overlay would be re-composed on every drag and
+        // would sit outside the page's own padding.
+        position.selection?.let { ref ->
+            if (selectedPageNumber == pagerState.currentPage + 1) {
+                ayahOnPageOrNull(ref)?.let { ayah ->
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(horizontal = space.lg)
+                            .padding(bottom = space.lg)
+                    ) {
+                        PageActionBar(
+                            ayah = ayah,
+                            actions = actionsFor(ayah),
+                            onDismiss = { position.clearSelection() },
+                            showTranslation = options.showTranslation,
+                            translationScale = options.translationScale
+                        )
+                    }
+                }
+            }
+        }
     }
 }
+
+/** The verse a reference names, if it exists. */
+private fun ayahOnPageOrNull(ref: QuranRef): com.example.data.model.Ayah? =
+    QuranBrowse.ayah(ref.surah, ref.ayah)
 
 /** One page, and a tap on it resolves to a verse on the page it is actually on. */
 @Composable
