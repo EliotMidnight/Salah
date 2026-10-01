@@ -97,7 +97,11 @@ class MushafPageText private constructor(
     fun verseAt(offset: Int): VerseSpan? {
         if (spans.isEmpty()) return null
         spans.firstOrNull { offset in it.full }?.let { return it }
-        return if (offset < spans.first().full.first) spans.first() else spans.last()
+        if (offset < spans.first().full.first) return spans.first()
+        // Past the end of the last verse: the nearest span *before* the offset, not
+        // unconditionally the last one. Those differ on a page whose text continues
+        // after the last recorded span, and "the last verse" is then wrong.
+        return spans.lastOrNull { it.full.first <= offset } ?: spans.last()
     }
 
     companion object {
@@ -240,14 +244,21 @@ class MushafPageText private constructor(
                 builder.pop()
                 val unitEnd = builder.length
 
-                // The prostration marker, inside the string so it cannot drift
-                // away from the verse it belongs to when the text reflows.
+                // The prostration marker, inside the string so it cannot drift away
+                // from the verse it belongs to when the text reflows.
+                //
+                // Appended *before* `unitEnd` is taken, so the glyph is part of the
+                // verse's span. Reading `unitEnd` first put the glyph outside
+                // `full`, and [verseAt] then had no span containing it and fell
+                // through to "past the end" - which returns the *last* verse on the
+                // page. So a reader who tapped ۩ on 32:15 selected An-Nas.
                 QuranBrowse.sajdaAfter(ayah.surahNumber, ayah.ayahNumber)?.let { kind ->
                     builder.append(' ')
                     builder.pushStyle(SpanStyle(color = accent, fontSize = markerSize))
                     builder.append(sajdaGlyph(kind))
                     builder.pop()
                 }
+                val unitEndWithSajda = builder.length
 
                 // And a space between verses, so the last word of one and the
                 // first of the next cannot read as one phrase.
@@ -257,7 +268,7 @@ class MushafPageText private constructor(
                     ayahNumber = ayah.ayahNumber,
                     surahNumber = ayah.surahNumber,
                     text = start until textEnd,
-                    full = start until unitEnd
+                    full = start until unitEndWithSajda
                 )
             }
 

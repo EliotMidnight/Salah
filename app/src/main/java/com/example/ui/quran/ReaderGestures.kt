@@ -108,14 +108,13 @@ internal fun Modifier.readerPinch(
     // *not* keyed on the scale value - see above.
     pointerInput(target, isMagnified) {
         detectTransformGestures(panZoomLock = !isMagnified) { centroid, panChange, zoom, _ ->
-            // Zoom first, so that the branch below sees the updated scale for
-            // this event rather than the one before it.
+            // Zoom first, so the pan branch below sees this event's scale rather
+            // than the previous one.
             if (zoom != 1f) {
                 when (target) {
                     QuranPinchTarget.TEXT_SIZE -> {
-                        // The dead zone is applied to the *change*, not to the
-                        // result. A real pinch jitters by a fraction of a percent on
-                        // every event, and each of those was a write to the reader's
+                        // A real pinch jitters by a fraction of a percent on every
+                        // event, and each of those was a write to the reader's
                         // stored text size - so a reader who pinched to look closer
                         // found their preference had drifted when they let go.
                         val next = PinchMath.applyZoom(arabic.value, zoom)
@@ -130,14 +129,13 @@ internal fun Modifier.readerPinch(
                         if (changed) onViewChange.value(next)
 
                         // Hold the content under the fingers - but only when the
-                        // scale actually moved.
+                        // scale actually moved on this event.
                         //
                         // The centroid is reported whether or not there is a pinch,
-                        // so forwarding it unconditionally feeds a *one-finger drag*
-                        // into the pan as well. The two would add up, and the reader
-                        // would find the page sliding away from their finger as they
-                        // dragged it - which reads as the page being broken rather
-                        // than as two gestures fighting.
+                        // so forwarding it unconditionally also feeds a *one-finger
+                        // drag* into the pan. The two add up, and the reader finds
+                        // the page sliding away from their own finger - which reads
+                        // as a broken page rather than as two gestures fighting.
                         if (changed && panChange != Offset.Zero) {
                             onFocalChange.value?.invoke(panChange)
                         }
