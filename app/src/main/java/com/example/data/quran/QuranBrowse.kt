@@ -66,6 +66,9 @@ object QuranBrowse {
 
     fun ayahsInHizb(hizb: Int): List<Ayah> = QuranCorpus.ayahsInHizb(hizb)
 
+    /** The corpus position of a verse, or -1 when the reference does not exist. */
+    fun indexOf(surah: Int, ayah: Int): Int = QuranCorpus.indexOf(surah, ayah)
+
     /** A verse, or null when the reference does not exist. */
     fun ayah(surah: Int, ayah: Int): Ayah? =
         QuranCorpus.ayahAt(QuranCorpus.indexOf(surah, ayah))
@@ -170,6 +173,20 @@ object QuranBrowse {
      * since the beginning and which the reader had never once asked - so a page
      * containing a prostration looked exactly like one that did not.
      */
+    /**
+     * Whether [ref] falls on [page].
+     *
+     * Used to decide whether a selection survives a page turn. A selection is a
+     * property of the *surface* it was made on, and page 604 holds three surahs -
+     * so ayah 1 selected there is not ayah 1 anywhere else, and carrying it across
+     * a turn would highlight a verse on a page that does not contain it.
+     */
+    fun ayahOnPage(ref: QuranRef, page: Int): Boolean {
+        val index = indexOf(ref.surah, ref.ayah)
+        if (index < 0) return false
+        return QuranCorpus.ayahs[index].pageNumber == page
+    }
+
     fun sajdaAfter(surah: Int, ayah: Int): SajdaKind? =
         when (QuranCorpus.sajdaAfterVerse(surah, ayah)) {
             QuranCorpus.SajdaKind.OBLIGATORY -> SajdaKind.OBLIGATORY
