@@ -55,7 +55,6 @@ fun QuranScreen(
 
     QuranReader(
         state = state,
-        onSelectSurah = onSurahSelected,
         onSelectSurahAyah = onSurahAyahSelected,
         onAyahViewed = onAyahViewed,
         onToggleBookmark = onToggleBookmark,

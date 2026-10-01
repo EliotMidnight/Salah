@@ -140,7 +140,17 @@ internal object QuranCorpus {
         // fast, with a clear message, rather than halfway through building the
         // Arabic half.
         val translations = englishByReference
-        val text = resource("uthmani.txt", TEXT_HASH).toString(Charsets.UTF_8).removePrefix("﻿")
+        // The BOM is stripped because the bundled file has one, and the first verse
+        // would otherwise begin with U+FEFF - an invisible character that is not
+        // Arabic, sits inside the ayah's own text, and is copied out with the verse.
+        //
+        // Written as an escape rather than as the character itself: a literal U+FEFF
+        // in the middle of a source file is invisible to read and is flagged by lint
+        // as a stray byte-order mark, so the one place that handles a BOM is the one
+        // place that cannot contain one.
+        val text = resource("uthmani.txt", TEXT_HASH)
+            .toString(Charsets.UTF_8)
+            .removePrefix("\uFEFF")
         val verses = text.lineSequence()
             .filter { it.firstOrNull()?.isDigit() == true }
             .map { line ->

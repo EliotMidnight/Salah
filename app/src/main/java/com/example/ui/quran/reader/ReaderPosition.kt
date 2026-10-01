@@ -6,7 +6,6 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -305,26 +304,3 @@ internal fun initialPosition(): QuranRef = QuranRef.Start
  * to zoom at all.
  */
 internal const val MAGNIFIED_THRESHOLD = 1.01f
-
-/**
- * Drops a selection when the surface it was made on goes away.
- *
- * A layout or axis change re-seats the reader, and a *pending* selection from the
- * old surface is dropped - because the thing it referred to is no longer on
- * screen. The position is not moved: it is already correct, and moving it here
- * would be a second writer of the one thing there is only one of.
- *
- * The first composition is not a re-seat, so it does not clear anything; only a
- * *change* of [key] does.
- */
-@Composable
-internal fun ReSeatSelectionOnChange(position: ReaderPosition, key: Any?) {
-    var first by remember { mutableStateOf(true) }
-    LaunchedEffect(key) {
-        if (first) {
-            first = false
-        } else {
-            position.clearSelection()
-        }
-    }
-}

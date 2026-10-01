@@ -93,7 +93,6 @@ import com.example.ui.theme.layoutMetrics
 @Composable
 fun QuranReader(
     state: SalahUiState,
-    onSelectSurah: (Int) -> Unit,
     onSelectSurahAyah: (Int, Int) -> Unit,
     onAyahViewed: (Ayah) -> Unit,
     onToggleBookmark: (Ayah) -> Unit,

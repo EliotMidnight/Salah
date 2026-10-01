@@ -113,7 +113,6 @@ class QuranReaderScreenshotTest {
                 ProvideAppLanguage(language = "English") {
                     QuranReader(
                         state = state(ayahNumber),
-                        onSelectSurah = {},
                         onSelectSurahAyah = { _, _ -> },
                         onAyahViewed = {},
                         onToggleBookmark = {},
@@ -310,7 +309,6 @@ class QuranReaderScreenshotTest {
                 ProvideAppLanguage(language = "English") {
                     QuranReader(
                         state = state(),
-                        onSelectSurah = {},
                         onSelectSurahAyah = { _, _ -> },
                         onAyahViewed = {},
                         onToggleBookmark = {},

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.Locale
 import kotlin.math.sin
 
 data class AudioPlaybackState(
@@ -51,8 +52,15 @@ class QuranAudioPlayer(private val context: Context) {
         )
 
         // Try online audio stream (EveryAyah public domain audio)
-        val paddedSurah = String.format("%03d", surahNumber)
-        val paddedAyah = String.format("%03d", ayahNumber)
+        //
+        // `Locale.ROOT` deliberately, and the reason is not tidiness: these digits go
+        // into a URL, and in a locale whose digits are not ASCII - Arabic, Urdu,
+        // Bengali, all of which this app ships in - `String.format("%03d", 2)` produces
+        // "٠٠٢". everyayah.com names files in ASCII, so the request 404s and the reader
+        // hears nothing, in exactly the languages where listening matters most. Lint
+        // flags the implicit default here and was right to.
+        val paddedSurah = String.format(Locale.ROOT, "%03d", surahNumber)
+        val paddedAyah = String.format(Locale.ROOT, "%03d", ayahNumber)
         val url = "https://everyayah.com/data/Alafasy_128kbps/${paddedSurah}${paddedAyah}.mp3"
 
         try {

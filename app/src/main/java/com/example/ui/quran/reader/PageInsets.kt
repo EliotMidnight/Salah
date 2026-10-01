@@ -47,7 +47,16 @@ object PageInsets {
     }
 }
 
-/** The inset a *continuously* scrolling surface uses, which has no page chrome. */
+/**
+ * The inset a *continuously* scrolling surface uses, which has no page chrome.
+ *
+ * Not used, and kept only because it is the obvious next question: "what about the
+ * list, which has no pages?" The answer turned out to be [top] as well, passed as the
+ * list's content padding rather than as a heading's padding - a lazy list can be at
+ * any offset, so a room reserved by one item is a room reserved for one offset. This
+ * version had no `controlsVisible`, so it would also have reserved the control row in
+ * immersive mode, which is the bug [top] exists to avoid.
+ */
 @Composable
 internal fun continuousTopInset(): Dp =
     statusBarInset() + Space.current.sm
