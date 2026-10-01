@@ -7,8 +7,8 @@ Built with Kotlin and Jetpack Compose (Material 3). No account, no tracking, wor
 
 - **Today dashboard** — next prayer countdown, live astronomical sky indicator, Hijri date, prayer checklist, continue-reading shortcut.
 - **Prayer times** — 8 calculation methods (Morocco Ministry/Habous default, MWL, ISNA, Egypt, Umm Al-Qura, Karachi, Dubai, France 12°), Standard/Hanafi Asr jurisprudence, per-prayer minute adjustments, monthly calendar, Imsak / Islamic midnight / last-third-of-night vigils.
-- **Quran reader** — opens straight into the text at your last position (Al-Fatihah on a first run). Three layouts (per ayah, per page, continuous surah), vertical or horizontal, the real 604-page mushaf partition, seven washed-out papers with light/dark treatment, Arabic and translation size, five named Quran fonts (two bundled), pinch as zoom or as text size, and immersive mode that clears the status bar and the dock. All 114 surahs with verified Uthmani Arabic and full Saheeh International English, bundled offline (6,236 verses). Verse-level search in Arabic or English with page/juz'/hizb quick filters, bookmarks, copy/share, per-verse audio recitation (Mishary Alafasy via everyayah.com, streamed).
-- **Qibla compass** — sensor-fused bearing with true/magnetic north, distance to the Kaaba, magnetic-interference diagnostics, device-level indicator, vibration on alignment. Graduated dial: tick every 2°, numerals every 30°, heading and Qibla bearing side by side.
+- **Quran reader** — opens straight into the text at your last position (Al-Fatihah on a first run). Two layouts — the canonical 604-page mushaf, or continuous per-surah flow with optional per-verse blocks — each on either axis. Seven washed-out papers with light/dark treatment, independent Arabic and translation sizing, five bundled Quran faces, pinch as zoom or as text size, and immersive mode that clears the status bar and the dock. All 114 surahs with verified Uthmani Arabic and full Saheeh International English, bundled offline (6,236 verses). Verse-level search in Arabic or English with page/juz'/hizb quick filters, bookmarks, copy/share, per-verse audio recitation (Mishary Alafasy via everyayah.com, streamed). Page turns work by drag *and* by accessibility action, so a page is reachable without a finger.
+- **Qibla compass** — sensor-fused bearing with true/magnetic north, distance to the Kaaba, magnetic-interference diagnostics, device-level indicator, vibration on alignment. Graduated dial: tick every 2°, numerals every 30°, heading and Qibla bearing side by side, and a banner that names the turn — "turn right 12°" — rather than only reporting that you are not there yet.
 - **Adhan & alerts** — full Adhan, Takbeer-only, chime, vibration or silent per prayer; pre-prayer reminders; global silent and auto masjid-silence mode during prayer windows.
 - **Localization** — full UI in 11 languages (English, Arabic, French, Indonesian, Turkish, Urdu, Malay, Bengali, Russian, German, Spanish) with RTL support.
 - **Offline-first & private** — prayer math runs on-device; location stays on the device; the only network use is verse audio streaming.
@@ -73,12 +73,18 @@ app/src/main/java/com/example/
 │   ├── model/                 # Prayer, Quran, location models
 │   ├── local/                 # Room: prayer log, bookmarks, continue-reading
 │   ├── location/              # GPS + cached location
-│   └── quran/                 # QuranDataSource + verified corpus loader
+│   └── quran/                 # QuranCorpus + the browse/search/text facades over it
 ├── engine/                    # Prayer math, Hijri calendar, Qibla, sky, audio
 ├── service/                   # Alarm receiver/scheduler, alert service
-└── ui/                        # Compose screens, theme, 11-language strings
+└── ui/
+    ├── quran/                 # Reader, index sheet, options sheet, verse cards
+    │   ├── reader/            # Mushaf pager/page, continuous flow, page fitting
+    │   └── gesture/           # Pinch maths and the modifier that applies it
+    ├── qibla/                 # Dial, guidance banner, sun cross-check
+    ├── home/                  # Today, clock geometry, Hijri month sheet
+    └── localization/          # 11 languages, one data class per group
 app/src/main/resources/quran/  # Uthmani text, metadata, EN translation (see SOURCES.md)
-app/src/test/                  # JVM unit tests incl. QuranCorpusTest
+app/src/test/                  # JVM + Robolectric suites, screenshot baselines
 ```
 
 ## Data sources & attribution
@@ -90,23 +96,35 @@ app/src/test/                  # JVM unit tests incl. QuranCorpusTest
 ## Tests
 
 ```bash
-./gradlew testDebugUnitTest
+./tools/build.sh test     # the JVM test suite
+./tools/build.sh check    # assembleDebug + the test suite
+./tools/build.sh record   # re-record the screenshot baselines (x86_64 only)
 ```
 
-24 pure-JVM tests (Quran corpus integrity, prayer math, Qibla bearing, location
-validation, sky-text contrast) run on any host, including ARM64 Linux/Termux.
+`tools/build.sh` exists because of two facts about this particular machine, both
+local to it and neither in `gradle.properties` where they would break a build
+anywhere else: the default `java` on PATH is a JRE with no `javac`, so the build is
+pointed at an installed JDK 21; and with 4 cores and ~3.8 GB of RAM alongside a
+desktop session, a parallel Compose build gets OOM-killed, so it runs without
+parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
+JDK and memory for it.
 
-Three Robolectric classes (`ExampleRobolectricTest`, `GreetingScreenshotTest`)
-need an **x86_64 Linux or macOS** host: Robolectric 4.15+ requires its native
-runtime, which has no ARM64 Linux build. The build detects this and skips exactly
-those classes on ARM64 with a loud log line, so the suite stays green for the
-right reason instead of failing for a platform one. Run them on CI or an x86_64
-machine to exercise them:
+279 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
+maths, search, prayer maths, Qibla bearing and guidance, localisation coverage,
+sky-text contrast) run on any host, including ARM64 Linux/Termux.
 
-```bash
-./gradlew testDebugUnitTest   # pure-JVM suites on any host
-./gradlew recordRoborazziDebug  # regenerate screenshot baselines (x86_64 only)
-```
+The Robolectric classes need an **x86_64 Linux or macOS** host: Robolectric 4.15+
+requires its native runtime, which has no ARM64 Linux build. `app/build.gradle.kts`
+detects the host and skips exactly the classes that use `RobolectricTestRunner` on
+ARM64 with a loud log line, so the suite stays green for the right reason instead
+of failing for a platform one.
+
+Screenshot baselines live in `app/src/test/screenshots/`. They are only meaningful
+if a recording is reproducible, so every screen they cover is fed state rather
+than reading the wall clock: the Today page reads its countdown and its current
+prayer from the state the one-second ticker maintains, which is what a page should
+have been doing anyway. Two consecutive `record` runs produce byte-identical
+baselines.
 
 ## Configuration & environment
 
@@ -171,24 +189,29 @@ Release notes:
 ## Today
 
 The Today page is a port of the [athan-pwa](https://github.com/klsoen/athan-pwa)
-home page: one dominant prayer name, the countdown on a hairline rule, the day's
-times as a dotted-leader list, and a tap anywhere that opens the whole day as a
-24-hour clock with Maghrib at the top.
+home page: one dominant prayer name, the countdown on a hairline rule, and the day's
+times as a dotted-leader list.
 
-- `ui/home/TodayScreen.kt` — the page, both views, and the day pager.
-- `ui/home/ClockGeometry.kt` — the dial's angles, arcs and windows. Pure, and
-  unit-tested in `ClockGeometryTest`, because a misplaced prayer still looks like
-  a clock and a reversed arc still looks like an arc.
+The 24-hour clock view is **not** ported. It made the whole page a tap target, and
+the tap was the only affordance the page had; removing the clock and the
+whole-page tap together is what left the layout quiet. The day pager the webapp
+walked with is the app's existing date switcher instead.
+
+- `ui/home/TodayScreen.kt` — the page and the day pager.
 - `ui/home/CelestialBody.kt` — the sun or moon above the prayer name, glowing in
   its own colour and *placed* by the sky it is in. The sun's altitude and
   azimuth come from `QiblaEngine` for the user's location and time, so it rises
   on the correct side and crosses at the actual solar noon; its colour is the same
   `AstronomicalSky` altitude ramp that tints the sky, so it reddens at sunset for
-  the same reason the horizon does. The moon's position is *derived from its
-  phase* — new moon rides with the sun, full moon is opposite — because the app
-  does not compute lunar ephemeris and a prayer app should not pretend to. Its
-  phase is exact. On a light page the disc is mixed toward warm ink rather than
-  shown at its glow value, because a cream sun on cream paper measures 1.1:1.
+  the same reason the horizon does. That ramp is the *only* sky palette:
+  `AstronomicalSky` used to carry an eight-case `SkyPeriod` enum with its own
+  hand-picked gradients, chosen by hour of day, which nothing rendered. Two
+  answers to "what colour is the sky", one of them consulted by no one.
+  The moon's position is *derived from its phase* — new moon rides with the sun,
+  full moon is opposite — because the app does not compute lunar ephemeris and a
+  prayer app should not pretend to. Its phase is exact. On a light page the disc
+  is mixed toward warm ink rather than shown at its glow value, because a cream
+  sun on cream paper measures 1.1:1.
 - `ui/home/HijriMonthSheet.kt` — the whole Hijri month, each cell carrying both
   the Hijri and Gregorian number. Month length is found by walking outward and
   asking the engine, not by arithmetic: a Hijri month is 29 or 30 days and
@@ -208,33 +231,58 @@ The Hijri month sheet pages by whole Hijri months, walking outward and asking th
 engine where each day lands rather than stepping 29 or 30 days - either of those
 drifts, and lands in the wrong month within a year.
 
-The Quran library has no top bar and no tab row, and there is no library screen
+## Quran
+
+The library has no top bar and no tab row, and there is no library screen
 at all: opening Quran opens the text, at the last place it was left. The browse
 affordances - surahs, saved verses, search, page/juz'/hizb - live in one sheet
 that is a tap away from the reading surface and dismisses back onto it, rather
 than being a screen you have to pass *through* to reach the book.
 
-- `ui/quran/QuranReader.kt` - the reader, all four layouts, and the control pill.
+- `ui/quran/QuranReader.kt` - the reader's chrome, the surface switch, and the
+  gesture layer. It used to be 2,261 lines holding every layout inline.
+- `ui/quran/reader/MushafPager.kt`, `MushafPage.kt`, `MushafPageText.kt` - the
+  604-page surface: pager, page, and the Arabic set on it.
+- `ui/quran/reader/ContinuousReader.kt`, `FlowingBlock.kt` - continuous flow, in
+  blocks of twelve verses so neither the measure nor memory cost is proportional to
+  the surah.
+- `ui/quran/reader/ReaderPosition.kt` - position, selection and magnification as
+  one value.
+- `ui/quran/reader/PageFit.kt` - chooses the type size a page is actually measured
+  to fit.
+- `ui/quran/reader/PageActionBar.kt`, `PageInsets.kt` - the per-page action row and
+  the chrome the page must not draw under.
 - `ui/quran/QuranIndexSheet.kt` - surahs / saved / search in one sheet.
 - `ui/quran/ReadingOptionsSheet.kt` - layout, axis, paper, typeface, pinch.
 - `ui/quran/VerseCards.kt` - the verse block, translation card and inspector.
+- `ui/quran/gesture/PinchMath.kt`, `ReaderPinch.kt` - the pinch arithmetic,
+  separated from the modifier so it can be tested without a device.
 - `ui/theme/QuranFonts.kt`, `ui/theme/QuranPaper.kt` - typeface registry and the
   seven-colour mushaf paper, both contrast-checked in `QuranPaperContrastTest`.
 
 ### The one thing worth knowing about the reader
 
-Every layout reads from the *same* anchor - a `(surah, ayah)` pair - and each
-layout knows how to resolve that anchor into its own coordinates: an index into a
-surah for the scrolling layouts, a page number for the mushaf layouts. That is
-what makes switching layout keep your place instead of throwing you to the top
-of the surah, and it is why there is no second "where am I" cursor anywhere.
+A verse is identified by `QuranRef(surah, ayah, page)`. The page is not redundant:
+an ayah number alone is ambiguous, because page 604 holds three ayah-1s and a
+bookmark that stored only `ayah = 1` could not say which one.
 
-Per-page mode follows the canonical 604-page partition from the bundled corpus,
-so a page boundary is where the printed page actually breaks and a page can
-begin in one surah and end in the next. That is also why page mode carries its
-own cursor: no single verse stands for "page 300", so the cursor is the page and
-it is written back into the anchor on every turn, which keeps Continue Reading
-and bookmarks truthful.
+Every layout resolves that same reference into its own coordinates, so switching
+layout keeps your place instead of throwing you to the top of the surah, and there
+is no second "where am I" cursor anywhere. Per-page mode follows the canonical
+604-page partition from the bundled corpus, so a page boundary is where the
+printed page actually breaks and a page can begin in one surah and end in the next.
+
+**A page is data, not a layout.** The corpus says which verses are on which page;
+the reader never decides that. This is why a surah head prints no basmalah of its
+own - the bundled Tanzil text carries the basmalah *inside* verse 1 of 113 of the
+114 surahs, so printing one as well doubles it. At-Tawbah is the exception that
+proves it: no basmalah is printed there either, because there is none in the text.
+
+**Page fit is measured, not estimated.** A page's height is *quadratic* in the type
+size, because both the number of lines and the line height grow with it. Arithmetic
+that assumes one factor reports a clipped page as fitting - in the dangerous
+direction, since it fails by hiding text. `PageFit.resolve` bisects on real
+measurements instead.
 
 Two invariants live in `QuranReadingOptions` rather than at the call sites, and
 are unit-tested:
@@ -274,16 +322,19 @@ slideshow rather than a page of reading.
 
 ### Turning a page
 
-In the paged layouts the page can be turned by swiping, or by tapping either
-margin. The tap zones are 48dp strips in the gutter *beside* the text rather
-than a full-width tap handler, because the text already claims taps to select a
-verse; a parent that consumed them would make turning the page and reading a
-verse mutually exclusive. They carry no visible chevrons on purpose - a reader
-who can see the affordance stops reading and starts swiping.
+A page turns by dragging, and by a page-turn accessibility action on the page
+itself. Both go through one `turn` function, so the gesture and the accessibility
+route cannot drift.
 
-A page can also be taller than the screen, since the Arabic is sized by the
-reader and not by the page. The paged surface scrolls vertically inside the
-horizontal pager rather than clipping, so no line is ever lost off the bottom.
+There used to be a third route as well: 48dp tap strips in the margin either side
+of the text. They are gone. They cost reading width, and they only ever worked on
+the horizontal axis, so a screen-reader user on the vertical layout had no way to
+reach the next page at all. A page is reachable by finger or by action; the
+margin is for the text.
+
+A page can also be taller than the screen, since the Arabic is sized by the reader
+and not by the page. The paged surface scrolls vertically inside the horizontal
+pager rather than clipping, so no line is ever lost off the bottom.
 
 ### Panning while zoomed
 
@@ -293,26 +344,36 @@ be moved is one you have cropped yourself out of. At 1x the lock stays on, so a
 one-finger drag is still an ordinary scroll and the two gestures never fight.
 The offset is clamped to the surplus the scale actually created and re-centres on
 the way back to 1x, so dragging can never leave a strip of empty paper beside the
-text.
+text. The magnification lives on `ReaderPosition` rather than in the gesture layer,
+because the drag/pan switch has to agree with the scale it is switching on.
 
 ### Quran fonts
 
-Five faces are offered by name and two ship with the APK. `res/font` could only
-take OFL faces: **Amiri** and **Lateef** are SIL Open Font License and freely
-redistributable, and they carry the U+06DD ayah marker the corpus uses. The other
-five slots - KFGQ, MeQuran, Digital Khatt v2, Naskh Nastaleeq, Noorani Quran -
-resolve to the default face and are labelled *Not included yet*, because their
-own licences do not allow redistribution (KFGQPC is "all rights reserved",
-me_quran is "free for non commercial use", the rest are trademarked). Enabling
-one you hold permission for is a two-step change; see
-`app/src/main/assets/quran_fonts_OFL.txt`.
+Five faces, and all five ship in the APK: **Amiri**, **Amiri Quran**, **Lateef**,
+**Scheherazade New** and **Harmattan**, all under the SIL Open Font License, which
+permits redistribution inside an Apache-2.0 application.
+
+There used to be seven on offer and two bundled. The other five - KFGQ, MeQuran,
+Digital Khatt, Naskh Nastaleeq and Noorani - cannot be redistributed (KFGQPC is
+"all rights reserved", me_quran is "free for non commercial use", the rest are
+trademarked), so each silently fell back to Amiri. A picker that offers five
+choices which all draw the same face is worse than a smaller honest list, and it
+cost a settings screen to discover.
+
+Each face was checked for **U+06DD**, the ayah-end ornament, before being added.
+That codepoint is a standalone ornament rather than a numeric placeholder, and a
+mushaf whose ayah markers are tofu boxes is not a mushaf; Reem Kufi was rejected on
+exactly that. `fontRes` is a non-null `Int` and `isBundled` is a constant, so a
+face without a file cannot be added by accident.
 
 Each face carries its own line-height multiplier rather than sharing one, because
 Nastaliq descenders need materially more room than a Naskh face and a Nastaliq
-set with Naskh leading looks like a mistake. The picker previews each face with
-real Quranic text, so the choice is made by looking rather than by reading a name.
+set with Naskh leading looks like a mistake. Harmattan is the extreme case here -
+a deep descender that needs more room than any other face in the set. The picker
+previews each face with real Quranic text, so the choice is made by looking rather
+than by reading a name. Licences are in `app/src/main/assets/quran_fonts_OFL.txt`.
 
-- `ui/compose/CelestialClock.kt` — the dial and its labels.
+## Notes on the port
 
 The date lives in `SalahUiState.selectedDate` and is switched on the **Prayer**
 tab. It is the app's only date switcher; Today follows it. Two switches meant two
@@ -323,6 +384,17 @@ The webapp's nine accent themes and its Google Fonts are **not** ported: the pag
 reads from the app's Material light/dark scheme so it sits with every other
 screen, and the display serif is the system one. The webapp's own source is
 checked out alongside this project at `../athan-pwa` for reference.
+
+Today's live reading - the countdown, the headline prayer, the highlighted row -
+comes from `SalahUiState`, maintained by a one-second ticker in the ViewModel. The
+page used to compute its own inside a `remember(day, isToday)`, and those keys do
+not change between seconds, so all three held whatever was true when the screen was
+composed: leave the page open across Dhuhr and the headline still read Asr with
+Dhuhr as "next". A side effect worth knowing about is that the page read
+`LocalTime.now()`, so every recording of the Today screenshots baked in whatever
+time of day it was run at. Two recordings twenty minutes apart produced two
+different images. The baselines are now reproducible, and that is verified rather
+than assumed: two consecutive `record` runs are byte-identical.
 
 ## Qibla
 
@@ -350,6 +422,22 @@ Two defects in the reference were **not** carried across:
   aligned", while the guidance banner beside the dial correctly said "turn 2°
   right". The two could contradict each other. `QiblaEngine.calculateRelativeAngle`
   folds the difference circularly, so they cannot.
+
+The second fix is less obvious. Folding the difference is only half of it: the
+result also has to be something a sentence can be built from, because "not aligned"
+is not guidance. `QiblaGuidance` is that result - a direction and a whole number of
+degrees - and it is the *one* source for the banner's words, the dial's ring colour,
+the check mark, the number of degrees and the haptic. That last part matters: the
+window used to be decided in three places at once (`abs(relativeAngle) <= 4.0f` in
+the ViewModel, a `> 0` sign test in the banner, and the window in the guidance
+type), and at 4.5° they gave three different answers - a green ring, a check mark,
+and "turn 5°" on the same screen.
+
+The alignment window is 5°, and that is deliberately forgiving. A compass reading
+jitters by a degree or two with nobody moving, and a phone held at chest height in
+one hand is worse. A tighter window makes the aligned state flicker as the reading
+crosses the threshold, and a reader who has to watch for a flicker rather than being
+*told* they are aligned will correct past the target and correct back.
 
 The dial also unrolls its rotation: the target angle accumulates the shortest
 signed delta from the previous frame rather than being set from the raw heading,
@@ -391,6 +479,11 @@ instrument rather than a spinning image.
   local mosque timetable.
 - Qibla accuracy depends on the device magnetometer; the app shows
   interference diagnostics when the field looks unreliable.
+- Mushaf justification is typographic, not print-exact. Only the KFGQ/QCF-style
+  page-glyph fonts can reproduce the Uthmani justification rule, because the glyph
+  itself carries the kashida; with a general-purpose face the line is justified by
+  the text engine instead. Every bundled face is OFL, and none of the page-glyph
+  fonts are.
 
 ## Credits
 
