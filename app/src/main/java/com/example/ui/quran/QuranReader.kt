@@ -31,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +40,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -131,6 +133,29 @@ fun QuranReader(
             QuranBrowse.ayah(ref.surah, ref.ayah)?.let(onAyahViewed)
         }
     )
+
+    // A layout change drops the magnification.
+    //
+    // `resetMagnification` was documented as doing this and nothing called it, so a
+    // pinch-zoom set on the mushaf survived a switch to continuous - a magnification
+    // chosen to make a dense page legible, then applied to one verse per screen, where
+    // the text is already a line wide and the reader is looking at a fraction of a
+    // surah through a keyhole.
+    //
+    // On a rotation too. Not because the magnification breaks - `PageFit` measures
+    // the page's own text and the zoom is a `graphicsLayer` applied outside it, so
+    // the fit is unaffected and nothing clips. But the pan is clamped to the surplus
+    // the scale created in the *old* orientation, and the surplus is width x height,
+    // so a pan chosen for a tall surface is out of range for a wide one - clamped to
+    // whatever fits, which is a position the reader never chose and cannot explain.
+    // Resetting is the only answer that is right in both orientations.
+    //
+    // Everything else survives - the position, the selection, the text size - because
+    // those are properties of the *reading*, and neither a rotation nor a layout
+    // change changes what the reader is reading.
+    LaunchedEffect(options.layout, LocalConfiguration.current.orientation) {
+        position.resetMagnification()
+    }
 
     QuranFonts.Provide(options.font) {
         Box(
