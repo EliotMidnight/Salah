@@ -195,7 +195,19 @@ class MushafPageText private constructor(
             ink: Color,
             accent: Color,
             highlight: Color,
-            lineHeightFactor: Float
+            lineHeightFactor: Float,
+            /**
+             * Whether to name the surah this text opens, as a *mushaf page* does.
+             *
+             * False for a flowing block in the continuous layout, and that is not
+             * a detail. A page is a fixed object and needs its running head; a
+             * twelve-verse block inside a scrolling list already sits under a
+             * surah heading, so naming the surah again prints it twice - and in the
+             * rendered result the second copy lands *inline*, at the start of the
+             * first line, where it reads as part of the text rather than as a
+             * heading.
+             */
+            showSurahHead: Boolean = true
         ): MushafPageText {
             val spans = ArrayList<VerseSpan>(ayahs.size)
             val bodySize = QuranReadingOptions.ARABIC_BASE_SP * scale
@@ -212,12 +224,28 @@ class MushafPageText private constructor(
                 )
             )
 
-            ayahs.firstOrNull()?.let { opening ->
-                builder.appendSurahHead(
-                    surah = opening.surahNumber,
-                    scale = scale,
-                    accent = accent
-                )
+            // The head only when the page **opens** a surah, and only when this
+            // text is a page.
+            //
+            // Unconditionally printing it is wrong in a way that is easy to miss
+            // because it looks right: page 3 is Al-Baqarah verses 6 to 16, and
+            // printing "البقرة" above it says the surah starts there. A reader
+            // checking their place in the mushaf would be misled by furniture the
+            // app put there precisely to help them check.
+            //
+            // A surah starts at its own verse 1, so that is the test - and it is
+            // read from the data rather than from a list of pages that open a
+            // surah, which would have to be maintained by hand.
+            if (showSurahHead) {
+                ayahs.firstOrNull()?.let { opening ->
+                    if (opening.ayahNumber == 1) {
+                        builder.appendSurahHead(
+                            surah = opening.surahNumber,
+                            scale = scale,
+                            accent = accent
+                        )
+                    }
+                }
             }
 
             for (ayah in ayahs) {
@@ -248,14 +276,21 @@ class MushafPageText private constructor(
                 // from the verse it belongs to when the text reflows.
                 //
                 // Appended *before* `unitEnd` is taken, so the glyph is part of the
-                // verse's span. Reading `unitEnd` first put the glyph outside
-                // `full`, and [verseAt] then had no span containing it and fell
-                // through to "past the end" - which returns the *last* verse on the
-                // page. So a reader who tapped ۩ on 32:15 selected An-Nas.
-                QuranBrowse.sajdaAfter(ayah.surahNumber, ayah.ayahNumber)?.let { kind ->
+                // verse's span. Reading `unitEnd` first put the glyph outside `full`,
+                // and [verseAt] then had no span containing it and fell through to
+                // "past the end" - which returns the *last* verse on the page. So a
+                // reader who tapped ۩ on 32:15 selected An-Nas.
+                //
+                // **Only when the verse does not already carry one.** Tanzil's text
+                // has U+06E9 written into 7:206 - the corpus's own text, not
+                // something this app added - and appending a second one put two
+                // prostration marks in the middle of Al-A'raf, visible in the
+                // screenshot. A marker that is already in the text is the text.
+                val sajda = QuranBrowse.sajdaAfter(ayah.surahNumber, ayah.ayahNumber)
+                if (sajda != null && !ayah.textArabic.contains(SajdaMarker.OBLIGATORY)) {
                     builder.append(' ')
                     builder.pushStyle(SpanStyle(color = accent, fontSize = markerSize))
-                    builder.append(sajdaGlyph(kind))
+                    builder.append(sajdaMarkerFor(sajda))
                     builder.pop()
                 }
                 val unitEndWithSajda = builder.length
@@ -319,9 +354,30 @@ class MushafPageText private constructor(
             pop()
         }
 
-        private fun sajdaGlyph(kind: QuranBrowse.SajdaKind): String = when (kind) {
-            QuranBrowse.SajdaKind.OBLIGATORY -> "۩"
-            QuranBrowse.SajdaKind.RECOMMENDED -> "۩"
-        }
+        private fun sajdaMarkerFor(kind: QuranBrowse.SajdaKind): String =
+            if (kind == QuranBrowse.SajdaKind.OBLIGATORY) SajdaMarker.OBLIGATORY
+            else SajdaMarker.RECOMMENDED
+    }
+
+    /**
+     * The prostration markers, U+06E9.
+     *
+     * One glyph for both kinds. A reader who knows whether a prostration is
+     * obligatory or recommended is being told something, and the metadata
+     * distinguishes fifteen of them - but U+06E9 is the only character Unicode has
+     * for the place of sajdah, and inventing a second one would put a shape in the
+     * text that no other Quran text uses. The distinction is kept in the data and
+     * is available to a reader who asks for it; it is not smuggled into a glyph.
+     *
+     * It is worth naming because U+06E9 is small and reads as a "ص" with marks on
+     * it, so a stray one is invisible in a screenshot of a page of Arabic - which
+     * is exactly how one came to be printed in the middle of Al-Ikhlas.
+     */
+    object SajdaMarker {
+        /** Obligatory, as the Tanzil metadata types it. */
+        const val OBLIGATORY = "۩"
+
+        /** Recommended. */
+        const val RECOMMENDED = "۩"
     }
 }

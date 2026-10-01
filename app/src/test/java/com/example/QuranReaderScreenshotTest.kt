@@ -9,6 +9,7 @@ import com.example.data.model.QuranPinchTarget
 import com.example.data.model.QuranReadingLayout
 import com.example.data.model.QuranReadingOptions
 import com.example.data.model.QuranScrollDirection
+import com.example.data.model.Surah
 import com.example.data.quran.QuranBrowse
 import com.example.ui.SalahUiState
 import com.example.ui.localization.ProvideAppLanguage
@@ -24,34 +25,34 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Renders the reader to a PNG so its four combinations can be reviewed without a
- * device.
+ * Renders the reader to a PNG so its combinations can be reviewed without a device.
  *
  * ### Why these exist
  *
- * The reader is four independent settings - layout, axis, per-verse, pinch - and
- * the combinations are the product. Every serious bug in it so far was invisible
- * to the compiler and to the logic tests:
+ * The reader is four independent settings - layout, axis, per-verse, pinch - and the
+ * combinations are the product. Most of the serious bugs in it were invisible to the
+ * compiler and to the logic tests:
  *
- * - the page indicator disagreeing with the page on screen, because the label and
- *   the pager were reading from different state;
- * - the surah heading eating a third of the screen;
- * - the horizontal axis re-laying-out the surah into side-by-side panels,
- *   because the axis had been treated as a shape rather than a mechanism.
+ * - the horizontal continuous measure being *infinite*, so each verse was set as one
+ *   unwrapped line running off both edges - and the committed baseline for that mode
+ *   had recorded the broken picture as correct;
+ * - the surah heading printing a basmalah the verses already contained;
+ * - a fitted page that was never actually drawn at its fitted size;
+ * - a prostration marker that selected a different verse.
  *
- * None of those are logic errors. The functions were correct and the code was
- * tidy; the *picture* was wrong. So the picture is the assertion.
+ * None of those are logic errors. The functions were correct and the code was tidy;
+ * the *picture* was wrong. So the picture is the assertion.
  *
  * ### What each image is for
  *
- * The first two pair up to show that per-page is genuinely one page on either
- * axis - same page number, same running head, only the direction of travel
- * differs. The next two do the same for continuous, where the axis must change
- * only the measure and never the arrangement of the text.
+ * The per-page pair shows that page mode is genuinely one page on either axis - same
+ * page number, same running head, only the direction of travel differs. The
+ * continuous pair shows that the axis changes the *measure* and never the
+ * arrangement of the text.
  *
- * A reader is expected to check these by eye after touching the layout code.
- * They are not a pixel-diff gate: Arabic rendering differs across hosts and font
- * stacks, so a diff would fail on typography rather than on layout.
+ * A reader is expected to check these by eye after touching the layout code. They are
+ * not a pixel-diff gate: Arabic rendering differs across hosts and font stacks, so a
+ * diff would fail on typography rather than on layout.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -61,8 +62,7 @@ class QuranReaderScreenshotTest {
     @get:Rule val composeTestRule = createComposeRule()
 
     private var surahNumber = 112
-    private var surah: com.example.data.model.Surah =
-        QuranBrowse.surah(surahNumber)!!
+    private var surah: Surah = QuranBrowse.surah(surahNumber)!!
     private var ayahs: List<Ayah> = QuranBrowse.ayahsInSurah(surahNumber)
 
     private fun state(ayahNumber: Int = 1) = SalahUiState(
@@ -74,10 +74,10 @@ class QuranReaderScreenshotTest {
     /**
      * Point the test at a different surah.
      *
-     * Al-Ikhlas is four verses on a single page, which is a good check that a
-     * short page is not shrunk - there is nothing to fit - but it can never show
-     * a page separator, because it never crosses a page. The long surah is
-     * there to exercise the boundary.
+     * Al-Ikhlas is four verses on one page, which is a good check that a short page
+     * is not shrunk - there is nothing to fit - but it can never show a page
+     * separator, because it never crosses a page. The long surah is there to
+     * exercise the boundary, and Al-Baqarah is the densest thing in the book.
      */
     private fun openSurah(number: Int) {
         surahNumber = number
@@ -88,16 +88,8 @@ class QuranReaderScreenshotTest {
     private fun render(
         options: QuranReadingOptions,
         dark: Boolean,
-        name: String
-    ) {
-        render(options, dark, name, surahNumber)
-    }
-
-    private fun render(
-        options: QuranReadingOptions,
-        dark: Boolean,
         name: String,
-        surah: Int
+        surah: Int = surahNumber
     ) {
         openSurah(surah)
         composeTestRule.setContent {
@@ -163,10 +155,6 @@ class QuranReaderScreenshotTest {
     )
 
     // --- Per-verse on each surface ----------------------------------------
-    //
-    // These are the two that matter most. Per-verse must break the same text
-    // into units in both layouts, and on the horizontal axis it must do so
-    // *without* rearranging the verses sideways.
 
     @Test
     fun per_page_vertical_per_verse() = render(
@@ -199,19 +187,15 @@ class QuranReaderScreenshotTest {
         name = "quran_continuous_horizontal_per_verse"
     )
 
-    // --- Dark, and a paper that is not the app default ---------------------
+    // --- Page boundaries, and the one case that can show one --------------
 
-    // --- Page separators, in the only case that can show one ----------------
-    //
-    // A separator is drawn between the last verse of one mushaf page and the
-    // first of the next, so it can only appear in a surah that crosses a page
-    // boundary. Al-Ikhlas never does, which is why the tests above cannot check
-    // it: those images would look identical whether the separator worked or not.
-    //
-    // Al-Baqarah runs to 286 ayat across pages 2 to 7, so it crosses five
-    // boundaries. Long surahs are also the ones where fitting a page to the
-    // viewport has to actually shrink the text, so these two images check the
-    // separator and the fit together.
+    @Test
+    fun continuous_vertical_across_pages() = render(
+        QuranReadingOptions(layout = QuranReadingLayout.CONTINUOUS),
+        dark = false,
+        name = "quran_continuous_vertical_across_pages",
+        surah = 2
+    )
 
     @Test
     fun continuous_vertical_per_verse_across_pages() = render(
@@ -224,13 +208,7 @@ class QuranReaderScreenshotTest {
         surah = 2
     )
 
-    @Test
-    fun continuous_vertical_across_pages() = render(
-        QuranReadingOptions(layout = QuranReadingLayout.CONTINUOUS),
-        dark = false,
-        name = "quran_continuous_vertical_across_pages",
-        surah = 2
-    )
+    // --- A dense mushaf page, which is where the fit has to work ----------
 
     @Test
     fun per_page_vertical_dense() = render(
@@ -239,6 +217,8 @@ class QuranReaderScreenshotTest {
         name = "quran_per_page_vertical_dense",
         surah = 2
     )
+
+    // --- Dark, and a paper that is not the app default --------------------
 
     @Test
     fun per_page_vertical_dark() = render(
@@ -261,4 +241,33 @@ class QuranReaderScreenshotTest {
         dark = true,
         name = "quran_continuous_vertical_per_verse_dark_paper"
     )
+
+    // --- Immersive --------------------------------------------------------
+
+    @Test
+    fun per_page_vertical_immersive() {
+        openSurah(112)
+        composeTestRule.setContent {
+            SalahTheme(darkTheme = false) {
+                ProvideAppLanguage(language = "English") {
+                    QuranReader(
+                        state = state(),
+                        onSelectSurah = {},
+                        onSelectSurahAyah = { _, _ -> },
+                        onAyahViewed = {},
+                        onToggleBookmark = {},
+                        onTogglePlayAyah = {},
+                        onStopAudio = {},
+                        options = QuranReadingOptions(layout = QuranReadingLayout.PER_PAGE),
+                        onOptionsChange = {},
+                        immersive = true,
+                        onImmersiveChange = {},
+                        onOpenIndex = {},
+                        onOpenOptions = {}
+                    )
+                }
+            }
+        }
+        composeTestRule.onRoot().captureRoboImage("src/test/screenshots/quran_per_page_vertical_immersive.png")
+    }
 }

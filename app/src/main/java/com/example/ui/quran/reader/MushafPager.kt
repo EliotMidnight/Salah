@@ -71,13 +71,21 @@ internal fun MushafPager(
     ink: Color,
     accent: Color,
     onSelectVerse: (QuranRef) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Whether the reader's control row is on screen, and so taking page space. */
+    controlsVisible: Boolean = true
 ) {
     val space = Space.current
-    // The selected verse, narrowed to the page being drawn. `position.selection` is
-    // checked against the page on *every* page in the pager rather than once here,
-    // because a selection on page 604 is not a selection on page 603 - and ayah 1
-    // exists on both.
+    // The room a page leaves for the reader's floating chrome.
+    //
+    // Passed in, because the reader knows whether the chrome is on screen and a
+    // page cannot: in immersive mode there is no control row, and a page that
+    // reserved the space anyway would lose height for a bar nobody can see.
+    val topInset = PageInsets.top(controlsVisible)
+
+    // The selected verse, narrowed to the page being drawn. Checked against the page
+    // on *every* page rather than once here, because a selection on page 604 is not
+    // a selection on page 603 - and ayah 1 exists on both.
     val selected = position.selection?.takeIf { it.page == position.page }
 
     // The pager writes the position. Keyed on the pager, so this is one collection
@@ -108,7 +116,7 @@ internal fun MushafPager(
                 pageSpacing = space.lg,
                 contentPadding = PaddingValues(horizontal = space.sm)
             ) { index ->
-                PageAt(index + 1, requestedScale, ink, accent, selected, onSelectVerse)
+                PageAt(index + 1, requestedScale, ink, accent, selected, onSelectVerse, topInset)
             }
         } else {
             VerticalPager(
@@ -117,7 +125,7 @@ internal fun MushafPager(
                 pageSpacing = space.lg,
                 contentPadding = PaddingValues(vertical = space.sm)
             ) { index ->
-                PageAt(index + 1, requestedScale, ink, accent, selected, onSelectVerse)
+                PageAt(index + 1, requestedScale, ink, accent, selected, onSelectVerse, topInset)
             }
         }
     }
@@ -131,7 +139,8 @@ private fun PageAt(
     ink: Color,
     accent: Color,
     selected: QuranRef?,
-    onSelectVerse: (QuranRef) -> Unit
+    onSelectVerse: (QuranRef) -> Unit,
+    topInset: androidx.compose.ui.unit.Dp
 ) {
     // A page's own surah, needed to resolve a tap into a full reference - and a
     // page can hold three surahs, so this cannot be read off the reader's position.
@@ -150,6 +159,7 @@ private fun PageAt(
         onSelectVerse = { ayahNumber ->
             onSelectVerse(QuranRef(firstSurah, ayahNumber, page))
         },
+        topInset = topInset,
         modifier = Modifier.fillMaxSize()
     )
 }
