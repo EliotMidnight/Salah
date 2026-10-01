@@ -203,6 +203,33 @@ class QuranReaderScreenshotTest {
         name = "quran_continuous_horizontal_per_verse"
     )
 
+    // --- Landing in the middle of a surah ---------------------------------
+
+    @Test
+    fun continuous_vertical_resumes_midway() = render(
+        QuranReadingOptions(layout = QuranReadingLayout.CONTINUOUS),
+        dark = false,
+        name = "quran_continuous_vertical_resumes_midway",
+        // 2:200, the middle of Al-Baqarah. Entering the continuous layout used to
+        // open at 2:1 whatever the position was - and then *wrote* 2:1 to Continue
+        // Reading half a second later, so the wrong place was not merely shown, it
+        // was saved. This baseline is the reader arriving where they were.
+        page = 42
+    )
+
+    @Test
+    fun continuous_vertical_per_verse_resumes_midway() = render(
+        QuranReadingOptions(
+            layout = QuranReadingLayout.CONTINUOUS,
+            perVerse = true
+        ),
+        dark = false,
+        name = "quran_continuous_vertical_per_verse_resumes_midway",
+        // Far enough in to be past the first screenful in both shapes, and on a
+        // block boundary, so a wrong block index is visible rather than plausible.
+        page = 42
+    )
+
     // --- Page boundaries, and the one case that can show one --------------
 
     @Test

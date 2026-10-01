@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -54,9 +55,10 @@ import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**
  * The whole surah as one flow, on either axis.
@@ -116,7 +118,16 @@ internal fun ContinuousReader(
     onPositionSettled: (QuranRef) -> Unit,
     modifier: Modifier = Modifier,
     /** Whether the reader's control row is on screen, and so taking list space. */
-    controlsVisible: Boolean = true
+    controlsVisible: Boolean = true,
+    /**
+     * How many items to scroll past the target and then back, for the initial seat.
+     *
+     * A parameter rather than a constant so the test can drive the arithmetic without
+     * a device-sized viewport, and named for what it is for rather than for how it is
+     * done. Zero means "do not overshoot", which is what a caller with no viewport
+     * yet wants.
+     */
+    resumeOvershoot: Int = DEFAULT_RESUME_OVERSHOOT
 ) {
     val space = Space.current
     val horizontal = options.scroll == QuranScrollDirection.HORIZONTAL
@@ -134,6 +145,75 @@ internal fun ContinuousReader(
     // is not a composable scope and so cannot `remember`.
     val blocks = remember(ayahs) { ayahs.chunked(FLOW_BLOCK_VERSES) }
 
+    // The item index the reader's verse sits at, or 0 when it is not in this surah.
+    //
+    // `+ HEADING_ITEMS` because the list is `[heading, verse…]` - the same offset the
+    // scroll observer below subtracts. The two must agree or a scroll writes back a
+    // position one verse from where the reader is.
+    val initialIndex = remember(ayahs, blocks, options.perVerse, position.ref) {
+        val verseIndex = ayahs.indexOfFirst {
+            it.surahNumber == position.ref.surah && it.ayahNumber == position.ref.ayah
+        }
+        if (verseIndex < 0) {
+            0
+        } else if (options.perVerse) {
+            verseIndex + HEADING_ITEMS
+        } else {
+            flowIndexOf(verseIndex, blocks)
+        }
+    }
+
+    // Open at the reader's verse, not at the top of the surah.
+    //
+    // The position is the reader's place and the whole module exists so that changing
+    // layout does not move them - so a list that starts at index 0 threw that away on
+    // every switch *into* continuous, and worse, made it stick: the scroll observer
+    // below debounced and then wrote 2:1 to Continue Reading, so the wrong place was
+    // not just shown, it was saved. Reading page 42 of Al-Baqarah and switching layout
+    // sent the reader to the top of the surah and remembered they were there.
+    //
+    // `scrollToItem`, not `animateScrollToItem`, and not a negative offset: this is a
+    // re-seat to where the reader already is, so it should be instant and it should
+    // put the verse at the top of the viewport rather than guess an offset that lands
+    // it in the middle.
+    //
+    // Gated on a measured layout, because scrolling before the list has one puts the
+    // reader at the end of the content instead of at the item.
+    //
+    // **A negative offset**, and this is the part that was wrong twice. A lazy list can
+    // only compose what is near its scroll position, so scrolling to item 21 means
+    // composing items around 21 - which is a screenful of text *above* the reader's
+    // verse, ending in the middle of a line, under the control pill. Every position
+    // had a line of clipped Arabic across the top of it, because the composition
+    // starts at the item's first pixel rather than at a line boundary.
+    //
+    // Scrolling further and putting the item back down by the overshoot is the fix, and
+    // it is why the target is scaled rather than used raw: the viewport is about three
+    // screens of blocks, so a third of it reads as "some context above", and the
+    // overshoot below is what the reader lands on. Without it the top of the screen is
+    // a half-rendered line of Arabic, which is the single most obviously wrong thing a
+    // reading surface can show.
+    LaunchedEffect(surah.number, initialIndex, listState) {
+        snapshotFlow { listState.layoutInfo.totalItemsCount }
+            .first { it > 0 }
+        if (initialIndex <= 0) return@LaunchedEffect
+
+        // Scroll *past* the target, then back - as two separate awaits across frames,
+        // which is the only way a lazy list will compose the items above the target.
+        //
+        // The obvious `scrollToItem(target + n); scrollToItem(target)` in one go does
+        // not work and looks like it does: both calls are scroll *requests* on the same
+        // state, so the second replaces the first and only the final position is ever
+        // composed. The screenshot then shows a line of Arabic cut in half across the
+        // top, under the control pill, which is the exact thing this was for.
+        //
+        // So: request the overshoot, let a frame compose it, then request the target.
+        // `withFrameNanos` between them is what makes the first one land.
+        listState.scrollToItem(initialIndex + resumeOvershoot)
+        withFrameNanos { }
+        listState.scrollToItem(initialIndex)
+    }
+
     // The verse at the top of the viewport is the reader's position.
     //
     // The list is `[heading, verse…]`, so the index the scroll state reports is one
@@ -141,9 +221,15 @@ internal fun ContinuousReader(
     // ayah list with it, which put the recorded position one verse ahead of the top
     // of the screen for the whole of the surah - and sent `ayahs[1]` whenever the
     // heading was showing at all.
+    //
+    // `drop(1)` and not `debounce`: the first emission of a fresh list is the item it
+    // opened at, which is the position the reader already had, so there is nothing to
+    // report. Debouncing it instead reported it half a second later, which is how a
+    // layout switch wrote a position the reader never chose.
     LaunchedEffect(listState, surah.number) {
         snapshotFlow { listState.firstVisibleItemIndex }
             .distinctUntilChanged()
+            .drop(1)
             .debounce(SCROLL_SETTLE_MILLIS)
             .collect { index ->
                 ayahs.getOrNull(index - HEADING_ITEMS)?.let { ayah ->
@@ -158,20 +244,31 @@ internal fun ContinuousReader(
         LazyColumn(
             state = listState,
             modifier = measure,
-            contentPadding = PaddingValues(vertical = space.md)
+            // The chrome's room is the list's *content padding*, not the heading's.
+            //
+            // It was on the heading, which is correct for exactly one scroll position:
+            // the top of the surah. Anywhere else - and after the resume above, that is
+            // everywhere - a line of Arabic sat under the control pill, because nothing
+            // between the list's first pixel and the text accounted for it. The pill is
+            // chrome *over* the reading surface, so the surface has to reserve room for
+            // it at every offset, and in a lazy list the only thing that does so at
+            // every offset is the content padding.
+            //
+            // Read here rather than inside the scope, because `LazyListScope` is not a
+            // composable scope and cannot call [PageInsets.top].
+            contentPadding = PaddingValues(
+                top = PageInsets.top(controlsVisible) + space.md,
+                bottom = space.xxl
+            )
         ) {
             item(key = HEADING_KEY) {
-                // The heading is the reader's first sight of the text, so it has to
-                // clear the *whole* floating chrome, control row and all - not just
-                // the status bar. In immersive mode the control row is gone, so it
-                // is passed down rather than assumed: a heading that sat under the
-                // index pill meant the reader could not read the surah's name at
-                // exactly the moment they opened it.
                 SurahHeading(
                     surah = surah,
                     ink = ink,
                     muted = muted,
-                    topInset = PageInsets.top(controlsVisible),
+                    // No top inset: the list's content padding already carries it, and
+                    // passing it twice put a full bar of dead space above the heading.
+                    topInset = 0.dp,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -408,6 +505,36 @@ internal fun VerseRow(
 }
 
 /**
+ * Which block a verse is in, as an item index.
+ *
+ * Flowing text is `ayahs.chunked(FLOW_BLOCK_VERSES)`, so a verse's item is its
+ * block's index - which is its verse index divided by the block size, not the verse
+ * index itself. Getting that wrong scrolls to a block twelve times further on, which
+ * on Al-Baqarah means landing anywhere at all in a 24-block surah.
+ *
+ * Counted rather than divided, because blocks are the last one short: 286 verses at
+ * twelve a block is 23 full blocks and one of ten, so the last verse is in block 23
+ * and not 23.83 rounded. Dividing gives 24, which is one past the end of the list -
+ * and a `scrollToItem` past the end is how a reader ends up looking at a blank sheet
+ * rather than at the text they asked for.
+ */
+internal fun flowIndexOf(verseIndex: Int, blocks: List<List<Ayah>>): Int {
+    if (verseIndex < 0) return 0
+    // Counted, not searched: `indexOfFirst { verseIndex in it.indices }` answers 0
+    // for every verse, because block 0's indices contain 0 and `0 in 0..11` is true
+    // for the first verse *and* the predicate never examines the later blocks that
+    // would also be candidates. Every reader resumed at the top of the surah and the
+    // arithmetic behind it said it had not.
+    var block = 0
+    var remaining = verseIndex
+    while (block < blocks.size && remaining >= blocks[block].size) {
+        remaining -= blocks[block].size
+        block++
+    }
+    return block.coerceAtMost(blocks.lastIndex.coerceAtLeast(0))
+}
+
+/**
  * A hairline and a page number, between the text of one mushaf page and the next.
  *
  * The continuous layout has no page breaks, which is the point of it. But the
@@ -493,6 +620,17 @@ internal const val SCROLL_SETTLE_MILLIS = 500L
  * block rather than as a list, and small enough to be cheap.
  */
 internal const val FLOW_BLOCK_VERSES = 12
+
+/**
+ * How far past the reader's verse the initial seat scrolls, then back.
+ *
+ * One screenful of items, which is about three screens of blocks. Enough for the
+ * reader to see where they have arrived and still be at their verse, and it is what
+ * makes the list compose *whole* blocks above the target instead of starting
+ * mid-line: a lazy list begins composing at the item's own first pixel, so a plain
+ * `scrollToItem` puts the top of the screen inside a line of Arabic.
+ */
+internal const val DEFAULT_RESUME_OVERSHOOT = 3
 
 /**
  * The measure of a horizontally-panned continuous surah.

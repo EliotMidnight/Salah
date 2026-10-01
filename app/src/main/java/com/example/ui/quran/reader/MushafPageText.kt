@@ -250,12 +250,11 @@ class MushafPageText private constructor(
                 //
                 // Testing the page's own first verse - "does this page open a surah?"
                 // - was the rule until a sweep over all 604 pages found it wrong on
-                // 42 of them. A surah does not begin at a page boundary: on 42 pages
-                // a surah's ayah 1 lands mid-page, so its name was never printed
-                // anywhere. 42 of 114 surahs - 37% - reached the reader as an
-                // unlabelled run of Arabic, on the page where they started, which is
-                // the one page where the name is needed most. A printed mushaf prints
-                // it at that point in the flow.
+                // 58 of the 114 surahs. A surah does not begin at a page boundary: on
+                // 51 pages a surah's ayah 1 lands part-way down, so its name was never
+                // printed anywhere - and since ayah 1 is on exactly one page, that
+                // name was on no page at all. A printed mushaf prints it where the
+                // surah starts.
                 //
                 // The test is `ayahNumber == 1` rather than "the page opens a surah",
                 // so it is read from the data and holds for every page rather than
