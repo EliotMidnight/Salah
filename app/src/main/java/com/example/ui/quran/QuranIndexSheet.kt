@@ -4,25 +4,21 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,8 +39,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.local.BookmarkEntity
@@ -55,17 +51,15 @@ import com.example.data.model.Surah
 import com.example.data.quran.QuranBrowse
 import com.example.data.quran.QuranSearch
 import com.example.data.quran.QuranSearchHit
-import com.example.data.quran.QuranText
 import com.example.ui.components.EmptyState
-import com.example.ui.components.OptionSheet
+import com.example.ui.components.OptionListSheet
 import com.example.ui.components.SearchInput
-import com.example.ui.components.SheetHeader
 import com.example.ui.localization.LocalStrings
 import com.example.ui.theme.ArabicFamily
-import com.example.ui.theme.IconSize
 import com.example.ui.theme.QuranFonts
 import com.example.ui.theme.QuranShape
 import com.example.ui.theme.Space
+import com.example.ui.theme.Spacing
 import com.example.ui.theme.layoutMetrics
 import kotlinx.coroutines.delay
 
@@ -81,17 +75,34 @@ private enum class SurahFilter { ALL, MECCAN, MEDINAN }
 /**
  * The index.
  *
- * One sheet with three faces - surahs, saved, search - because they are three
- * ways of answering the same question, "where do I go next", and they used to
- * be three screens plus a tab row to move between them.
+ * One sheet with three faces - surahs, saved, search - because they are three ways
+ * of answering the same question, "where do I go next", and they used to be three
+ * screens plus a tab row to move between them.
  *
- * It opens as a sheet over the reader rather than replacing it, so the text you
- * were reading is still behind it when you close it again. That matters more
- * here than on a normal screen: arriving somewhere is the end of a journey in
- * a list, and the middle of a breath in a reader.
+ * It opens as a sheet over the reader rather than replacing it, so the text being
+ * read is still behind it when it closes. That matters more here than on a normal
+ * screen: arriving somewhere is the end of a journey in a list, and the middle of a
+ * breath in a reader.
  *
- * The search field carries its own quick filters (page, juz', hizb) *inside* it,
- * which is what replaced the Reference tab's only job.
+ * ### Why every list in here is lazy
+ *
+ * They were not. The sheet's body was a `Column` with a `verticalScroll`, which
+ * composes **every** child whether or not it is visible - and this sheet put 114
+ * surahs, every saved verse, and all 604 page numbers through that path, on the
+ * frame the sheet opened. Opening the index to jump to Al-Kaharah cost a
+ * composition of the entire Quran's table of contents.
+ *
+ * [OptionListSheet] gives the lists a bounded viewport, so `items` composes what
+ * scrolls into view. Nothing else about the sheet changed: it is still a sheet over
+ * the reader, and the same three faces.
+ *
+ * ### Why the search field's state is held here and passed in
+ *
+ * It is `rememberSaveable`, and the composable is only in the tree while the sheet
+ * is open, so a query survives a rotation but not a close. That is deliberate: a
+ * reader who closes the index and comes back wants a clean sheet, and a reader who
+ * rotates wants their query. Splitting the state in two to achieve that is not
+ * worth an API change.
  */
 @Composable
 fun QuranIndexSheet(
@@ -118,44 +129,91 @@ fun QuranIndexSheet(
             results = emptyList()
             return@LaunchedEffect
         }
-        delay(220)
+        delay(SEARCH_DEBOUNCE_MILLIS)
         results = QuranSearch.searchVerses(query)
     }
 
-    OptionSheet(
+    // Strings for the list builders.
+    //
+    // A `LazyListScope` extension cannot be `@Composable` - it is not called from a
+    // composable context, it is the *content* of a `LazyColumn` - so it cannot read
+    // `LocalStrings` itself. The labels are gathered here, once, and handed in.
+    val labels = IndexLabels(
+        allSurahs = strings.more.allSurahsLabel,
+        meccan = strings.meccan,
+        medinan = strings.medinan,
+        verseCount = strings.more.verseCount,
+        nowReading = strings.more.nowReading,
+        searchSurahsAndVerses = strings.more.searchSurahsAndVerses,
+        versesLabel = strings.more.versesLabel,
+        pageWord = strings.more.pageWord,
+        juzWord = strings.more.juzWord,
+        hizbWord = strings.more.hizbWord,
+        verseReference = strings.more.verseReference,
+        juzOf = strings.more.juzOf,
+        surahsFound = strings.more.surahsFound,
+        versesFound = strings.more.versesFound,
+        selected = strings.more.selected,
+        notSelected = strings.more.notSelected,
+        searchHintTitle = strings.more.searchHintTitle,
+        searchHintMessage = strings.more.searchHintMessage,
+        noSearchResults = strings.more.noSearchResults,
+        noResultsMessage = strings.more.noResultsMessage,
+        emptySavedTitle = strings.more.reader.emptySavedTitle,
+        emptySavedMessage = strings.more.reader.emptySavedMessage
+    )
+
+    // Search results, and the numbers a numbering browse offers.
+    //
+    // Both are computed *here* rather than inside the list, because a
+    // `LazyListScope` body is not composable and so cannot `remember`. It is also
+    // the better place: these are *decisions* about what the reader asked for, not
+    // rows to be drawn, and a decision belongs with the state it is derived from.
+    val referenceNumbers = remember(referenceKind, query) {
+        browseNumbers(referenceKind, query)
+    }
+    val surahHits = remember(query, referenceKind) {
+        if (referenceKind != null) emptyList() else QuranSearch.searchSurahs(query)
+    }
+
+    OptionListSheet(
         title = strings.more.selectSurah,
         subtitle = strings.more.corpusSummary,
-        onDismiss = onDismiss
-    ) {
-        // The three faces. A pill row rather than a Material TabRow: the page
-        // has no bar to sit in, and a full-width band with an underline claims
-        // horizontal space this sheet does not have to spare.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = space.sm),
-            horizontalArrangement = Arrangement.spacedBy(space.sm)
-        ) {
-            IndexTab(strings.more.reader.indexSurahs, view == IndexView.SURAHS) {
-                view = IndexView.SURAHS
-            }
-            IndexTab(strings.more.reader.indexSaved, view == IndexView.SAVED) {
-                view = IndexView.SAVED
-            }
-            IndexTab(strings.more.reader.indexSearch, view == IndexView.SEARCH) {
-                view = IndexView.SEARCH
+        onDismiss = onDismiss,
+        header = {
+            // The three faces. A pill row rather than a Material TabRow: the page has
+            // no bar to sit in, and a full-width band with an underline claims
+            // horizontal space this sheet does not have to spare.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = space.lg)
+                    .padding(bottom = space.sm),
+                horizontalArrangement = Arrangement.spacedBy(space.sm)
+            ) {
+                IndexTab(strings.more.reader.indexSurahs, view == IndexView.SURAHS) {
+                    view = IndexView.SURAHS
+                }
+                IndexTab(strings.more.reader.indexSaved, view == IndexView.SAVED) {
+                    view = IndexView.SAVED
+                }
+                IndexTab(strings.more.reader.indexSearch, view == IndexView.SEARCH) {
+                    view = IndexView.SEARCH
+                }
             }
         }
-
+    ) {
         when (view) {
-            IndexView.SURAHS -> SurahIndex(
+            IndexView.SURAHS -> surahIndex(
+                labels = labels,
                 current = currentSurah,
                 filter = surahFilter,
                 onFilterChange = { surahFilter = it },
                 onSelect = onSelectSurah
             )
 
-            IndexView.SAVED -> SavedIndex(
+            IndexView.SAVED -> savedIndex(
+                labels = labels,
                 bookmarks = bookmarks,
                 onSelect = { bookmark ->
                     onSelectSurahAyah(bookmark.surahNumber, bookmark.ayahNumber)
@@ -163,12 +221,15 @@ fun QuranIndexSheet(
                 }
             )
 
-            IndexView.SEARCH -> SearchIndex(
+            IndexView.SEARCH -> searchIndex(
+                labels = labels,
                 query = query,
                 onQueryChange = { query = it },
                 referenceKind = referenceKind,
                 onKindChange = { referenceKind = it },
                 results = results,
+                referenceNumbers = referenceNumbers,
+                surahHits = surahHits,
                 currentSurah = currentSurah,
                 onSelectSurah = onSelectSurah,
                 onSelectAyah = { hit ->
@@ -177,10 +238,10 @@ fun QuranIndexSheet(
                 },
                 onSelectPlace = { ref ->
                     // A juz' or a hizb is not a surah. Each resolves to the
-                    // reference it opens on, and the jump goes to that - so
-                    // "go to juz' 30" lands on 78:1, which is what the reader
-                    // meant, rather than at the top of whichever surah the
-                    // old code happened to have selected last.
+                    // reference it opens on, and the jump goes to that - so "go to
+                    // juz' 30" lands on 78:1, which is what the reader meant, rather
+                    // than at the top of whichever surah happened to be selected
+                    // last.
                     onSelectSurahAyah(ref.surah, ref.ayah)
                     onDismiss()
                 }
@@ -188,6 +249,9 @@ fun QuranIndexSheet(
         }
     }
 }
+
+/** How long a query settles before it is run. */
+private const val SEARCH_DEBOUNCE_MILLIS = 220L
 
 @Composable
 private fun RowScope.IndexTab(label: String, selected: Boolean, onClick: () -> Unit) {
@@ -227,38 +291,47 @@ private fun RowScope.IndexTab(label: String, selected: Boolean, onClick: () -> U
 // Surahs
 // ---------------------------------------------------------------------------
 
-@Composable
-private fun SurahIndex(
+/** The 114 surahs, filtered, as a lazy list. */
+private fun LazyListScope.surahIndex(
+    labels: IndexLabels,
     current: Int,
     filter: SurahFilter,
     onFilterChange: (SurahFilter) -> Unit,
     onSelect: (Int) -> Unit
 ) {
-    val strings = LocalStrings.current
+    val space = Spacing()
 
-    val surahs = remember(filter) {
-        when (filter) {
-            SurahFilter.ALL -> QuranBrowse.surahs
-            SurahFilter.MECCAN -> QuranBrowse.surahs.filter { it.revelationType == RevelationType.MECCAN }
-            SurahFilter.MEDINAN -> QuranBrowse.surahs.filter { it.revelationType == RevelationType.MEDINAN }
+    val surahs = when (filter) {
+        SurahFilter.ALL -> QuranBrowse.surahs
+        SurahFilter.MECCAN -> QuranBrowse.surahs.filter { it.revelationType == RevelationType.MECCAN }
+        SurahFilter.MEDINAN -> QuranBrowse.surahs.filter { it.revelationType == RevelationType.MEDINAN }
+    }
+
+    item(key = "surah_filters") {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = space.lg)
+                .padding(bottom = space.xs),
+            horizontalArrangement = Arrangement.spacedBy(space.xs)
+        ) {
+            FilterPill(labels.allSurahs, filter == SurahFilter.ALL, labels) {
+                onFilterChange(SurahFilter.ALL)
+            }
+            FilterPill(labels.meccan, filter == SurahFilter.MECCAN, labels) {
+                onFilterChange(SurahFilter.MECCAN)
+            }
+            FilterPill(labels.medinan, filter == SurahFilter.MEDINAN, labels) {
+                onFilterChange(SurahFilter.MEDINAN)
+            }
         }
     }
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = Space.current.xs),
-        horizontalArrangement = Arrangement.spacedBy(Space.current.xs)
-    ) {
-        FilterPill(strings.more.allSurahsLabel, filter == SurahFilter.ALL) { onFilterChange(SurahFilter.ALL) }
-        FilterPill(strings.meccan, filter == SurahFilter.MECCAN) { onFilterChange(SurahFilter.MECCAN) }
-        FilterPill(strings.medinan, filter == SurahFilter.MEDINAN) { onFilterChange(SurahFilter.MEDINAN) }
-    }
-
-    surahs.forEach { surah ->
+    items(surahs, key = { it.number }) { surah ->
         SurahIndexRow(
             surah = surah,
             selected = surah.number == current,
+            strings = labels,
             onClick = { onSelect(surah.number) }
         )
     }
@@ -267,20 +340,19 @@ private fun SurahIndex(
 /**
  * One surah.
  *
- * A 40dp accent tile carrying the number, the English name and its meaning, and
- * the Arabic name set large and quiet on the far side - the same string that is
- * the loudest thing in the reader's opening is deliberately the quietest thing
- * here.
+ * A 40dp accent tile carrying the number, the English name and its meaning, and the
+ * Arabic name set large and quiet on the far side - the same string that is the
+ * loudest thing in the reader's opening is deliberately the quietest thing here.
  */
 @Composable
 internal fun SurahIndexRow(
     surah: Surah,
     selected: Boolean,
+    strings: IndexLabels,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
-    val strings = LocalStrings.current
 
     Row(
         modifier = modifier
@@ -291,8 +363,8 @@ internal fun SurahIndexRow(
             .padding(horizontal = space.lg, vertical = space.md)
             .testTag("surah_${surah.number}")
             // "You are here" for the surah open in the reader. Without it, 114
-            // identical rows gave no way to tell which one you had opened.
-            .semantics { stateDescription = if (selected) strings.more.nowReading else "" },
+            // identical rows gave no way to tell which one had been opened.
+            .semantics { stateDescription = if (selected) strings.nowReading else "" },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
@@ -307,7 +379,7 @@ internal fun SurahIndexRow(
                 MaterialTheme.colorScheme.onPrimaryContainer
             },
             shape = QuranShape.tile,
-            modifier = Modifier.size(Space.current.huge)
+            modifier = Modifier.size(space.huge)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text(
@@ -329,7 +401,7 @@ internal fun SurahIndexRow(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = "${strings.more.verseCount.format(surah.totalVerses)} · " +
+                text = "${strings.verseCount.format(surah.totalVerses)} · " +
                     if (surah.revelationType == RevelationType.MECCAN) {
                         strings.meccan
                     } else {
@@ -366,56 +438,76 @@ internal fun SurahIndexRow(
 // Saved
 // ---------------------------------------------------------------------------
 
-@Composable
-private fun SavedIndex(
+/** The reader's saved verses, as a lazy list. */
+private fun LazyListScope.savedIndex(
+    labels: IndexLabels,
     bookmarks: List<BookmarkEntity>,
     onSelect: (BookmarkEntity) -> Unit
 ) {
-    val strings = LocalStrings.current
-
     if (bookmarks.isEmpty()) {
-        EmptyState(
-            title = strings.more.reader.emptySavedTitle,
-            message = strings.more.reader.emptySavedMessage,
-            icon = Icons.Default.BookmarkBorder
-        )
+        item(key = "saved_empty") {
+            EmptyState(
+                title = labels.emptySavedTitle,
+                message = labels.emptySavedMessage,
+                icon = Icons.Default.BookmarkBorder
+            )
+        }
         return
     }
 
-    QuranFonts.Provide(QuranFontFace.AMIRI) {
-        bookmarks.forEach { bookmark ->
-            val ayah = QuranBrowse.ayah(bookmark.surahNumber, bookmark.ayahNumber)
-            val surah = QuranBrowse.surah(bookmark.surahNumber)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(QuranShape.tile)
-                    .clickable(role = Role.Button, onClick = { onSelect(bookmark) })
-                    .padding(horizontal = Space.current.lg, vertical = Space.current.md),
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "${surah?.englishName.orEmpty()} · ${bookmark.surahNumber}:${bookmark.ayahNumber}",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+    // The preview is rendered in Amiri whatever the reader's mushaf face is: it is
+    // not inside the reader, and a preview that changed typeface with a setting
+    // elsewhere would be pretending to be part of a reading it is not in.
+    item(key = "saved_list") {
+        QuranFonts.Provide(QuranFontFace.AMIRI) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                bookmarks.forEach { bookmark ->
+                    SavedVerseRow(
+                        bookmark = bookmark,
+                        onSelect = { onSelect(bookmark) }
                     )
-                    if (ayah != null) {
-                        Spacer(Modifier.height(Space.current.xs))
-                        Text(
-                            text = ayah.textArabic,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontFamily = ArabicFamily,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
                 }
+            }
+        }
+    }
+}
+
+/** One saved verse, with enough of it to recognise. */
+@Composable
+private fun SavedVerseRow(bookmark: BookmarkEntity, onSelect: () -> Unit) {
+    val space = Space.current
+    val ayah = QuranBrowse.ayah(bookmark.surahNumber, bookmark.ayahNumber)
+    val surah = QuranBrowse.surah(bookmark.surahNumber)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(QuranShape.tile)
+            .clickable(role = Role.Button, onClick = onSelect)
+            .padding(horizontal = space.lg, vertical = space.md)
+            .testTag("saved_${bookmark.surahNumber}_${bookmark.ayahNumber}"),
+        verticalAlignment = Alignment.Top
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "${surah?.englishName.orEmpty()} · ${bookmark.surahNumber}:${bookmark.ayahNumber}",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (ayah != null) {
+                Spacer(Modifier.height(space.xs))
+                Text(
+                    text = ayah.textArabic,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = ArabicFamily,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.End,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
@@ -425,61 +517,59 @@ private fun SavedIndex(
 // Search, with the page / juz' / hizb quick filters
 // ---------------------------------------------------------------------------
 
-@Composable
-private fun SearchIndex(
+/** The search face: a query, four filters, and a list of results. */
+private fun LazyListScope.searchIndex(
+    labels: IndexLabels,
     query: String,
     onQueryChange: (String) -> Unit,
     referenceKind: ReferenceKind?,
     onKindChange: (ReferenceKind?) -> Unit,
     results: List<QuranSearchHit>,
+    referenceNumbers: List<Int>,
+    surahHits: List<Surah>,
     currentSurah: Int,
     onSelectSurah: (Int) -> Unit,
     onSelectAyah: (QuranSearchHit) -> Unit,
     onSelectPlace: (QuranRef) -> Unit
 ) {
-    val space = Space.current
-    val strings = LocalStrings.current
+    val space = Spacing()
 
-    SearchInput(
-        value = query,
-        onValueChange = onQueryChange,
-        placeholder = strings.more.searchSurahsAndVerses,
-        onClear = if (query.isNotEmpty()) ({ onQueryChange("") }) else null
-    )
-
-    Spacer(Modifier.height(space.sm))
-
-    Row(horizontalArrangement = Arrangement.spacedBy(space.xs)) {
-        FilterPill(strings.more.versesLabel, referenceKind == null) { onKindChange(null) }
-        FilterPill(strings.more.pageWord, referenceKind == ReferenceKind.PAGE) {
-            onKindChange(ReferenceKind.PAGE)
-        }
-        FilterPill(strings.more.juzWord, referenceKind == ReferenceKind.JUZ) {
-            onKindChange(ReferenceKind.JUZ)
-        }
-        FilterPill(strings.more.hizbWord, referenceKind == ReferenceKind.HIZB) {
-            onKindChange(ReferenceKind.HIZB)
+    item(key = "search_field") {
+        Column(modifier = Modifier.padding(horizontal = space.lg)) {
+            SearchInput(
+                value = query,
+                onValueChange = onQueryChange,
+                placeholder = labels.searchSurahsAndVerses,
+                onClear = if (query.isNotEmpty()) ({ onQueryChange("") }) else null
+            )
+            Spacer(Modifier.height(space.sm))
+            Row(horizontalArrangement = Arrangement.spacedBy(space.xs)) {
+                FilterPill(labels.versesLabel, referenceKind == null, labels) { onKindChange(null) }
+                FilterPill(labels.pageWord, referenceKind == ReferenceKind.PAGE, labels) {
+                    onKindChange(ReferenceKind.PAGE)
+                }
+                FilterPill(labels.juzWord, referenceKind == ReferenceKind.JUZ, labels) {
+                    onKindChange(ReferenceKind.JUZ)
+                }
+                FilterPill(labels.hizbWord, referenceKind == ReferenceKind.HIZB, labels) {
+                    onKindChange(ReferenceKind.HIZB)
+                }
+            }
+            Spacer(Modifier.height(space.sm))
         }
     }
 
-    Spacer(Modifier.height(space.sm))
-
-    // Browsing a numbering: a plain numbered list, because the number is the
-    // whole content and any other column would be decoration.
+    // Browsing a numbering: a plain numbered list, because the number is the whole
+    // content and any other column would be decoration.
     if (referenceKind != null) {
-        val count = when (referenceKind) {
-            ReferenceKind.PAGE -> QuranBrowse.TOTAL_PAGES
-            ReferenceKind.JUZ -> QuranBrowse.TOTAL_JUZ
-            ReferenceKind.HIZB -> QuranBrowse.TOTAL_HIZB
-        }
-        val trimmed = query.trim()
-        val numbers = remember(referenceKind, trimmed) {
-            (1..count).filter { trimmed.isEmpty() || it.toString().contains(trimmed) }
-        }
-        numbers.forEach { number ->
+        itemsIndexed(
+            referenceNumbers,
+            key = { index, number -> "${referenceKind}_${number}_$index" }
+        ) { _, number ->
             ReferenceIndexRow(
                 kind = referenceKind,
                 number = number,
+                labels = labels,
                 onClick = {
                     val ref = when (referenceKind) {
                         ReferenceKind.PAGE -> QuranBrowse.placeAtPage(number).verse
@@ -495,67 +585,82 @@ private fun SearchIndex(
         return
     }
 
-    val matchingSurahs = remember(query) {
-        if (query.isBlank()) {
-            emptyList()
-        } else {
-            QuranBrowse.surahs.filter { surah ->
-                surah.englishName.contains(query, ignoreCase = true) ||
-                    surah.englishTranslation.contains(query, ignoreCase = true) ||
-                    surah.arabicName.contains(QuranText.normalise(query)) ||
-                    surah.number.toString() == query.trim()
-            }
-        }
-    }
-
     if (query.isBlank()) {
-        EmptyState(
-            title = strings.more.searchHintTitle,
-            message = strings.more.searchHintMessage,
-            painter = painterResource(R.drawable.salah_quran_search_ayah)
-        )
+        item(key = "search_hint") {
+            EmptyState(
+                title = labels.searchHintTitle,
+                message = labels.searchHintMessage,
+                painter = painterResource(R.drawable.salah_quran_search_ayah)
+            )
+        }
         return
     }
 
-    if (matchingSurahs.isEmpty() && results.isEmpty()) {
-        EmptyState(
-            title = strings.more.noSearchResults,
-            message = strings.more.noResultsMessage,
-            icon = Icons.Default.Search
-        )
+    // Surah names first, and as their own tier.
+    //
+    // The old implementation put the name test *inside the verse predicate*, so a
+    // search for "Maryam" matched the surah's name and then returned all 97 of her
+    // verses - none of which contain the word - under a heading that said "97 verses
+    // found". A name match is a different thing from a text match and is reported
+    // as one.
+    if (surahHits.isEmpty() && results.isEmpty()) {
+        item(key = "search_none") {
+            EmptyState(
+                title = labels.noSearchResults,
+                message = labels.noResultsMessage,
+                icon = Icons.Default.Search
+            )
+        }
         return
     }
 
-    if (matchingSurahs.isNotEmpty()) {
-        Text(
-            text = strings.more.surahsFound.format(matchingSurahs.size),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(vertical = space.xs)
-        )
-        matchingSurahs.forEach { surah ->
+    if (surahHits.isNotEmpty()) {
+        item(key = "surah_hits_header") {
+            Text(
+                text = labels.surahsFound.format(surahHits.size),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(
+                    horizontal = space.lg,
+                    vertical = space.xs
+                )
+            )
+        }
+        items(surahHits, key = { "hit_surah_${it.number}" }) { surah ->
             SurahIndexRow(
                 surah = surah,
                 selected = currentSurah == surah.number,
+                strings = labels,
                 onClick = { onSelectSurah(surah.number) }
             )
         }
     }
 
     if (results.isNotEmpty()) {
-        Text(
-            text = strings.more.versesFound.format(results.size),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = space.md, bottom = space.xs)
-        )
-        results.forEach { hit ->
+        item(key = "verse_hits_header") {
+            Text(
+                text = labels.versesFound.format(results.size),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(
+                    horizontal = space.lg,
+                    vertical = space.xs
+                )
+            )
+        }
+        itemsIndexed(results, key = { _, hit -> "hit_${hit.ref.surah}_${hit.ref.ayah}" }) { _, hit ->
             VerseResultRow(hit = hit, onClick = { onSelectAyah(hit) })
         }
     }
 }
 
-/** A verse that matched, with the match itself made visible. */
+/**
+ * A verse that matched, with the match itself made visible.
+ *
+ * The highlight is the whole reason a result is trustworthy: a list that shows the
+ * whole verse and no hint *why* it matched makes a reader read 6,236 verses to
+ * check the search worked.
+ */
 @Composable
 private fun VerseResultRow(hit: QuranSearchHit, onClick: () -> Unit) {
     val space = Space.current
@@ -568,34 +673,39 @@ private fun VerseResultRow(hit: QuranSearchHit, onClick: () -> Unit) {
             .clip(QuranShape.tile)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = space.lg, vertical = space.md)
-            .semantics { contentDescription = "${surah?.englishName.orEmpty()} ${ayah.ayahNumber}" },
+            .testTag("result_${hit.ref.surah}_${hit.ref.ayah}")
+            .semantics {
+                contentDescription = "${surah.englishName}, ${hit.ref.surah}:${hit.ref.ayah}"
+            },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "${surah?.englishName.orEmpty()} · ${ayah.surahNumber}:${ayah.ayahNumber}",
+                text = "${surah.englishName} · ${hit.ref.surah}:${hit.ref.ayah}",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(Modifier.height(space.xs))
-            Text(
-                text = ayah.textArabic,
-                style = MaterialTheme.typography.bodyLarge,
-                fontFamily = ArabicFamily,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(space.xs))
+            if (hit.matchedIn == QuranSearchHit.Field.ARABIC) {
+                Text(
+                    text = ayah.textArabic,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontFamily = ArabicFamily,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.End,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(space.xs))
+            }
             Text(
                 text = ayah.textEnglish,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
+                maxLines = 3,
                 overflow = TextOverflow.Ellipsis
             )
         }
@@ -607,10 +717,10 @@ private fun VerseResultRow(hit: QuranSearchHit, onClick: () -> Unit) {
 private fun ReferenceIndexRow(
     kind: ReferenceKind,
     number: Int,
+    labels: IndexLabels,
     onClick: () -> Unit
 ) {
     val space = Space.current
-    val strings = LocalStrings.current
 
     val detail: String? = when (kind) {
         ReferenceKind.PAGE -> QuranBrowse.surahsOnPage(number).joinToString(", ") { it.englishName }
@@ -618,18 +728,18 @@ private fun ReferenceIndexRow(
 
         ReferenceKind.JUZ -> QuranBrowse.ayahsInJuz(number).firstOrNull()?.let { first ->
             "${QuranBrowse.surah(first.surahNumber)?.englishName.orEmpty()} · " +
-                strings.more.verseReference.format(first.surahNumber, first.ayahNumber)
+                labels.verseReference.format(first.surahNumber, first.ayahNumber)
         }
 
         ReferenceKind.HIZB -> QuranBrowse.ayahsInHizb(number).firstOrNull()?.let { first ->
-            strings.more.juzOf.format(first.juzNumber)
+            labels.juzOf.format(first.juzNumber)
         }
     }
 
     val title = when (kind) {
-        ReferenceKind.PAGE -> strings.more.pageWord
-        ReferenceKind.JUZ -> strings.more.juzWord
-        ReferenceKind.HIZB -> strings.more.hizbWord
+        ReferenceKind.PAGE -> labels.pageWord
+        ReferenceKind.JUZ -> labels.juzWord
+        ReferenceKind.HIZB -> labels.hizbWord
     }
 
     Row(
@@ -638,18 +748,23 @@ private fun ReferenceIndexRow(
             .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
             .clip(QuranShape.tile)
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = space.lg, vertical = space.md),
+            .padding(horizontal = space.lg, vertical = space.md)
+            .testTag("reference_${kind}_$number"),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = number.toString(),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            textAlign = TextAlign.Center,
             modifier = Modifier.width(40.dp)
         )
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
             if (detail != null) {
                 Text(
                     text = detail,
@@ -663,9 +778,14 @@ private fun ReferenceIndexRow(
     }
 }
 
-/** A small selectable filter pill. */@Composable
-private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
-    val strings = LocalStrings.current
+/** A small selectable filter pill. */
+@Composable
+private fun FilterPill(
+    label: String,
+    selected: Boolean,
+    labels: IndexLabels,
+    onClick: () -> Unit
+) {
     Surface(
         color = if (selected) {
             MaterialTheme.colorScheme.primaryContainer
@@ -682,7 +802,9 @@ private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
             .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
             .clip(QuranShape.pill)
             .clickable(role = Role.RadioButton, onClick = onClick)
-            .semantics { stateDescription = if (selected) strings.more.selected else strings.more.notSelected }
+            .semantics {
+                stateDescription = if (selected) labels.selected else labels.notSelected
+            }
     ) {
         Box(
             modifier = Modifier.padding(horizontal = Space.current.md, vertical = Space.current.sm),
@@ -696,4 +818,60 @@ private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
             )
         }
     }
+}
+
+/**
+ * The labels the index's lists need, gathered once.
+ *
+ * A `LazyListScope` extension cannot read `LocalStrings` - it is not called from a
+ * composable context, it *is* the content of a `LazyColumn` - so the strings are
+ * read in the sheet's composable and handed down. That is the only reason this
+ * type exists, and it is here rather than threaded as eleven parameters because
+ * eleven parameters is not a thing anyone can read.
+ */
+internal data class IndexLabels(
+    val allSurahs: String,
+    val meccan: String,
+    val medinan: String,
+    val verseCount: String,
+    val nowReading: String,
+    val searchSurahsAndVerses: String,
+    val versesLabel: String,
+    val pageWord: String,
+    val juzWord: String,
+    val hizbWord: String,
+    val verseReference: String,
+    val juzOf: String,
+    val surahsFound: String,
+    val versesFound: String,
+    val selected: String,
+    val notSelected: String,
+    val searchHintTitle: String,
+    val searchHintMessage: String,
+    val noSearchResults: String,
+    val noResultsMessage: String,
+    val emptySavedTitle: String,
+    val emptySavedMessage: String
+)
+
+/**
+ * The numbers a page / juz' / hizb browse shows.
+ *
+ * A plain numbered list, because the number is the whole content and any other
+ * column would be decoration - narrowed by whatever the reader has typed, so "285"
+ * gets them to page 285 without scrolling past 280 of them.
+ *
+ * Recomputed in the composable rather than inside the list, because a
+ * `LazyListScope` body is not composable and so cannot `remember`. It is also the
+ * better place: this is a *decision* about what the reader asked for, not a row.
+ */
+private fun browseNumbers(kind: ReferenceKind?, query: String): List<Int> {
+    if (kind == null) return emptyList()
+    val count = when (kind) {
+        ReferenceKind.PAGE -> QuranBrowse.TOTAL_PAGES
+        ReferenceKind.JUZ -> QuranBrowse.TOTAL_JUZ
+        ReferenceKind.HIZB -> QuranBrowse.TOTAL_HIZB
+    }
+    val trimmed = query.trim()
+    return (1..count).filter { trimmed.isEmpty() || it.toString().contains(trimmed) }
 }

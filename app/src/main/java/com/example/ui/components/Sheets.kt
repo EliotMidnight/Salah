@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
@@ -90,6 +93,70 @@ fun OptionSheet(
             Spacer(Modifier.height(space.xs))
             content()
             Spacer(Modifier.height(space.lg))
+        }
+    }
+}
+
+/**
+ * A bottom sheet whose body is a lazy list.
+ *
+ * ### Why this exists
+ *
+ * [OptionSheet] puts its content in a `Column` with a `verticalScroll`, which
+ * composes **every** child whether or not it is on screen. That is fine for a
+ * settings sheet with a dozen rows and wrong for a list of anything a reader can
+ * browse: the Quran index drew all 114 surahs, every saved verse, and all 604 page
+ * numbers through that path, on the frame the sheet opened.
+ *
+ * The list here is capped rather than infinite, because a bottom sheet is a
+ * *panel* - it should not become the whole screen - and the cap is what makes the
+ * lazy list able to exist at all: a bounded viewport is the only thing a
+ * `LazyColumn` can measure.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun OptionListSheet(
+    title: String,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    /** Content above the list, which does not scroll with it. */
+    header: @Composable ColumnScope.() -> Unit = {},
+    /**
+     * The list. Scrolled, lazy, and bounded by the sheet.
+     *
+     * Not `@Composable`, because it is a `LazyListScope` body rather than a
+     * composable body: the items it declares are composed when they scroll into
+     * view, which is the entire point of this sheet existing.
+     */
+    list: LazyListScope.() -> Unit
+) {
+    val space = Space.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        modifier = modifier
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Box(modifier = Modifier.padding(horizontal = space.lg)) {
+                SheetHeader(title = title, subtitle = subtitle, onClose = onDismiss)
+            }
+            header()
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // Bounded, so the list is a list and the sheet is a sheet. The
+                    // cap leaves room for the header, the navigation bar and a row
+                    // or two of the list itself, which is what a reader scrolling it
+                    // expects to see.
+                    .heightIn(max = 520.dp),
+                contentPadding = PaddingValues(bottom = space.xxl)
+            ) {
+                list()
+            }
         }
     }
 }
