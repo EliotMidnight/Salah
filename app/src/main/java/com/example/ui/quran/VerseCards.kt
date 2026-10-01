@@ -40,7 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.model.Ayah
-import com.example.data.quran.QuranDataSource
+import com.example.data.quran.ArabicDigits
 import com.example.ui.components.StatusDot
 import com.example.ui.localization.LocalStrings
 import com.example.ui.theme.IconSize
@@ -189,7 +189,7 @@ internal fun VerseArabic(
 ) {
     Text(
         text = if (showEndMarker) {
-            "${ayah.textArabic} ۝${QuranDataSource.toArabicDigits(ayah.ayahNumber)}"
+            "${ayah.textArabic} ۝${ArabicDigits.ayahMarker(ayah.ayahNumber)}"
         } else {
             ayah.textArabic
         },
@@ -282,7 +282,7 @@ internal fun VerseActionRow(
 
 /** Builds the text a copy or share puts on the clipboard. */
 internal fun versePayload(ayah: Ayah): String =
-    "${ayah.textArabic} ۝${QuranDataSource.toArabicDigits(ayah.ayahNumber)}\n\n" +
+    "${ayah.textArabic} ۝${ArabicDigits.ayahMarker(ayah.ayahNumber)}\n\n" +
         "\"${ayah.textEnglish}\"\n[${ayah.surahNumber}:${ayah.ayahNumber}]"
 
 internal fun copyVerse(

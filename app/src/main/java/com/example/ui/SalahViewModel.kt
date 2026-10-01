@@ -32,8 +32,10 @@ import com.example.data.model.QuranPinchTarget
 import com.example.data.model.QuranReadingLayout
 import com.example.data.model.QuranReadingOptions
 import com.example.data.model.QuranScrollDirection
+import com.example.data.model.QuranRef
 import com.example.data.model.Surah
 import com.example.data.model.UserLocation
+import com.example.data.quran.QuranBrowse
 import com.example.data.quran.QuranDataSource
 import com.example.data.repository.SalahRepository
 import com.example.engine.AstronomicalSky
@@ -142,7 +144,7 @@ data class SalahUiState(
     val locationStatusMessage: String? = null,
     val cachedLocationTimestamp: Long? = null,
     // Quran reader state
-    val selectedSurah: Surah = QuranDataSource.SURAHS[0],
+    val selectedSurah: Surah = QuranBrowse.surahs.first(),
     val currentSurahAyahs: List<Ayah> = emptyList(),
     val activeReadingAyahNumber: Int = 1,
     val isAudioPlaying: Boolean = false,
@@ -450,7 +452,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         // because `currentSurahAyahs` starts empty and the reader renders its
         // loading state until a surah is chosen; starting on nothing is what
         // made the first frame of the reader a blank page.
-        selectSurah(1)
+        selectSurah(1, 1)
         _uiState.value = _uiState.value.copy(isQuranImmersive = repository.quranImmersive)
 
         // Start 1-second live ticker
@@ -944,9 +946,16 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
     }
 
     // Quran actions
+    //
+    // Every way of going somewhere in the Quran ends in [selectPlace], which takes
+    // the one reference type. The reader, the index sheet, Continue Reading and a
+    // restored session all arrive as a `(surah, ayah, page)` and are therefore
+    // incapable of disagreeing about where "here" is - which is the failure that
+    // produced a page indicator that did not match the page.
+
     fun selectSurah(surahNumber: Int, ayahNumber: Int = 1) {
-        val surah = QuranDataSource.getSurahByNumber(surahNumber) ?: QuranDataSource.SURAHS[0]
-        val ayahs = QuranDataSource.getAyahsForSurah(surahNumber)
+        val surah = QuranBrowse.surah(surahNumber) ?: QuranBrowse.surahs.first()
+        val ayahs = QuranBrowse.ayahsInSurah(surahNumber)
         val startAyah = ayahNumber.coerceIn(1, ayahs.size.coerceAtLeast(1))
         _uiState.value = _uiState.value.copy(
             selectedSurah = surah,
@@ -955,33 +964,14 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         )
     }
 
-    fun selectPage(pageNumber: Int) {
-        val page = pageNumber.coerceIn(1, 604)
-        val resolved = QuranDataSource.resolvePage(page)
-        if (resolved != null) {
-            selectSurah(resolved.first.number, resolved.second)
-        } else {
-            selectSurah(1, 1)
-        }
-    }
+    /** Moves to a reference, whatever asked. */
+    fun selectPlace(ref: QuranRef) = selectSurah(ref.surah, ref.ayah)
 
-    fun selectJuz(juzNumber: Int) {
-        val target = QuranDataSource.firstAyahForJuz(juzNumber)
-        if (target != null) {
-            selectSurah(target.surahNumber, target.ayahNumber)
-        } else {
-            selectSurah(1, 1)
-        }
-    }
+    fun selectPage(pageNumber: Int) = selectPlace(QuranBrowse.placeAtPage(pageNumber).verse)
 
-    fun selectHizb(hizbNumber: Int) {
-        val target = QuranDataSource.firstAyahForHizb(hizbNumber)
-        if (target != null) {
-            selectSurah(target.surahNumber, target.ayahNumber)
-        } else {
-            selectSurah(1, 1)
-        }
-    }
+    fun selectJuz(juzNumber: Int) = selectPlace(QuranBrowse.placeAtJuz(juzNumber).verse)
+
+    fun selectHizb(hizbNumber: Int) = selectPlace(QuranBrowse.placeAtHizb(hizbNumber).verse)
 
     fun onAyahViewed(ayah: Ayah) {
         _uiState.value = _uiState.value.copy(activeReadingAyahNumber = ayah.ayahNumber)

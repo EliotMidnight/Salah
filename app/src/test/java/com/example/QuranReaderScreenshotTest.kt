@@ -9,7 +9,7 @@ import com.example.data.model.QuranPinchTarget
 import com.example.data.model.QuranReadingLayout
 import com.example.data.model.QuranReadingOptions
 import com.example.data.model.QuranScrollDirection
-import com.example.data.quran.QuranDataSource
+import com.example.data.quran.QuranBrowse
 import com.example.ui.SalahUiState
 import com.example.ui.localization.ProvideAppLanguage
 import com.example.ui.quran.QuranReader
@@ -62,8 +62,8 @@ class QuranReaderScreenshotTest {
 
     private var surahNumber = 112
     private var surah: com.example.data.model.Surah =
-        QuranDataSource.getSurahByNumber(surahNumber)!!
-    private var ayahs: List<Ayah> = QuranDataSource.getAyahsForSurah(surahNumber)
+        QuranBrowse.surah(surahNumber)!!
+    private var ayahs: List<Ayah> = QuranBrowse.ayahsInSurah(surahNumber)
 
     private fun state(ayahNumber: Int = 1) = SalahUiState(
         selectedSurah = surah,
@@ -81,8 +81,8 @@ class QuranReaderScreenshotTest {
      */
     private fun openSurah(number: Int) {
         surahNumber = number
-        surah = QuranDataSource.getSurahByNumber(number)!!
-        ayahs = QuranDataSource.getAyahsForSurah(number)
+        surah = QuranBrowse.surah(number)!!
+        ayahs = QuranBrowse.ayahsInSurah(number)
     }
 
     private fun render(

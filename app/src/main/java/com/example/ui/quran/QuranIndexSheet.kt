@@ -48,11 +48,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.local.BookmarkEntity
-import com.example.data.model.Ayah
 import com.example.data.model.QuranFontFace
+import com.example.data.model.QuranRef
 import com.example.data.model.RevelationType
 import com.example.data.model.Surah
-import com.example.data.quran.QuranDataSource
+import com.example.data.quran.QuranBrowse
+import com.example.data.quran.QuranSearch
+import com.example.data.quran.QuranSearchHit
+import com.example.data.quran.QuranText
 import com.example.ui.components.EmptyState
 import com.example.ui.components.OptionSheet
 import com.example.ui.components.SearchInput
@@ -106,16 +109,17 @@ fun QuranIndexSheet(
     var referenceKind by rememberSaveable { mutableStateOf<ReferenceKind?>(null) }
     var surahFilter by rememberSaveable { mutableStateOf(SurahFilter.ALL) }
 
-    // Verse search runs over all 6,236 verses, so it is debounced rather than
-    // run on every keystroke.
-    var results by remember { mutableStateOf<List<Ayah>>(emptyList()) }
+    // Verse search scans all 6,236 verses, so it is debounced rather than run on
+    // every keystroke. The hits carry their own reference and their own highlight
+    // range, which is why this is a list of hits and not a list of verses.
+    var results by remember { mutableStateOf<List<QuranSearchHit>>(emptyList()) }
     LaunchedEffect(query, referenceKind) {
         if (query.isBlank() || referenceKind != null) {
             results = emptyList()
             return@LaunchedEffect
         }
         delay(220)
-        results = QuranDataSource.searchAyahs(query).take(50)
+        results = QuranSearch.searchVerses(query)
     }
 
     OptionSheet(
@@ -167,18 +171,18 @@ fun QuranIndexSheet(
                 results = results,
                 currentSurah = currentSurah,
                 onSelectSurah = onSelectSurah,
-                onSelectAyah = { ayah ->
-                    onSelectSurahAyah(ayah.surahNumber, ayah.ayahNumber)
+                onSelectAyah = { hit ->
+                    onSelectSurahAyah(hit.ref.surah, hit.ref.ayah)
                     onDismiss()
                 },
-                onSelectPage = { page ->
-                    // A page number resolves to the verse it opens on, which is
-                    // the anchor the reader needs - jumping to a page used to
-                    // drop the reader at the top of that page's surah instead.
-                    QuranDataSource.resolvePage(page)?.let { (surah, ayah) ->
-                        onSelectSurahAyah(surah.number, ayah)
-                        onDismiss()
-                    }
+                onSelectPlace = { ref ->
+                    // A juz' or a hizb is not a surah. Each resolves to the
+                    // reference it opens on, and the jump goes to that - so
+                    // "go to juz' 30" lands on 78:1, which is what the reader
+                    // meant, rather than at the top of whichever surah the
+                    // old code happened to have selected last.
+                    onSelectSurahAyah(ref.surah, ref.ayah)
+                    onDismiss()
                 }
             )
         }
@@ -234,9 +238,9 @@ private fun SurahIndex(
 
     val surahs = remember(filter) {
         when (filter) {
-            SurahFilter.ALL -> QuranDataSource.SURAHS
-            SurahFilter.MECCAN -> QuranDataSource.SURAHS.filter { it.revelationType == RevelationType.MECCAN }
-            SurahFilter.MEDINAN -> QuranDataSource.SURAHS.filter { it.revelationType == RevelationType.MEDINAN }
+            SurahFilter.ALL -> QuranBrowse.surahs
+            SurahFilter.MECCAN -> QuranBrowse.surahs.filter { it.revelationType == RevelationType.MECCAN }
+            SurahFilter.MEDINAN -> QuranBrowse.surahs.filter { it.revelationType == RevelationType.MEDINAN }
         }
     }
 
@@ -380,8 +384,8 @@ private fun SavedIndex(
 
     QuranFonts.Provide(QuranFontFace.AMIRI) {
         bookmarks.forEach { bookmark ->
-            val ayah = QuranDataSource.resolveAyah(bookmark.surahNumber, bookmark.ayahNumber)
-            val surah = QuranDataSource.getSurahByNumber(bookmark.surahNumber)
+            val ayah = QuranBrowse.ayah(bookmark.surahNumber, bookmark.ayahNumber)
+            val surah = QuranBrowse.surah(bookmark.surahNumber)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -427,11 +431,11 @@ private fun SearchIndex(
     onQueryChange: (String) -> Unit,
     referenceKind: ReferenceKind?,
     onKindChange: (ReferenceKind?) -> Unit,
-    results: List<Ayah>,
+    results: List<QuranSearchHit>,
     currentSurah: Int,
     onSelectSurah: (Int) -> Unit,
-    onSelectAyah: (Ayah) -> Unit,
-    onSelectPage: (Int) -> Unit
+    onSelectAyah: (QuranSearchHit) -> Unit,
+    onSelectPlace: (QuranRef) -> Unit
 ) {
     val space = Space.current
     val strings = LocalStrings.current
@@ -464,9 +468,9 @@ private fun SearchIndex(
     // whole content and any other column would be decoration.
     if (referenceKind != null) {
         val count = when (referenceKind) {
-            ReferenceKind.PAGE -> 604
-            ReferenceKind.JUZ -> 30
-            ReferenceKind.HIZB -> 60
+            ReferenceKind.PAGE -> QuranBrowse.TOTAL_PAGES
+            ReferenceKind.JUZ -> QuranBrowse.TOTAL_JUZ
+            ReferenceKind.HIZB -> QuranBrowse.TOTAL_HIZB
         }
         val trimmed = query.trim()
         val numbers = remember(referenceKind, trimmed) {
@@ -477,16 +481,12 @@ private fun SearchIndex(
                 kind = referenceKind,
                 number = number,
                 onClick = {
-                    when (referenceKind) {
-                        ReferenceKind.PAGE -> onSelectPage(number)
-                        ReferenceKind.JUZ -> QuranDataSource.firstAyahForJuz(number)
-                            ?.let(onSelectAyah) ?: return@ReferenceIndexRow
-
-                        ReferenceKind.HIZB -> QuranDataSource.firstAyahForHizb(number)
-                            ?.let(onSelectAyah) ?: return@ReferenceIndexRow
-
-                        else -> Unit
+                    val ref = when (referenceKind) {
+                        ReferenceKind.PAGE -> QuranBrowse.placeAtPage(number).verse
+                        ReferenceKind.JUZ -> QuranBrowse.placeAtJuz(number).verse
+                        else -> QuranBrowse.placeAtHizb(number).verse
                     }
+                    onSelectPlace(ref)
                     onQueryChange("")
                     onKindChange(null)
                 }
@@ -499,10 +499,10 @@ private fun SearchIndex(
         if (query.isBlank()) {
             emptyList()
         } else {
-            QuranDataSource.SURAHS.filter { surah ->
+            QuranBrowse.surahs.filter { surah ->
                 surah.englishName.contains(query, ignoreCase = true) ||
                     surah.englishTranslation.contains(query, ignoreCase = true) ||
-                    surah.arabicName.contains(QuranDataSource.normalizeArabic(query)) ||
+                    surah.arabicName.contains(QuranText.normalise(query)) ||
                     surah.number.toString() == query.trim()
             }
         }
@@ -549,17 +549,18 @@ private fun SearchIndex(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = space.md, bottom = space.xs)
         )
-        results.forEach { ayah ->
-            VerseResultRow(ayah = ayah, onClick = { onSelectAyah(ayah) })
+        results.forEach { hit ->
+            VerseResultRow(hit = hit, onClick = { onSelectAyah(hit) })
         }
     }
 }
 
-/** A verse that matched, with enough of it to recognise. */
+/** A verse that matched, with the match itself made visible. */
 @Composable
-private fun VerseResultRow(ayah: Ayah, onClick: () -> Unit) {
+private fun VerseResultRow(hit: QuranSearchHit, onClick: () -> Unit) {
     val space = Space.current
-    val surah = QuranDataSource.getSurahByNumber(ayah.surahNumber)
+    val ayah = hit.ayah
+    val surah = hit.surah
 
     Row(
         modifier = Modifier
@@ -612,17 +613,16 @@ private fun ReferenceIndexRow(
     val strings = LocalStrings.current
 
     val detail: String? = when (kind) {
-        ReferenceKind.PAGE -> QuranDataSource.surahForPage(number)?.let {
-            "${it.englishName} · ${strings.more.verseReference.format(it.number, QuranDataSource.firstAyahOnPage(number)?.ayahNumber ?: 1)}"
+        ReferenceKind.PAGE -> QuranBrowse.surahsOnPage(number).joinToString(", ") { it.englishName }
+            .takeIf { it.isNotBlank() }
+
+        ReferenceKind.JUZ -> QuranBrowse.ayahsInJuz(number).firstOrNull()?.let { first ->
+            "${QuranBrowse.surah(first.surahNumber)?.englishName.orEmpty()} · " +
+                strings.more.verseReference.format(first.surahNumber, first.ayahNumber)
         }
 
-        ReferenceKind.JUZ -> QuranDataSource.firstAyahForJuz(number)?.let {
-            "${QuranDataSource.getSurahByNumber(it.surahNumber)?.englishName.orEmpty()} · " +
-                strings.more.verseReference.format(it.surahNumber, it.ayahNumber)
-        }
-
-        ReferenceKind.HIZB -> QuranDataSource.firstAyahForHizb(number)?.let {
-            strings.more.juzOf.format(it.juzNumber)
+        ReferenceKind.HIZB -> QuranBrowse.ayahsInHizb(number).firstOrNull()?.let { first ->
+            strings.more.juzOf.format(first.juzNumber)
         }
     }
 

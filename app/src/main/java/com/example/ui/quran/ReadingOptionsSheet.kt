@@ -33,7 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.remember
-import com.example.data.quran.QuranDataSource
+import com.example.data.quran.QuranBrowse
 import com.example.data.model.QuranFontFace
 import com.example.data.model.QuranPaperTone
 import com.example.data.model.QuranPinchTarget
@@ -461,7 +461,7 @@ private fun LivePreview(
     val space = Space.current
     val strings = LocalStrings.current
 
-    val sample = remember { QuranDataSource.resolveAyah(1, 1) }
+    val sample = remember { QuranBrowse.ayah(1, 1) }
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLowest,

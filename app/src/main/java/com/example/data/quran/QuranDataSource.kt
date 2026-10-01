@@ -1,9 +1,23 @@
 package com.example.data.quran
 
-import com.example.data.model.Ayah
 import com.example.data.model.RevelationType
 import com.example.data.model.Surah
 
+/**
+ * The 114 surahs, curated.
+ *
+ * ### This is the only place surah names are written
+ *
+ * The reader, the index, the search and the sheets all read this list. It used
+ * to be duplicated in spirit: the corpus metadata carries its own transliteration
+ * and meaning, and the two were never compared, so a fix applied to one did not
+ * reach the other. [assertMatchesCorpus] now checks the four facts the metadata
+ * is authoritative for - verse count, start page, revelation place, and the
+ * Arabic name - so the curated half can be curated and the factual half cannot
+ * quietly go stale.
+ *
+ * Everything else the reader needs from the corpus is on [QuranBrowse].
+ */
 object QuranDataSource {
 
     val SURAHS: List<Surah> = listOf(
@@ -123,136 +137,115 @@ object QuranDataSource {
         Surah(114, "الناس", "An-Nas", "Mankind", 6, RevelationType.MECCAN, 604)
     )
 
-    fun getSurahByNumber(number: Int): Surah? = SURAHS.find { it.number == number }
+    fun getSurahByNumber(number: Int): Surah? =
+        if (number in 1..SURAHS.size) SURAHS[number - 1] else null
 
-    /**
-     * Full verified Arabic text (Tanzil Uthmani) with Saheeh International
-     * English for every verse. Loaded once from bundled resources.
-     */
-    fun getAyahsForSurah(surahNumber: Int): List<Ayah> {
-        return QuranCorpus.ayahs.filter { it.surahNumber == surahNumber }
-    }
+    // -----------------------------------------------------------------------
+    // Temporary bridge, for the call sites the rebuild has not reached yet.
+    //
+    // Every function below is a *forwarding* call to [QuranBrowse] or
+    // [QuranSearch], so behaviour is already the rebuilt behaviour and only the
+    // call sites are old. The old implementations - the linear filters and the
+    // regex-in-a-loop search - are gone, not wrapped: a wrapper around the slow
+    // version would have been a way to keep shipping it.
+    //
+    // @deprecated Call [QuranBrowse] or [QuranSearch]. Removed when the reader
+    // and the index sheet are on the new surfaces.
+    // -----------------------------------------------------------------------
 
-    fun getAyahsForPage(pageNumber: Int): List<Ayah> {
-        val page = pageNumber.coerceIn(1, 604)
-        return QuranCorpus.ayahs.filter { it.pageNumber == page }
-    }
+    @Deprecated("QuranBrowse.ayahsOnPage", ReplaceWith("QuranBrowse.ayahsOnPage(pageNumber)"))
+    fun getAyahsForPage(pageNumber: Int) = QuranBrowse.ayahsOnPage(pageNumber)
 
-    /** First verse on each mushaf page (1..604), built once from corpus order. */
-    private val pageStarts: Map<Int, Ayah> by lazy {
-        val starts = HashMap<Int, Ayah>(604)
-        for (ayah in QuranCorpus.ayahs) {
-            starts.putIfAbsent(ayah.pageNumber, ayah)
+    @Deprecated("QuranBrowse.ayahsInSurah", ReplaceWith("QuranBrowse.ayahsInSurah(surahNumber)"))
+    fun getAyahsForSurah(surahNumber: Int) = QuranBrowse.ayahsInSurah(surahNumber)
+
+    @Deprecated("QuranBrowse.ayah", ReplaceWith("QuranBrowse.ayah(surahNumber, ayahNumber)"))
+    fun resolveAyah(surahNumber: Int, ayahNumber: Int) =
+        QuranBrowse.ayah(surahNumber, ayahNumber)
+
+    @Deprecated("QuranBrowse.placeAtPage", ReplaceWith("QuranBrowse.placeAtPage(page)"))
+    fun firstAyahOnPage(pageNumber: Int) = QuranBrowse.ayahsOnPage(pageNumber).firstOrNull()
+
+    @Deprecated("QuranBrowse.surahOfPage", ReplaceWith("QuranBrowse.surahOfPage(pageNumber)"))
+    fun surahForPage(pageNumber: Int) = QuranBrowse.surahOfPage(pageNumber)
+
+    @Deprecated("QuranBrowse.ayahsInJuz", ReplaceWith("QuranBrowse.ayahsInJuz(juzNumber)"))
+    fun getAyahsForJuz(juzNumber: Int) = QuranBrowse.ayahsInJuz(juzNumber)
+
+    @Deprecated("QuranBrowse.ayahsInHizb", ReplaceWith("QuranBrowse.ayahsInHizb(hizbNumber)"))
+    fun getAyahsForHizb(hizbNumber: Int) = QuranBrowse.ayahsInHizb(hizbNumber)
+
+    @Deprecated("QuranBrowse.placeAtJuz", ReplaceWith("QuranBrowse.placeAtJuz(juzNumber)"))
+    fun firstAyahForJuz(juzNumber: Int) = QuranBrowse.placeAtJuz(juzNumber).verse
+
+    @Deprecated("QuranBrowse.placeAtHizb", ReplaceWith("QuranBrowse.placeAtHizb(hizbNumber)"))
+    fun firstAyahForHizb(hizbNumber: Int) = QuranBrowse.placeAtHizb(hizbNumber).verse
+
+    @Deprecated("QuranBrowse.placeAtPage", ReplaceWith("QuranBrowse.placeAtPage(page)"))
+    fun resolvePage(pageNumber: Int): Pair<Surah, Int>? =
+        QuranBrowse.placeAtPage(pageNumber).verse.let { ref ->
+            getSurahByNumber(ref.surah)?.let { it to ref.ayah }
         }
-        starts
-    }
 
-    /** First verse on a mushaf page (canonical page start). */
-    fun firstAyahOnPage(pageNumber: Int): Ayah? =
-        pageStarts[pageNumber.coerceIn(1, 604)]
+    @Deprecated("QuranText.normalise", ReplaceWith("QuranText.normalise(text)"))
+    fun normalizeArabic(text: String) = QuranText.normalise(text)
 
-    /** Surah that contains the start of a mushaf page. */
-    fun surahForPage(pageNumber: Int): Surah? =
-        firstAyahOnPage(pageNumber)?.let { getSurahByNumber(it.surahNumber) }
+    @Deprecated("QuranText.toArabicDigits", ReplaceWith("ArabicDigits.of(number)"))
+    fun toArabicDigits(number: Int) = ArabicDigits.of(number)
 
-    fun getAyahsForJuz(juzNumber: Int): List<Ayah> {
-        val juz = juzNumber.coerceIn(1, 30)
-        return QuranCorpus.ayahs.filter { it.juzNumber == juz }
-    }
-
-    private val juzStarts: Map<Int, Ayah> by lazy {
-        val starts = HashMap<Int, Ayah>(30)
-        for (ayah in QuranCorpus.ayahs) {
-            starts.putIfAbsent(ayah.juzNumber, ayah)
-        }
-        starts
-    }
-
-    /** First verse of a Juz'. */
-    fun firstAyahForJuz(juzNumber: Int): Ayah? =
-        juzStarts[juzNumber.coerceIn(1, 30)]
-
-    private val hizbStarts: Map<Int, Ayah> by lazy {
-        val starts = HashMap<Int, Ayah>(60)
-        for (ayah in QuranCorpus.ayahs) {
-            val hizb = ((ayah.hizbQuarter - 1) / 4) + 1
-            starts.putIfAbsent(hizb, ayah)
-        }
-        starts
-    }
+    @Deprecated("QuranSearch.searchVerses", ReplaceWith("QuranSearch.searchVerses(query)"))
+    fun searchAyahs(query: String) = QuranSearch.searchVerses(query, limit = 50).map { it.ayah }
 
     /**
-     * First verse of a Hizb (1..60). Corpus stores hizb-quarters (1..240);
-     * four quarters make one hizb.
+     * The curated surah list, checked against the bundled metadata.
+     *
+     * The names, meanings and revelation places are *curated*, not derived: the
+     * metadata spells them `Al-Baqara` and `The Cow`, which is not what a reader
+     * types or expects, and transliterating them properly is a human judgement
+     * about Arabic orthography rather than a transformation of a file.
+     *
+     * So the human data stays, and the machine-checkable facts in it are
+     * verified rather than trusted. [assertMatchesCorpus] is called from the
+     * corpus test, which means a wrong verse count or a wrong start page fails
+     * the build instead of producing a surah index that lies.
      */
-    fun firstAyahForHizb(hizbNumber: Int): Ayah? =
-        hizbStarts[hizbNumber.coerceIn(1, 60)]
+    internal fun assertMatchesCorpus() {
+        SURAHS.forEachIndexed { index, surah ->
+            val number = index + 1
+            require(surah.number == number) {
+                "Surah list is out of order at $number: found ${surah.number}"
+            }
+            val expectedVerses = QuranCorpus.surahVerseCount[number]
+            require(surah.totalVerses == expectedVerses) {
+                "Surah $number is listed as ${surah.totalVerses} verses, " +
+                    "metadata says $expectedVerses"
+            }
+            val expectedPage = QuranCorpus.surahStartPage(number)
+            require(surah.startPage == expectedPage) {
+                "Surah $number is listed as starting on page ${surah.startPage}, " +
+                    "metadata says $expectedPage"
+            }
+            val expectedMedinan = QuranCorpus.surahIsMedinan[number]
+            require(
+                (surah.revelationType == RevelationType.MEDINAN) == expectedMedinan
+            ) {
+                "Surah $number is listed as ${surah.revelationType}, " +
+                    "metadata says ${if (expectedMedinan) "Medinan" else "Meccan"}"
+            }
 
-    /** Resolves a mushaf page to the surah + ayah the reader should open at. */
-    fun resolvePage(pageNumber: Int): Pair<Surah, Int>? {
-        val start = firstAyahOnPage(pageNumber) ?: return null
-        val surah = getSurahByNumber(start.surahNumber) ?: return null
-        return surah to start.ayahNumber
-    }
-
-    /**
-     * Resolves a single verse reference from the verified corpus, or null when
-     * the reference does not exist. Used to display bookmarks from live text.
-     */
-    fun resolveAyah(surahNumber: Int, ayahNumber: Int): Ayah? {
-        val surah = getSurahByNumber(surahNumber) ?: return null
-        if (ayahNumber < 1 || ayahNumber > surah.totalVerses) return null
-        return QuranCorpus.ayahs.firstOrNull {
-            it.surahNumber == surahNumber && it.ayahNumber == ayahNumber
-        }
-    }
-
-    /**
-     * Converts an integer to Eastern Arabic-Indic numerals (٠-٩) for
-     * authentic Uthmani ayah-end markers.
-     */
-    fun toArabicDigits(number: Int): String {
-        val arabicDigits = charArrayOf('٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩')
-        return number.toString().map { arabicDigits[it - '0'] }.joinToString("")
-    }
-
-    /**
-     * Normalizes Arabic text by removing tashkeel (diacritics), tatweel, and
-     * normalizing alif/hamza for seamless full-text offline search.
-     */
-    fun normalizeArabic(text: String): String {
-        return text
-            // Remove Harakat (Tashkeel)
-            .replace(Regex("[\\u064B-\\u065F\\u0670\\u06D6-\\u06ED]"), "")
-            // Remove Tatweel / Kashida
-            .replace("\u0640", "")
-            // Normalize Alif forms (أ, إ, آ, ٱ -> ا)
-            .replace(Regex("[\\u0622\\u0623\\u0625\\u0671]"), "\u0627")
-            // Normalize Taa Marbuta (ة -> ه)
-            .replace("\u0629", "\u0647")
-            // Normalize Yaa (ى -> ي)
-            .replace("\u0649", "\u064A")
-            .trim()
-    }
-
-    /**
-     * Offline search across surah names, Arabic text (diacritics-insensitive)
-     * and the English translation.
-     */
-    fun searchAyahs(query: String): List<Ayah> {
-        val trimmed = query.trim()
-        if (trimmed.isEmpty()) return emptyList()
-        val normalizedQuery = normalizeArabic(trimmed).lowercase(java.util.Locale.ROOT)
-        val lowerQuery = trimmed.lowercase(java.util.Locale.ROOT)
-        return QuranCorpus.ayahs.filter { ayah ->
-            val surah = getSurahByNumber(ayah.surahNumber)
-            normalizeArabic(ayah.textArabic).lowercase(java.util.Locale.ROOT).contains(normalizedQuery) ||
-                ayah.textEnglish.lowercase(java.util.Locale.ROOT).contains(lowerQuery) ||
-                (surah != null && (
-                    surah.englishName.contains(trimmed, ignoreCase = true) ||
-                        surah.arabicName.contains(trimmed) ||
-                        surah.englishTranslation.contains(trimmed, ignoreCase = true)
-                    ))
+            // Compared folded, not byte for byte. The two spellings of a surah
+            // name in wide use differ only in the hamza on the alif - Ibrahim is
+            // both ابراهيم and إبراهيم, and the app writes the latter while
+            // Tanzil writes the former. That is not a disagreement about a fact,
+            // so this check must not be one; a *different* name still is, because
+            // folding does not turn بقرة into الladder.
+            require(
+                QuranText.normalise(surah.arabicName) ==
+                    QuranText.normalise(QuranCorpus.surahArabicName(number))
+            ) {
+                "Surah $number is listed as '${surah.arabicName}', " +
+                    "metadata says '${QuranCorpus.surahArabicName(number)}'"
+            }
         }
     }
 }

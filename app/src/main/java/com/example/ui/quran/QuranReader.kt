@@ -96,7 +96,8 @@ import com.example.data.model.QuranReadingOptions
 import com.example.data.model.QuranScrollDirection
 import com.example.data.model.RevelationType
 import com.example.data.model.Surah
-import com.example.data.quran.QuranDataSource
+import com.example.data.quran.ArabicDigits
+import com.example.data.quran.QuranBrowse
 import com.example.ui.SalahUiState
 import com.example.ui.components.EmptyState
 import com.example.ui.components.StatusBanner
@@ -176,7 +177,7 @@ fun QuranReader(
     // The anchor's page. Null until the corpus resolves it, which is why the
     // paged layouts fall back to page 1 rather than rendering nothing.
     val anchorPage = remember(surah.number, state.activeReadingAyahNumber) {
-        QuranDataSource.resolveAyah(surah.number, state.activeReadingAyahNumber)?.pageNumber ?: 1
+        QuranBrowse.ref(surah.number, state.activeReadingAyahNumber)?.page ?: 1
     }
 
     var selectedAyah by rememberSaveable { mutableStateOf(0) }
@@ -291,7 +292,7 @@ fun QuranReader(
     // the mushaf as it is actually turned and not only the surah view.
     LaunchedEffect(pageCursor) {
         if (options.layout != QuranReadingLayout.PER_PAGE) return@LaunchedEffect
-        QuranDataSource.firstAyahOnPage(pageCursor)?.let { first ->
+        QuranBrowse.ayahsOnPage(pageCursor).firstOrNull()?.let { first ->
             onSelectSurahAyah(first.surahNumber, first.ayahNumber)
         }
     }
@@ -491,7 +492,7 @@ fun QuranReader(
                 onOpenIndex = onOpenIndex,
                 onOpenOptions = onOpenOptions,
                 onSaveCurrentLocation = {
-                    QuranDataSource.resolveAyah(surah.number, state.activeReadingAyahNumber)
+                    QuranBrowse.ayah(surah.number, state.activeReadingAyahNumber)
                         ?.let(onToggleBookmark)
                 },
                 // The alignment has to be resolved here, at the call site: this
@@ -523,7 +524,7 @@ fun QuranReader(
 
             if (state.isAudioPlaying) {
                 AudioStrip(
-                    surahName = QuranDataSource.getSurahByNumber(surah.number)?.englishName.orEmpty(),
+                    surahName = QuranBrowse.surah(surah.number)?.englishName.orEmpty(),
                     surahNumber = surah.number,
                     ayahNumber = state.currentAudioAyah,
                     reciter = state.reciter,
@@ -1090,7 +1091,7 @@ private fun buildFlowingPage(
                     fontSize = markerSize
                 )
             ) {
-                append("۝${QuranDataSource.toArabicDigits(ayah.ayahNumber)}")
+                append("۝${ArabicDigits.ayahMarker(ayah.ayahNumber)}")
             }
             append(" ")
 
@@ -1999,10 +2000,10 @@ private fun MushafPage(
     val space = Space.current
     val strings = LocalStrings.current
 
-    val ayahs = remember(pageNumber) { QuranDataSource.getAyahsForPage(pageNumber) }
+    val ayahs = remember(pageNumber) { QuranBrowse.ayahsOnPage(pageNumber) }
     if (ayahs.isEmpty()) return
 
-    val openingSurah = remember(pageNumber) { QuranDataSource.getSurahByNumber(ayahs.first().surahNumber) }
+    val openingSurah = remember(pageNumber) { QuranBrowse.surah(ayahs.first().surahNumber) }
 
     // The running head clears the floating controls row, for the same reason the
     // surah heading does in the continuous layouts. It names the surah the page
