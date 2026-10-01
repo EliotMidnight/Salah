@@ -32,8 +32,10 @@ import kotlinx.coroutines.flow.onEach
  *
  * 1. `pageCursor` - the page the pager was on, written by the pager's own
  *    `snapshotFlow`, and separately re-seeded from the anchor in a `LaunchedEffect`.
- * 2. `state.activeReadingAyahNumber` - the anchor, written by `onAyahViewed` from
- *    the continuous layouts' scroll observer.
+ * 2. `state.activeReadingAyahNumber` - the anchor, written by `selectSurah` and
+ *    again by `onAyahViewed`, and read only as the *initial* value of the position
+ *    below: a second anchor feeding a value consumed once. Removed; the seed is
+ *    `state.readingAyahHint` and nothing else writes it.
  * 3. `browsedPage` - a *third* number, written by `onVerseVisible` from
  *    `onGloballyPositioned` inside the flowing text, purely so the pill could show
  *    something sensible.

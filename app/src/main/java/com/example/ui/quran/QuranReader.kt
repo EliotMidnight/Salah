@@ -127,7 +127,7 @@ fun QuranReader(
     // writers, and they overwrote each other. See `ReaderPosition` for the specific
     // damage that produced.
     val position = rememberReaderPosition(
-        initial = QuranBrowse.refOrStart(surah.number, state.activeReadingAyahNumber),
+        initial = QuranBrowse.refOrStart(surah.number, state.readingAyahHint),
         onPosition = { ref ->
             onSelectSurahAyah(ref.surah, ref.ayah)
             QuranBrowse.ayah(ref.surah, ref.ayah)?.let(onAyahViewed)

@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.example.engine.MagneticFieldStatus
+import com.example.engine.QiblaEngine
 import com.example.ui.SalahUiState
 import com.example.ui.components.BannerTone
 import com.example.ui.components.ConfirmDialog
@@ -179,13 +180,28 @@ private fun SunReferenceSheet(state: SalahUiState, onDismiss: () -> Unit) {
             return@OptionSheet
         }
 
-        val relative = (state.qiblaBearing - sun.azimuth + 360f) % 360f
+        // The same fold the dial uses, so the two agree.
+        //
+        // This computed `(qibla - sun + 360) % 360`, which is `[0, 360)` and therefore
+        // not a signed angle - so `abs()` on it was a no-op and the alignment test had
+        // only one side. A sun 5 degrees *behind* the Qibla gives `relative ≈ 355`,
+        // which missed `abs(relative) < 15`, fell through `195f..345f` and reported
+        // "the Qibla is in the opposite direction to the sun" - for a difference of
+        // five degrees. `QiblaEngine.calculateRelativeAngle` folds to `[-180, +180]`,
+        // which is what the branch ranges below were written against in the first
+        // place; it just was not being called.
+        val relative = QiblaEngine.calculateRelativeAngle(
+            currentHeading = sun.azimuth,
+            targetBearing = state.qiblaBearing
+        )
         val explanation = when {
             !sun.isSunVisible -> strings.more.sunBelowHorizon
             abs(relative) < 15f -> strings.more.sunAligned
-            relative in 15f..165f -> strings.more.sunToTheLeft.format(relative.toInt())
-            relative in 195f..345f -> strings.more.sunToTheRight.format((360 - relative).toInt())
-            else -> strings.more.sunOpposite
+            // Positive means the Qibla is clockwise of the sun - to the reader's right
+            // when facing it. The ranges are on the folded value, so there is one side
+            // of the window and the other is `360 - x`.
+            relative > 0f -> strings.more.sunToTheRight.format(relative.toInt())
+            else -> strings.more.sunToTheLeft.format((-relative).toInt())
         }
 
         Text(

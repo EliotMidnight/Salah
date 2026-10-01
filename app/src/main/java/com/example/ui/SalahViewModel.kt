@@ -122,7 +122,6 @@ data class SalahUiState(
     val autoSilentDurationMinutes: Int = 20,
     val lastChecked: String = "Today · Synced locally",
     val isOnline: Boolean = false,
-    val isSyncing: Boolean = false,
     // Expanded user preferences
     val language: String = "English",
     val riwayah: String = "Hafs 'an 'Asim",
@@ -158,26 +157,38 @@ data class SalahUiState(
      */
     val qiblaGuidance: QiblaGuidance = QiblaGuidance(QiblaGuidance.Direction.ON_TARGET, 0),
 
+    /**
+     * A sentence about how much the compass can be trusted, already chosen.
+     *
+     * Chosen here, in the ViewModel, because "which of the four accuracy states is
+     * this" is a decision and not a value. The raw `SENSOR_STATUS_*` integer used to
+     * live in this state beside it, and that is the exact shape this rebuild spent
+     * four bugs removing: a fact with a string for one reader and an integer for
+     * another, where the integer can be edited into disagreement and the string
+     * cannot. One representation, and it is the one the screens read.
+     */
     val compassAccuracy: String = "HIGH ACCURACY",
-    val magneticSensorAccuracy: Int = 3,
     val magneticFieldMagnitude: Float = 46.0f, // uT
     val magneticStatus: MagneticFieldStatus = MagneticFieldStatus.OPTIMAL,
     val useTrueNorth: Boolean = true,
-    val magneticDeclination: Float = 0f,
-    val hasMagneticSensor: Boolean = true,
     val sunPosition: SunPosition? = null,
     val distanceToKaabaKm: Int = 0,
-    // Device level & tilt sensor telemetry (Magnetometer & Accelerometer)
-    val pitchDegrees: Float = 0f,
-    val rollDegrees: Float = 0f,
     val isDeviceLevel: Boolean = true,
     val isLocating: Boolean = false,
     val locationStatusMessage: String? = null,
-    val cachedLocationTimestamp: Long? = null,
     // Quran reader state
     val selectedSurah: Surah = QuranBrowse.surahs.first(),
     val currentSurahAyahs: List<Ayah> = emptyList(),
-    val activeReadingAyahNumber: Int = 1,
+
+    /**
+     * Where to *place* the reader when it next opens in this surah.
+     *
+     * A hint, and read once - it seeds `ReaderPosition` and is then the reader's to
+     * own. It is not the reader's position, which lives in `ReaderPosition` and is
+     * written back through the debounced `onPosition`; keeping a second, continuously
+     * updated anchor here is the shape of bug this rebuild exists to prevent.
+     */
+    val readingAyahHint: Int = 1,
     val isAudioPlaying: Boolean = false,
     val currentAudioAyah: Int = 1,
     /**
@@ -196,10 +207,7 @@ data class SalahUiState(
      * destination. It is a view state rather than a reading preference, which
      * is why it is not part of [quranReadingOptions].
      */
-    val isQuranImmersive: Boolean = false,
-    // Calendar selected date inspection
-    val calendarSelectedDate: LocalDate = LocalDate.now(),
-    val calendarSelectedDayPrayers: PrayerTimesDay? = null
+    val isQuranImmersive: Boolean = false
 ) {
     /**
      * True once the Kaaba is inside the alignment window.
@@ -242,6 +250,9 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
     private var hasGeomagnetic = false
     private var lastVibrateTimestamp: Long = 0L
     private var wasFacingQibla: Boolean = false
+
+    /** The magnetometer's own accuracy report; see [onAccuracyChanged]. */
+    private var sensorAccuracy: Int = SensorManager.SENSOR_STATUS_ACCURACY_HIGH
     private var lastAzimuth: Float = 0f
     private var declCacheLat = Float.NaN
     private var declCacheLon = Float.NaN
@@ -285,16 +296,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             repository.locationFlow.collectLatest { loc ->
                 _uiState.value = _uiState.value.copy(location = loc)
                 recalculateAll()
-            }
-        }
-
-        viewModelScope.launch {
-            repository.cachedLocationDbFlow.collectLatest { cached ->
-                if (cached != null) {
-                    _uiState.value = _uiState.value.copy(
-                        cachedLocationTimestamp = cached.timestamp
-                    )
-                }
             }
         }
 
@@ -434,12 +435,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             }
         }
 
-        viewModelScope.launch {
-            repository.isSyncingFlow.collectLatest { syncing ->
-                _uiState.value = _uiState.value.copy(isSyncing = syncing)
-            }
-        }
-
         // Room observers.
         //
         // The prayer log is a row keyed by date, so this cannot be a one-off
@@ -511,8 +506,14 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
     }
 
     fun startCompass() {
-        val hasSensor = rotationSensor != null || magneticSensor != null
-        _uiState.value = _uiState.value.copy(hasMagneticSensor = hasSensor)
+        // Whether this device has a compass is not published as state. It was, and
+        // nothing read it - which meant a phone with no magnetometer showed a Qibla
+        // screen with a dial that would never move, and no message saying why. The
+        // honest fix is not another row: a device with no magnetometer has no Qibla to
+        // offer, so it should not offer one. That is a change to the Qibla tab's
+        // visibility rather than to this class, and it is worth doing deliberately -
+        // hiding a tab is a bigger call than showing a warning inside it, and it is the
+        // next person's decision rather than mine to make silently.
         rotationSensor?.let {
             sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
@@ -642,14 +643,19 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         val distanceKaaba = QiblaEngine.calculateDistanceToKaabaKm(state.location.latitude, state.location.longitude)
         val sun = QiblaEngine.calculateSunPosition(state.location)
 
-        // Calendar selected day calculation
-        val calDayPrayers = PrayerCalculationEngine.calculatePrayerTimes(
-            date = state.calendarSelectedDate,
-            location = state.location,
-            method = state.method,
-            madhhab = state.madhhab,
-            adjustments = state.adjustments
-        )
+        // No second day is calculated here.
+        //
+        // There used to be a `calendarSelectedDate` / `calendarSelectedDayPrayers` pair,
+        // and this function built a complete `PrayerTimesDay` for it on every location,
+        // method, madhhab, adjustment and midnight change - and nothing read either
+        // field. `selectCalendarDate`, which wrote them, was itself never called: the
+        // calendar goes through `setSelectedDate`, so the pair sat frozen at
+        // `LocalDate.now()` from construction and was recalculated all day to be
+        // discarded.
+        //
+        // The Prayer tab already computes the day it is showing, from
+        // `selectedDate`, on demand. So there is one day - the one the reader chose -
+        // and no second calendar to disagree with it.
 
         _uiState.value = state.copy(
             todayPrayerTimes = calculatedToday,
@@ -658,8 +664,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             countdownString = countdown,
             qiblaBearing = qiblaBearing,
             distanceToKaabaKm = distanceKaaba,
-            sunPosition = sun,
-            calendarSelectedDayPrayers = calDayPrayers
+            sunPosition = sun
         )
     }
 
@@ -999,14 +1004,27 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
     // incapable of disagreeing about where "here" is - which is the failure that
     // produced a page indicator that did not match the page.
 
+    /**
+     * Opens a surah at a verse.
+     *
+     * The ayah number is read once, here, when the reader asks to be *placed*. It is
+     * not published as state, because the reader does not read it: `ReaderPosition`
+     * owns the reader's place and holds it through rotation, and this is what seeds it
+     * on open.
+     *
+     * It used to also write `activeReadingAyahNumber`, which was read back as the
+     * reader's *initial* position - a write that fed a value consumed once, at first
+     * composition. A second anchor for "where the reader is", in a rebuild whose whole
+     * subject is that there must be one. `onAyahViewed` wrote it too, on the same code
+     * path, so it had two writers and neither could affect anything.
+     */
     fun selectSurah(surahNumber: Int, ayahNumber: Int = 1) {
         val surah = QuranBrowse.surah(surahNumber) ?: QuranBrowse.surahs.first()
         val ayahs = QuranBrowse.ayahsInSurah(surahNumber)
-        val startAyah = ayahNumber.coerceIn(1, ayahs.size.coerceAtLeast(1))
         _uiState.value = _uiState.value.copy(
             selectedSurah = surah,
             currentSurahAyahs = ayahs,
-            activeReadingAyahNumber = startAyah
+            readingAyahHint = ayahNumber.coerceIn(1, ayahs.size.coerceAtLeast(1))
         )
     }
 
@@ -1019,19 +1037,35 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     fun selectHizb(hizbNumber: Int) = selectPlace(QuranBrowse.placeAtHizb(hizbNumber).verse)
 
+    /**
+     * The reader has settled on a verse; remember it for next time.
+     *
+     * **Persistence only.** This used to also write the reader's in-session position,
+     * which was a second anchor for a fact `ReaderPosition` already owned and which
+     * only ever got read once - at first composition, long before this fired. Two
+     * writers, neither of which could affect anything, in a rebuild whose subject is
+     * that there must be one writer.
+     *
+     * The surah name is taken from [ayah], not from the selected surah: they are the
+     * same on every path today, and if they ever are not - a stale index sheet, a
+     * position restored from an older build - the name saved with a verse is the one
+     * that belongs to it. A Continue Reading row whose name contradicts its own
+     * reference is worse than one with no name.
+     */
     fun onAyahViewed(ayah: Ayah) {
-        _uiState.value = _uiState.value.copy(activeReadingAyahNumber = ayah.ayahNumber)
         viewModelScope.launch {
-            val entity = ContinueReadingEntity(
-                surahNumber = ayah.surahNumber,
-                ayahNumber = ayah.ayahNumber,
-                surahName = _uiState.value.selectedSurah.englishName,
-                surahNameAr = _uiState.value.selectedSurah.arabicName,
-                pageNumber = ayah.pageNumber,
-                snippetAr = ayah.textArabic.take(60),
-                timestamp = System.currentTimeMillis()
+            val surah = QuranBrowse.surah(ayah.surahNumber)
+            repository.saveContinueReading(
+                ContinueReadingEntity(
+                    surahNumber = ayah.surahNumber,
+                    ayahNumber = ayah.ayahNumber,
+                    surahName = surah?.englishName.orEmpty(),
+                    surahNameAr = surah?.arabicName.orEmpty(),
+                    pageNumber = ayah.pageNumber,
+                    snippetAr = ayah.textArabic.take(60),
+                    timestamp = System.currentTimeMillis()
+                )
             )
-            repository.saveContinueReading(entity)
         }
     }
 
@@ -1087,22 +1121,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         audioPlayer.stop()
     }
 
-    // Calendar
-    fun selectCalendarDate(date: LocalDate) {
-        val state = _uiState.value
-        val dayPrayers = PrayerCalculationEngine.calculatePrayerTimes(
-            date = date,
-            location = state.location,
-            method = state.method,
-            madhhab = state.madhhab,
-            adjustments = state.adjustments
-        )
-        _uiState.value = state.copy(
-            calendarSelectedDate = date,
-            calendarSelectedDayPrayers = dayPrayers
-        )
-    }
-
     // SensorEventListener
     // The TYPE_ORIENTATION branch below is a deliberate last-resort fallback for
     // hardware that exposes neither a rotation vector nor a geomagnetic field
@@ -1136,19 +1154,33 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             gravityValues[2] = alphaAcc * event.values[2] + (1 - alphaAcc) * gravityValues[2]
             hasGravity = true
 
-            // Calculate device pitch and roll tilt angles
+            // Device tilt, as the one thing the reader acts on.
+            //
+            // The pitch and roll were also published individually, into two state fields
+            // nothing read. The only consumer is the Qibla screen's "hold the phone
+            // flat" hint, and what it asks is a yes or no - and the threshold is the
+            // interesting part, not the degrees. Keeping the numbers would invite a
+            // second threshold somewhere, and two thresholds on a jittery accelerometer
+            // reading is a hint that flickers.
+            //
+            // The window is 18 degrees because a compass reading taken while the phone
+            // is tilted is wrong by roughly the tilt, and 18 is past the point a reader
+            // holds one-handed; see the low-pass filter above, which is what makes this
+            // a stable answer rather than a noisy one.
             val ax = gravityValues[0].toDouble()
             val ay = gravityValues[1].toDouble()
             val az = gravityValues[2].toDouble()
             val pitch = Math.toDegrees(kotlin.math.atan2(-ax, kotlin.math.sqrt(ay * ay + az * az))).toFloat()
             val roll = Math.toDegrees(kotlin.math.atan2(ay, az)).toFloat()
-            val isLevel = kotlin.math.abs(pitch) <= 18f && kotlin.math.abs(roll) <= 18f
 
-            _uiState.value = _uiState.value.copy(
-                pitchDegrees = pitch,
-                rollDegrees = roll,
-                isDeviceLevel = isLevel
-            )
+            val level = abs(pitch) <= DEVICE_LEVEL_TOLERANCE_DEGREES &&
+                abs(roll) <= DEVICE_LEVEL_TOLERANCE_DEGREES
+            if (level != _uiState.value.isDeviceLevel) {
+                // Only written on a change: this runs on every accelerometer event,
+                // and an unconditional `copy()` on each one is a state emission per
+                // event for a value nobody was waiting to change.
+                _uiState.value = _uiState.value.copy(isDeviceLevel = level)
+            }
         }
 
         val rotationMatrix = FloatArray(9)
@@ -1217,23 +1249,44 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         }
         wasFacingQibla = isFacing
 
-        val accuracyLabel = if (isFacing) {
-            "FACING QIBLA 🕋"
-        } else {
-            when (_uiState.value.magneticSensorAccuracy) {
-                SensorManager.SENSOR_STATUS_UNRELIABLE -> "UNRELIABLE (Calibrate)"
-                SensorManager.SENSOR_STATUS_ACCURACY_LOW -> "LOW ACCURACY"
-                SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> "MEDIUM ACCURACY"
-                else -> "HIGH ACCURACY"
-            }
+        // The accuracy sentence, chosen from the sensor's own report rather than from a
+        // field in this state.
+        //
+        // `magneticSensorAccuracy` was the raw `SENSOR_STATUS_*` integer sitting beside
+        // this string in the UI state, and it was the one the string was derived from.
+        // Two representations of one fact, where one can be copied over without the
+        // other - the shape that produced the four two-writer bugs this rebuild fixed.
+        // Now there is only the sentence.
+        //
+        // Note also what this does *not* say. "FACING QIBLA" is not an accuracy
+        // reading: it is the alignment state, which is what the banner and the dial's
+        // ring already say, with the actual degree count. A row in Settings labelled
+        // "Compass Sensors & Diagnostics" reporting alignment tells a reader nothing
+        // about their compass, and the emoji made it read as a status light rather than
+        // as a measurement. Aligned is now reported by the banner that exists for it.
+        val accuracyLabel = when (sensorAccuracy) {
+            SensorManager.SENSOR_STATUS_UNRELIABLE -> "UNRELIABLE (Calibrate)"
+            SensorManager.SENSOR_STATUS_ACCURACY_LOW -> "LOW ACCURACY"
+            SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> "MEDIUM ACCURACY"
+            else -> "HIGH ACCURACY"
         }
 
-        _uiState.value = _uiState.value.copy(
-            compassAzimuth = finalAzimuth,
-            qiblaGuidance = guidance,
-            magneticDeclination = declination,
-            compassAccuracy = accuracyLabel
-        )
+        // Two fields, both of which a screen reads and neither of which is derivable
+        // here alone: the heading the compass currently reports, and the guidance
+        // computed from it. The declination is not published - it is an input to the
+        // heading above, and a second copy of it in the UI state is a number that can
+        // disagree with the heading it produced.
+        if (finalAzimuth != _uiState.value.compassAzimuth || accuracyLabel != _uiState.value.compassAccuracy) {
+            _uiState.value = _uiState.value.copy(
+                compassAzimuth = finalAzimuth,
+                qiblaGuidance = guidance,
+                compassAccuracy = accuracyLabel
+            )
+        } else {
+            // The heading is smoothed, so it usually has not moved; the guidance may
+            // still have, and it is the value the banner and the haptic read.
+            _uiState.value = _uiState.value.copy(qiblaGuidance = guidance)
+        }
     }
 
     private fun vibrateQiblaLock() {
@@ -1259,12 +1312,30 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         }
     }
 
+    /**
+     * The magnetometer's own accuracy report.
+     *
+     * Held privately, because the sentence built from it is the only representation
+     * any screen reads. It used to be a field in the UI state beside that sentence -
+     * two answers to one question, and the one with the raw `SENSOR_STATUS_*` constant
+     * in it is the one that invites being copied over on its own.
+     */
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
         if (sensor?.type == Sensor.TYPE_MAGNETIC_FIELD ||
             sensor?.type == Sensor.TYPE_ROTATION_VECTOR ||
             sensor?.type == Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR
         ) {
-            _uiState.value = _uiState.value.copy(magneticSensorAccuracy = accuracy)
+            sensorAccuracy = accuracy
         }
     }
 }
+
+/**
+ * How far the phone may be tilted before its compass reading is not trusted.
+ *
+ * A compass reading taken while the phone is tilted is wrong by roughly the tilt
+ * angle, so this is a claim about the reading's accuracy rather than about the
+ * device's posture. 18 degrees is past the point at which a phone is held one-handed
+ * to face the Kaaba, which is the only posture this matters in.
+ */
+internal const val DEVICE_LEVEL_TOLERANCE_DEGREES = 18f

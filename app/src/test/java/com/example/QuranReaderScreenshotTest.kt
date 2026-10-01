@@ -69,7 +69,7 @@ class QuranReaderScreenshotTest {
     private fun state(ayahNumber: Int = this.ayahNumber) = SalahUiState(
         selectedSurah = surah,
         currentSurahAyahs = ayahs,
-        activeReadingAyahNumber = ayahNumber
+        readingAyahHint = ayahNumber
     )
 
     /**
