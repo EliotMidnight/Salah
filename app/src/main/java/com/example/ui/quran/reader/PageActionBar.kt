@@ -104,12 +104,21 @@ internal fun PageActionBar(
 }
 
 /**
- * The same bar, sized and shaped for the continuous layout.
+ * The bar, placed in a scrolling list rather than over a page.
  *
  * A thin alias rather than a parameter, because the two surfaces genuinely want
  * different things: in a scrolling list the bar is an *item* and moves with the
  * text, while on a page it is an overlay at the foot. Sharing the content and
  * splitting the placement is what stops the two from drifting.
+ *
+ * ### Why this existed and was not used
+ *
+ * There were three renderings of one bar: [PageActionBar], a hand-written
+ * `SelectedVersePanel` in `ContinuousReader.kt` that duplicated it line for line,
+ * and this alias, which called neither. Three copies is three places for a change
+ * to the actions to be applied to some of them and not others - and the two that
+ * were actually used had already drifted apart in their test tags and in their
+ * vertical padding, so a test could find one bar and not the other.
  */
 @Composable
 internal fun SelectedVerseActions(

@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
@@ -46,11 +45,9 @@ import com.example.data.model.RevelationType
 import com.example.data.model.Surah
 import com.example.data.quran.QuranBrowse
 import com.example.ui.localization.LocalStrings
-import com.example.ui.quran.VerseActionRow
 import com.example.ui.quran.VerseActions
 import com.example.ui.quran.VerseArabic
 import com.example.ui.quran.VerseReferenceChip
-import com.example.ui.quran.VerseTranslationCard
 import com.example.ui.theme.ArabicFamily
 import com.example.ui.theme.QuranFonts
 import com.example.ui.theme.Space
@@ -231,13 +228,12 @@ internal fun ContinuousReader(
                 ayahs.firstOrNull { it.surahNumber == selected.surah && it.ayahNumber == selected.ayah }
                     ?.let { ayah ->
                         item(key = SELECTION_KEY) {
-                            SelectedVersePanel(
+                            SelectedVerseActions(
                                 ayah = ayah,
                                 actions = actionsFor(ayah),
                                 options = options,
-                                ink = ink,
-                                muted = muted,
-                                onDismiss = { position.clearSelection() }
+                                onDismiss = { position.clearSelection() },
+                                modifier = Modifier.padding(vertical = space.md)
                             )
                         }
                     }
@@ -393,66 +389,6 @@ internal fun VerseRow(
             scale = options.arabicScale,
             ink = ink
         )
-    }
-}
-
-/**
- * The panel under a selected verse: its translation, its actions, and a way out.
- *
- * Only the translation lives here when the reader has asked for translations
- * *inline*; the actions are the reason this panel exists at all. It is placed at
- * the end of the flow rather than beside the verse because a floating bar would
- * cover the line the reader is looking at, and an inline card would push the text
- * they were reading down the page.
- */
-@Composable
-internal fun SelectedVersePanel(
-    ayah: Ayah,
-    actions: VerseActions,
-    options: QuranReadingOptions,
-    ink: Color,
-    muted: Color,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val space = Space.current
-    val strings = LocalStrings.current
-
-    androidx.compose.material3.Surface(
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = com.example.ui.theme.QuranShape.card,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = space.md)
-            .testTag("selected_verse_panel")
-    ) {
-        Column(modifier = Modifier.padding(space.lg)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "${ayah.surahNumber}:${ayah.ayahNumber}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f)
-                )
-                androidx.compose.material3.TextButton(onClick = onDismiss) {
-                    Text(strings.more.actionClose)
-                }
-            }
-
-            if (options.showTranslation) {
-                Spacer(Modifier.height(space.xs))
-                VerseTranslationCard(
-                    ayah = ayah,
-                    translationScale = options.translationScale,
-                    ink = ink,
-                    surface = Color.Transparent,
-                    showReference = false
-                )
-            }
-
-            Spacer(Modifier.height(space.sm))
-            VerseActionRow(actions)
-        }
     }
 }
 

@@ -167,12 +167,19 @@ object QuranBrowse {
     // --- Verse furniture ---------------------------------------------------
 
     /**
-     * The prostration after a verse, if there is one.
+     * The page a verse falls on, or 0 when there is no such verse.
      *
-     * Read from the bundled metadata, which has carried all fifteen positions
-     * since the beginning and which the reader had never once asked - so a page
-     * containing a prostration looked exactly like one that did not.
+     * The inverse of [ayahOnPage], and needed anywhere the answer is "which page
+     * does this point to" rather than "is this point on that page" - the index
+     * sheet's page filter, and the check that a stored position still resolves
+     * after a corpus change.
      */
+    fun pageOf(surah: Int, ayah: Int): Int {
+        val index = indexOf(surah, ayah)
+        if (index < 0) return 0
+        return QuranCorpus.ayahs[index].pageNumber
+    }
+
     /**
      * Whether [ref] falls on [page].
      *
@@ -187,6 +194,13 @@ object QuranBrowse {
         return QuranCorpus.ayahs[index].pageNumber == page
     }
 
+    /**
+     * The prostration after a verse, if there is one.
+     *
+     * Read from the bundled metadata, which has carried all fifteen positions
+     * since the beginning and which the reader had never once asked - so a page
+     * containing a prostration looked exactly like one that did not.
+     */
     fun sajdaAfter(surah: Int, ayah: Int): SajdaKind? =
         when (QuranCorpus.sajdaAfterVerse(surah, ayah)) {
             QuranCorpus.SajdaKind.OBLIGATORY -> SajdaKind.OBLIGATORY
