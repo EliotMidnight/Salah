@@ -4,14 +4,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntSize
 import com.example.data.model.QuranRef
+import com.example.data.model.QuranReadingOptions
 import com.example.data.quran.QuranBrowse
+import com.example.ui.quran.gesture.PinchMath
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -133,6 +138,102 @@ class ReaderPosition internal constructor(
     fun clearSelection() {
         selection = null
     }
+
+    // -----------------------------------------------------------------------
+    // Magnification.
+    //
+    // It lives on the position because it is the other piece of *view* state that
+    // has to be coordinated with it: a page turn resets it, a pinch changes it,
+    // and both have to agree about whether a one-finger drag is a scroll or a
+    // pan. Split across two objects they would drift, and the symptom of drift is
+    // a reading surface that swallows a scroll.
+    // -----------------------------------------------------------------------
+
+    /** The current view magnification. Never persisted. */
+    var viewScale: Float by mutableFloatStateOf(1f)
+        private set
+
+    private var pan: Offset by mutableStateOf(Offset.Zero)
+
+    /**
+     * Where the last pinch happened, so a magnified surface can stay under the
+     * fingers instead of drifting away as the layer scales about its centre.
+     */
+    private var focal: Offset by mutableStateOf(Offset.Zero)
+
+    /** The size of the reading surface, for the pan clamp. */
+    var surfaceSize: IntSize by mutableStateOf(IntSize.Zero)
+        private set
+
+    /**
+     * Whether a magnified view should claim a one-finger drag.
+     *
+     * The single switch that decides who owns a one-finger drag on the surface.
+     *
+     * The previous reader re-keyed its **whole gesture detector** on this, which
+     * fixed the stale-scale capture and *broke the pinch*: tearing the detector
+     * down on the frame the scale crossed 1 discarded the accumulated zoom
+     * mid-gesture. So this is now read inside a stable detector rather than being
+     * its key.
+     */
+    val isViewMagnified: Boolean
+        get() = viewScale > MAGNIFIED_THRESHOLD
+
+    /**
+     * Magnifies the view, for a pinch set to *Zoom the view*.
+     *
+     * Temporary on purpose: the scale belongs to the view, not to the reading, so
+     * reopening the reader shows the text at the size the reader chose rather than
+     * at whatever magnification they left behind.
+     */
+    fun magnifyBy(zoomChange: Float) {
+        val next = PinchMath.applyZoom(viewScale, zoomChange)
+            .coerceIn(QuranReadingOptions.ViewScaleRange)
+        if (next == viewScale) return
+        viewScale = next
+        if (next <= MAGNIFIED_THRESHOLD) recentre()
+    }
+
+    /** Resets magnification, for a layout or surface change. */
+    fun resetMagnification() = recentre()
+
+    private fun recentre() {
+        viewScale = 1f
+        // At 1x the view fills the screen, so any leftover offset would leave a
+        // strip of blank paper beside the text with no way back.
+        pan = Offset.Zero
+        focal = Offset.Zero
+    }
+
+    fun surfaceMeasured(size: IntSize) {
+        surfaceSize = size
+    }
+
+    /**
+     * The reader's own pan plus the pinch correction, clamped **as one value**.
+     *
+     * Clamping the sum rather than each part is load-bearing. The focal correction
+     * is not bounded by the same thing the pan is: a pinch at the far corner of a
+     * surface at maximum magnification asks for a correction exactly the size of
+     * the visible surplus, and adding that to an already-clamped pan drags the
+     * reading past the edge of its own content and leaves blank paper with no way
+     * back. Clamped together, the reader gets the best correction the geometry
+     * allows and the surface never shows anything that is not text.
+     */
+    val appliedPan: Offset
+        get() = PinchMath.clampPan(pan + focal, viewScale, surfaceSize)
+
+    /** Moves a magnified view. A no-op unless magnified, and a no-op at 1x. */
+    fun panBy(delta: Offset) {
+        if (!isViewMagnified || delta == Offset.Zero) return
+        pan = PinchMath.clampPan(pan + delta, viewScale, surfaceSize)
+    }
+
+    /** Records a pinch's own movement, so the content stays under the fingers. */
+    fun pinchBy(delta: Offset) {
+        if (delta == Offset.Zero) return
+        focal += delta
+    }
 }
 
 /**
@@ -194,6 +295,16 @@ fun rememberReaderPosition(
 
 /** The position a first run starts at: Al-Fatihah, page 1. */
 internal fun initialPosition(): QuranRef = QuranRef.Start
+
+/**
+ * The scale above which the view counts as magnified.
+ *
+ * Slightly above 1 rather than exactly 1, because a pinch that lands on 1.004
+ * is a wobble and not a magnification - and a surface that started claiming
+ * one-finger drags at 1.004 would steal a scroll from a reader who had not asked
+ * to zoom at all.
+ */
+internal const val MAGNIFIED_THRESHOLD = 1.01f
 
 /**
  * Drops a selection when the surface it was made on goes away.

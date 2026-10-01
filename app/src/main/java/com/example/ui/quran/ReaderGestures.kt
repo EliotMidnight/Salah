@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.data.model.QuranPinchTarget
 import com.example.data.model.QuranReadingOptions
+import com.example.ui.quran.gesture.PinchMath
 import kotlin.math.abs
 
 /**
@@ -111,19 +112,35 @@ internal fun Modifier.readerPinch(
             // this event rather than the one before it.
             if (zoom != 1f) {
                 when (target) {
-                    QuranPinchTarget.TEXT_SIZE -> onArabicChange.value(
-                        (arabic.value * zoom).coerceIn(QuranReadingOptions.ArabicScaleRange)
-                    )
+                    QuranPinchTarget.TEXT_SIZE -> {
+                        // The dead zone is applied to the *change*, not to the
+                        // result. A real pinch jitters by a fraction of a percent on
+                        // every event, and each of those was a write to the reader's
+                        // stored text size - so a reader who pinched to look closer
+                        // found their preference had drifted when they let go.
+                        val next = PinchMath.applyZoom(arabic.value, zoom)
+                            .coerceIn(QuranReadingOptions.ArabicScaleRange)
+                        if (next != arabic.value) onArabicChange.value(next)
+                    }
 
                     QuranPinchTarget.VIEW_SCALE -> {
-                        val next = (view.value * zoom).coerceIn(QuranReadingOptions.ViewScaleRange)
-                        onViewChange.value(next)
-                        // Hold the content under the fingers. The surplus is what
-                        // this event's zoom added beyond the centre, which is
-                        // `(next - 1) * (centroid - centre)`; feeding it to the
-                        // pan keeps the point between the fingers fixed and lets
-                        // the reader's own panning show through.
-                        onFocalChange.value?.invoke(panChange)
+                        val next = PinchMath.applyZoom(view.value, zoom)
+                            .coerceIn(QuranReadingOptions.ViewScaleRange)
+                        val changed = next != view.value
+                        if (changed) onViewChange.value(next)
+
+                        // Hold the content under the fingers - but only when the
+                        // scale actually moved.
+                        //
+                        // The centroid is reported whether or not there is a pinch,
+                        // so forwarding it unconditionally feeds a *one-finger drag*
+                        // into the pan as well. The two would add up, and the reader
+                        // would find the page sliding away from their finger as they
+                        // dragged it - which reads as the page being broken rather
+                        // than as two gestures fighting.
+                        if (changed && panChange != Offset.Zero) {
+                            onFocalChange.value?.invoke(panChange)
+                        }
                     }
                 }
             }
@@ -157,15 +174,7 @@ internal fun focalCorrection(
     centroid: Offset,
     scale: Float,
     containerSize: IntSize
-): Offset {
-    if (scale <= 1f || containerSize.width == 0 || containerSize.height == 0) return Offset.Zero
-    val centre = Offset(containerSize.width / 2f, containerSize.height / 2f)
-    val delta = centroid - centre
-    return Offset(
-        x = -delta.x * (scale - 1f),
-        y = -delta.y * (scale - 1f)
-    )
-}
+): Offset = PinchMath.focalCorrection(centroid, scale, containerSize)
 
 /**
  * Swipe left or right to change surah.
@@ -268,12 +277,5 @@ internal fun rememberPan(
  * A negative scale or a zero/unmeasured size yields a zero offset rather than
  * throwing or producing `NaN` from a negative coercion bound.
  */
-internal fun clampPan(pan: Offset, scale: Float, containerSize: IntSize): Offset {
-    val surplus = ((scale - 1f) / 2f).coerceAtLeast(0f)
-    val maxX = containerSize.width * surplus
-    val maxY = containerSize.height * surplus
-    return Offset(
-        x = pan.x.coerceIn(-maxX, maxX),
-        y = pan.y.coerceIn(-maxY, maxY)
-    )
-}
+internal fun clampPan(pan: Offset, scale: Float, containerSize: IntSize): Offset =
+    PinchMath.clampPan(pan, scale, containerSize)
