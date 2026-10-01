@@ -268,14 +268,16 @@ data class ReaderStrings(
     val exitImmersive: String = "Leave immersive mode",
     val showControls: String = "Show controls",
     val saveThisLocation: String = "Save this verse",
-    val layoutPerAyah: String = "Per ayah",
     val layoutPerPage: String = "Per page",
     val layoutContinuousSurah: String = "Continuous surah",
     val scrollDirection: String = "Scroll direction",
+    val previousPage: String = "Previous page",
+    val nextPage: String = "Next page",
+    val perVerseTitle: String = "Break out each verse",
+    val perVerseDescription: String =
+        "Study mode: every verse gets its own reference and its own actions, revealed when you select it.",
     val scrollVertical: String = "Vertical",
     val scrollHorizontal: String = "Horizontal",
-    val continuousNeedsVertical: String =
-        "Continuous text has no pages, so it always scrolls vertically.",
     val backgroundColour: String = "Background",
     val backgroundDefault: String = "App default",
     val pinchBehaviour: String = "Pinch does",
@@ -675,6 +677,7 @@ val EnglishStrings = UiStrings(
 )
 
 val ArabicStrings = UiStrings(
+
     appName = "صلاة",
     navToday = "اليوم",
     navPrayer = "الصلاة",
@@ -791,6 +794,40 @@ val ArabicStrings = UiStrings(
             previousMonth = "الشهر السابق", // verify
     ),
     more = UiStringsMore(
+reader = ReaderStrings(
+        openIndex = "فتح الفهرس",
+        immersiveMode = "وضع الغمر",
+        exitImmersive = "الخروج من وضع الغمر",
+        showControls = "إظهار عناصر التحكم",
+        saveThisLocation = "حفظ هذه الآية",  // verify
+        layoutPerPage = "صفحة بصفحة",  // verify
+        layoutContinuousSurah = "سورة متصلة",  // verify
+        scrollDirection = "اتجاه التمرير",
+        previousPage = "الصفحة السابقة",
+        nextPage = "الصفحة التالية",
+        perVerseTitle = "إبراز كل آية",  // verify
+        perVerseDescription = "وضع الدراسة: لكل آية مرجعها وإجراءاتها، تظهر عند تحديدها.",  // verify
+        scrollVertical = "رأسي",
+        scrollHorizontal = "أفقي",
+        backgroundColour = "الخلفية",
+        backgroundDefault = "افتراضي التطبيق",
+        pinchBehaviour = "ماذا يفعل القرص",
+        pinchZoomView = "تكبير العرض",
+        pinchTextSize = "تغيير حجم النص",
+        arabicTextSize = "حجم النص العربي",
+        translationSize = "حجم الترجمة",
+        quranFont = "خط المصحف",
+        fontNotBundled = "غير مُضمَّن حاليًا",
+        showTranslationLabelShort = "إظهار الترجمة",  // verify
+        indexSurahs = "السور",  // verify
+        indexSaved = "المحفوظات",
+        indexSearch = "البحث",
+        emptySavedTitle = "لا توجد محفوظات بعد",  // verify
+        emptySavedMessage = "احفظ آية أثناء القراءة وستجدها هنا.",  // verify
+        headingLabel = "العنوان",
+        mushaf = "المصحف",  // verify
+        changeInReader = "غيّر هذا من خيارات القراءة في المصحف.",
+    ),
         actionSave = "حفظ",
         actionCancel = "إلغاء",
         actionClose = "إغلاق",
@@ -1027,6 +1064,7 @@ val ArabicStrings = UiStrings(
 )
 
 val FrenchStrings = UiStrings(
+
     appName = "SALAH",
     navToday = "Aujourd'hui",
     navPrayer = "Prière",
@@ -1143,6 +1181,40 @@ val FrenchStrings = UiStrings(
             previousMonth = "Mois précédent", // verify
     ),
     more = UiStringsMore(
+reader = ReaderStrings(
+        openIndex = "Ouvrir l’index",
+        immersiveMode = "Mode immersif",
+        exitImmersive = "Quitter le mode immersif",
+        showControls = "Afficher les commandes",
+        saveThisLocation = "Enregistrer ce verset",  // verify
+        layoutPerPage = "Page par page",  // verify
+        layoutContinuousSurah = "Sourate continue",  // verify
+        scrollDirection = "Sens de défilement",
+        previousPage = "Page précédente",
+        nextPage = "Page suivante",
+        perVerseTitle = "Isoler chaque verset",  // verify
+        perVerseDescription = "Mode étude : chaque verset a sa référence et ses actions, révélées à la sélection.",  // verify
+        scrollVertical = "Vertical",
+        scrollHorizontal = "Horizontal",
+        backgroundColour = "Arrière-plan",
+        backgroundDefault = "Réglage de l’application",
+        pinchBehaviour = "Le pincement",
+        pinchZoomView = "Agrandir la vue",
+        pinchTextSize = "Modifier la taille du texte",
+        arabicTextSize = "Taille du texte arabe",
+        translationSize = "Taille de la traduction",
+        quranFont = "Police du Coran",
+        fontNotBundled = "Pas encore incluse",
+        showTranslationLabelShort = "Afficher la traduction",  // verify
+        indexSurahs = "Sourates",  // verify
+        indexSaved = "Enregistrés",
+        indexSearch = "Rechercher",
+        emptySavedTitle = "Rien d’enregistré pour l’instant",  // verify
+        emptySavedMessage = "Enregistrez un verset en lisant et il vous attendra ici.",  // verify
+        headingLabel = "Titre",
+        mushaf = "Mushaf",  // verify
+        changeInReader = "À modifier dans les options de lecture du Coran.",
+    ),
         actionSave = "Enregistrer",
         actionCancel = "Annuler",
         actionClose = "Fermer",
@@ -1379,6 +1451,7 @@ val FrenchStrings = UiStrings(
 )
 
 val IndonesianStrings = UiStrings(
+
     appName = "SALAH",
     navToday = "Hari Ini",
     navPrayer = "Jadwal",
@@ -1495,6 +1568,40 @@ val IndonesianStrings = UiStrings(
             previousMonth = "Bulan sebelumnya", // verify
     ),
     more = UiStringsMore(
+reader = ReaderStrings(
+        openIndex = "Buka indeks",
+        immersiveMode = "Mode imersif",
+        exitImmersive = "Keluar dari mode imersif",
+        showControls = "Tampilkan kontrol",
+        saveThisLocation = "Simpan ayat ini",  // verify
+        layoutPerPage = "Per halaman",  // verify
+        layoutContinuousSurah = "Surah_continuous",  // verify
+        scrollDirection = "Arah gulir",
+        previousPage = "Halaman sebelumnya",
+        nextPage = "Halaman berikutnya",
+        perVerseTitle = "Pisahkan setiap ayat",  // verify
+        perVerseDescription = "Mode belajar: setiap ayat punya referensi dan aksinya sendiri, muncul saat dipilih.",  // verify
+        scrollVertical = "Vertikal",
+        scrollHorizontal = "Horizontal",
+        backgroundColour = "Latar belakang",
+        backgroundDefault = "Bawaan aplikasi",
+        pinchBehaviour = "Pinch melakukan",
+        pinchZoomView = "Perbesar tampilan",
+        pinchTextSize = "Ubah ukuran teks",
+        arabicTextSize = "Ukuran teks Arab",
+        translationSize = "Ukuran terjemahan",
+        quranFont = "Font Quran",
+        fontNotBundled = "Belum disertakan",
+        showTranslationLabelShort = "Tampilkan terjemahan",  // verify
+        indexSurahs = "Surah",  // verify
+        indexSaved = "Tersimpan",
+        indexSearch = "Cari",
+        emptySavedTitle = "Belum ada yang tersimpan",  // verify
+        emptySavedMessage = "Simpan ayat saat membaca dan akan menunggu di sini.",  // verify
+        headingLabel = "Judul",
+        mushaf = "Mushaf",  // verify
+        changeInReader = "Ubah ini di Opsi Bacaan Al-Qur’an.",
+    ),
         actionSave = "Simpan",
         actionCancel = "Batal",
         actionClose = "Tutup",
@@ -1731,6 +1838,7 @@ val IndonesianStrings = UiStrings(
 )
 
 val TurkishStrings = UiStrings(
+
     appName = "SALAH",
     navToday = "Bugün",
     navPrayer = "Vakitler",
@@ -1847,6 +1955,40 @@ val TurkishStrings = UiStrings(
             previousMonth = "Önceki ay", // verify
     ),
     more = UiStringsMore(
+reader = ReaderStrings(
+        openIndex = "Dizinü aç",
+        immersiveMode = "Odak modu",
+        exitImmersive = "Odak modundan çık",
+        showControls = "Kontrolleri göster",
+        saveThisLocation = "Bu ayeti kaydet",  // verify
+        layoutPerPage = "Sayfa sayfa",  // verify
+        layoutContinuousSurah = "Kesintisiz sûre",  // verify
+        scrollDirection = "Kaydırma yönü",
+        previousPage = "Önceki sayfa",
+        nextPage = "Sonraki sayfa",
+        perVerseTitle = "Her ayeti ayır",  // verify
+        perVerseDescription = "Çalışma kipi: her ayetin kendi referansı ve işlemleri vardır, seçildiğinde görünür.",  // verify
+        scrollVertical = "Dikey",
+        scrollHorizontal = "Yatay",
+        backgroundColour = "Arka plan",
+        backgroundDefault = "Uygulama varsayılanı",
+        pinchBehaviour = "Parmak hareketi",
+        pinchZoomView = "Görünümü yakınlaştır",
+        pinchTextSize = "Yazı boyutunu değiştir",
+        arabicTextSize = "Arapça yazı boyutu",
+        translationSize = "Çeviri boyutu",
+        quranFont = "Kur’an yazı tipi",
+        fontNotBundled = "Henüz eklenmedi",
+        showTranslationLabelShort = "Çeviriyi göster",  // verify
+        indexSurahs = "Sureler",  // verify
+        indexSaved = "Kaydedilenler",
+        indexSearch = "Ara",
+        emptySavedTitle = "Henüz kaydedilen yok",  // verify
+        emptySavedMessage = "Okurken bir ayeti kaydet, burada seni bekliyor olacak.",  // verify
+        headingLabel = "Başlık",
+        mushaf = "Mushaf",  // verify
+        changeInReader = "Bunu Mushaf okuma seçeneklerinden değiştirebilirsin.",
+    ),
         actionSave = "Kaydet",
         actionCancel = "İptal",
         actionClose = "Kapat",
@@ -2083,6 +2225,7 @@ val TurkishStrings = UiStrings(
 )
 
 val UrduStrings = UiStrings(
+
     appName = "صلاۃ",
     navToday = "آج",
     navPrayer = "نماز",
@@ -2199,6 +2342,40 @@ val UrduStrings = UiStrings(
             previousMonth = "پچھلا مہینہ", // verify
     ),
     more = UiStringsMore(
+reader = ReaderStrings(
+        openIndex = "فہرست کھولیں",
+        immersiveMode = "غمر شدہ موڈ",
+        exitImmersive = "غمر شدہ موڈ چھوڑیں",
+        showControls = "کنٹرولز دکھائیں",
+        saveThisLocation = "یہ آیت محفوظ کریں",  // verify
+        layoutPerPage = "صفحہ بہ صفحہ",  // verify
+        layoutContinuousSurah = "مسلسل سورہ",  // verify
+        scrollDirection = "اسکرول کی سمت",
+        previousPage = "پچھلا صفحہ",
+        nextPage = "اگلا صفحہ",
+        perVerseTitle = "ہر آیت الگ کریں",  // verify
+        perVerseDescription = "مطالعے کا انداز: ہر آیت کا اپنا حوالہ اور اپنے اقدامات ہوتے ہیں، منتخب کرنے پر نظر آتے ہیں۔",  // verify
+        scrollVertical = "عمودی",
+        scrollHorizontal = "افقی",
+        backgroundColour = "پس منظر",
+        backgroundDefault = "ایپ کا ڈیفالٹ",
+        pinchBehaviour = " pinch کیا کرتا ہے",
+        pinchZoomView = "ویو زوم کریں",
+        pinchTextSize = "متن کا حجم تبدیل کریں",
+        arabicTextSize = "عربی متن کا حجم",
+        translationSize = "ترجمے کا حجم",
+        quranFont = "قرآنی فونٹ",
+        fontNotBundled = "ابھی شامل نہیں",
+        showTranslationLabelShort = "ترجمہ دکھائیں",  // verify
+        indexSurahs = "سورے",  // verify
+        indexSaved = "محفوظات",
+        indexSearch = "تلاش",
+        emptySavedTitle = "ابھی کچھ محفوظ نہیں",  // verify
+        emptySavedMessage = "پڑھتے ہوئے کوئی آیت محفوظ کریں، وہ یہاں انتظار کرے گی۔",  // verify
+        headingLabel = "عنوان",
+        mushaf = "مصحف",  // verify
+        changeInReader = "یہ قرآن کی تلاوت کے اختیارات میں تبدیل کریں۔",
+    ),
         actionSave = "محفوظ کریں",
         actionCancel = "منسوخ کریں",
         actionClose = "بند کریں",
@@ -2435,6 +2612,7 @@ val UrduStrings = UiStrings(
 )
 
 val MalayStrings = UiStrings(
+
     appName = "SALAH",
     navToday = "Hari Ini",
     navPrayer = "Solat",
@@ -2551,6 +2729,40 @@ val MalayStrings = UiStrings(
             previousMonth = "Bulan sebelumnya", // verify
     ),
     more = UiStringsMore(
+reader = ReaderStrings(
+        openIndex = "Buka indeks",
+        immersiveMode = "Mod imersif",
+        exitImmersive = "Keluar daripada mod imersif",
+        showControls = "Tunjuk kawalan",
+        saveThisLocation = "Simpan ayat ini",  // verify
+        layoutPerPage = "Halaman demi halaman",  // verify
+        layoutContinuousSurah = "Surah berterusan",  // verify
+        scrollDirection = "Arah skrol",
+        previousPage = "Halaman sebelumnya",
+        nextPage = "Halaman seterusnya",
+        perVerseTitle = "Pisahkan setiap ayat",  // verify
+        perVerseDescription = "Modul belajar: setiap ayat mempunyai rujukan dan tindakannya sendiri, muncul apabila dipilih.",  // verify
+        scrollVertical = "Menegak",
+        scrollHorizontal = "Mendatar",
+        backgroundColour = "Latar belakang",
+        backgroundDefault = "Lalaian aplikasi",
+        pinchBehaviour = "Cubit melakukan",
+        pinchZoomView = "Besarkan paparan",
+        pinchTextSize = "Ubah saiz teks",
+        arabicTextSize = "Saiz teks Arab",
+        translationSize = "Saiz terjemahan",
+        quranFont = "Font Quran",
+        fontNotBundled = "Belum disertakan",
+        showTranslationLabelShort = "Tunjukkan terjemahan",  // verify
+        indexSurahs = "Surah",  // verify
+        indexSaved = "Disimpan",
+        indexSearch = "Cari",
+        emptySavedTitle = "Belum ada yang disimpan",  // verify
+        emptySavedMessage = "Simpan ayat semasa membaca dan ia akan menunggu di sini.",  // verify
+        headingLabel = "Tajuk",
+        mushaf = "Mushaf",  // verify
+        changeInReader = "Ubah ini dalam pilihan bacaan Al-Quran.",
+    ),
         actionSave = "Simpan",
         actionCancel = "Batal",
         actionClose = "Tutup",
@@ -2787,6 +2999,7 @@ val MalayStrings = UiStrings(
 )
 
 val BengaliStrings = UiStrings(
+
     appName = "সালাহ",
     navToday = "আজ",
     navPrayer = "নামাজ",
@@ -2903,6 +3116,40 @@ val BengaliStrings = UiStrings(
             previousMonth = "আগের মাস", // verify
     ),
     more = UiStringsMore(
+reader = ReaderStrings(
+        openIndex = "সূচি খুলুন",
+        immersiveMode = "নিমগ্ন মোড",
+        exitImmersive = "নিমগ্ন মোড থেকে বের হয় নিন",
+        showControls = "নিয়ন্ত্রণ দেখান",
+        saveThisLocation = "এই আয়াত সংরক্ষণ করুন",  // verify
+        layoutPerPage = "পৃষ্ঠা ধরে পৃষ্ঠা",  // verify
+        layoutContinuousSurah = "ধারাবাহিক সূরা",  // verify
+        scrollDirection = "স্ক্রলের দিক",
+        previousPage = "আগের পৃষ্ঠা",
+        nextPage = "পরের পৃষ্ঠা",
+        perVerseTitle = "প্রতিটি আয়াত আলাদা করুন",  // verify
+        perVerseDescription = "অধ্যয়নের ধরন: প্রতিটি আয়াতের নিজস্ব রেফারেন্স ও কাজ থাকে, নির্বাচন করলে দৃশ্যমান হয়।",  // verify
+        scrollVertical = "উল্লম্ব",
+        scrollHorizontal = "অনুভূমিক",
+        backgroundColour = "পটভূমি",
+        backgroundDefault = "অ্যাপের ডিফল্ট",
+        pinchBehaviour = "পিঞ্চ করলে",
+        pinchZoomView = "ভিউ জুম হয়",
+        pinchTextSize = "লেখার আকার বদলায়",
+        arabicTextSize = "আরবি লেখার আকার",
+        translationSize = "অনুবাদের আকার",
+        quranFont = "কুরআনের ফন্ট",
+        fontNotBundled = "এখনও অন্তর্ভুক্ত নয়",
+        showTranslationLabelShort = "অনুবাদ দেখান",  // verify
+        indexSurahs = "সূরা",  // verify
+        indexSaved = "সংরক্ষিত",
+        indexSearch = "খুঁজুন",
+        emptySavedTitle = "এখনও কিছু সংরক্ষণ করা হয়নি",  // verify
+        emptySavedMessage = "পড়ার সময় একটি আয়াত সংরক্ষণ করুন, তা এখানে অপেক্ষা করবে।",  // verify
+        headingLabel = "শিরোনাম",
+        mushaf = "মুশফ",  // verify
+        changeInReader = "এটি মুশফ পাঠের বিকল্পগুলোতে বদলান।",
+    ),
         actionSave = "সংরক্ষণ",
         actionCancel = "বাতিল",
         actionClose = "বন্ধ",
@@ -3139,6 +3386,7 @@ val BengaliStrings = UiStrings(
 )
 
 val RussianStrings = UiStrings(
+
     appName = "SALAH",
     navToday = "Сегодня",
     navPrayer = "Намаз",
@@ -3255,6 +3503,40 @@ val RussianStrings = UiStrings(
             previousMonth = "Предыдущий месяц", // verify
     ),
     more = UiStringsMore(
+reader = ReaderStrings(
+        openIndex = "Открыть указатель",
+        immersiveMode = "Погружение",
+        exitImmersive = "Выйти из погружения",
+        showControls = "Показать элементы управления",
+        saveThisLocation = "Сохранить этот аят",  // verify
+        layoutPerPage = "По страницам",  // verify
+        layoutContinuousSurah = "Сплошная сура",  // verify
+        scrollDirection = "Направление прокрутки",
+        previousPage = "Предыдущая страница",
+        nextPage = "Следующая страница",
+        perVerseTitle = "Выделить каждый аят",  // verify
+        perVerseDescription = "Режим изучения: у каждого аята своя ссылка и действия, появляются при выборе.",  // verify
+        scrollVertical = "Вертикально",
+        scrollHorizontal = "Горизонтально",
+        backgroundColour = "Фон",
+        backgroundDefault = "Как в приложении",
+        pinchBehaviour = "Щипок делает",
+        pinchZoomView = "Увеличивает вид",
+        pinchTextSize = "Меняет размер текста",
+        arabicTextSize = "Размер арабского текста",
+        translationSize = "Размер перевода",
+        quranFont = "Шрифт Корана",
+        fontNotBundled = "Пока не включён",
+        showTranslationLabelShort = "Показать перевод",  // verify
+        indexSurahs = "Суры",  // verify
+        indexSaved = "Сохранённые",
+        indexSearch = "Поиск",
+        emptySavedTitle = "Пока ничего не сохранено",  // verify
+        emptySavedMessage = "Сохраните аят при чтении — он будет ждать здесь.",  // verify
+        headingLabel = "Заголовок",
+        mushaf = "Мусхаф",  // verify
+        changeInReader = "Измените это в параметрах чтения Корана.",
+    ),
         actionSave = "Сохранить",
         actionCancel = "Отмена",
         actionClose = "Закрыть",
@@ -3491,6 +3773,7 @@ val RussianStrings = UiStrings(
 )
 
 val GermanStrings = UiStrings(
+
     appName = "SALAH",
     navToday = "Heute",
     navPrayer = "Gebet",
@@ -3607,6 +3890,40 @@ val GermanStrings = UiStrings(
             previousMonth = "Vorheriger Monat", // verify
     ),
     more = UiStringsMore(
+reader = ReaderStrings(
+        openIndex = "Verzeichnis öffnen",
+        immersiveMode = "Immersiver Modus",
+        exitImmersive = "Immersiven Modus verlassen",
+        showControls = "Steuerung anzeigen",
+        saveThisLocation = "Diesen Vers speichern",  // verify
+        layoutPerPage = "Seite für Seite",  // verify
+        layoutContinuousSurah = "Fortlaufende Surea",  // verify
+        scrollDirection = "Scrollrichtung",
+        previousPage = "Vorherige Seite",
+        nextPage = "Nächste Seite",
+        perVerseTitle = "Jeden Vers einzeln",  // verify
+        perVerseDescription = "Lernmodus: Jeder Vers hat seine eigene Referenz und eigene Aktionen, sichtbar bei Auswahl.",  // verify
+        scrollVertical = "Vertikal",
+        scrollHorizontal = "Horizontal",
+        backgroundColour = "Hintergrund",
+        backgroundDefault = "App-Standard",
+        pinchBehaviour = "Auf Fingerbreite",
+        pinchZoomView = "Ansicht vergrößern",
+        pinchTextSize = "Schriftgröße ändern",
+        arabicTextSize = "Arabische Schriftgröße",
+        translationSize = "Übersetzungsgröße",
+        quranFont = "Koran-Schriftart",
+        fontNotBundled = "Noch nicht enthalten",
+        showTranslationLabelShort = "Übersetzung anzeigen",  // verify
+        indexSurahs = "Suren",  // verify
+        indexSaved = "Gespeichert",
+        indexSearch = "Suchen",
+        emptySavedTitle = "Noch nichts gespeichert",  // verify
+        emptySavedMessage = "Speichere beim Lesen einen Vers, er wartet hier auf dich.",  // verify
+        headingLabel = "Überschrift",
+        mushaf = "Mushaf",  // verify
+        changeInReader = "Ändere das in den Lesoptionen des Mushaf.",
+    ),
         actionSave = "Speichern",
         actionCancel = "Abbrechen",
         actionClose = "Schließen",
@@ -3843,6 +4160,7 @@ val GermanStrings = UiStrings(
 )
 
 val SpanishStrings = UiStrings(
+
     appName = "SALAH",
     navToday = "Hoy",
     navPrayer = "Oración",
@@ -3959,6 +4277,40 @@ val SpanishStrings = UiStrings(
             previousMonth = "Mes anterior", // verify
     ),
     more = UiStringsMore(
+reader = ReaderStrings(
+        openIndex = "Abrir el índice",
+        immersiveMode = "Modo inmersivo",
+        exitImmersive = "Salir del modo inmersivo",
+        showControls = "Mostrar los controles",
+        saveThisLocation = "Guardar este versículo",  // verify
+        layoutPerPage = "Página por página",  // verify
+        layoutContinuousSurah = "Sura continua",  // verify
+        scrollDirection = "Dirección de desplazamiento",
+        previousPage = "Página anterior",
+        nextPage = "Página siguiente",
+        perVerseTitle = "Separar cada versículo",  // verify
+        perVerseDescription = "Modo de estudio: cada versículo tiene su referencia y sus acciones, reveladas al seleccionarlo.",  // verify
+        scrollVertical = "Vertical",
+        scrollHorizontal = "Horizontal",
+        backgroundColour = "Fondo",
+        backgroundDefault = "Predeterminado de la app",
+        pinchBehaviour = "El pellizco hace",
+        pinchZoomView = "Ampliar la vista",
+        pinchTextSize = "Cambiar el tamaño del texto",
+        arabicTextSize = "Tamaño del texto árabe",
+        translationSize = "Tamaño de la traducción",
+        quranFont = "Fuente del Corán",
+        fontNotBundled = "Aún no incluida",
+        showTranslationLabelShort = "Mostrar la traducción",  // verify
+        indexSurahs = "Suras",  // verify
+        indexSaved = "Guardados",
+        indexSearch = "Buscar",
+        emptySavedTitle = "Aún no has guardado nada",  // verify
+        emptySavedMessage = "Guarda un versículo al leer y te estará esperando aquí.",  // verify
+        headingLabel = "Título",
+        mushaf = "Mushaf",  // verify
+        changeInReader = "Cámbialo en las opciones de lectura del Mushaf.",
+    ),
         actionSave = "Guardar",
         actionCancel = "Cancelar",
         actionClose = "Cerrar",

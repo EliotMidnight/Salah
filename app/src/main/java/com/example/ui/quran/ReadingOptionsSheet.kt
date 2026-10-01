@@ -104,41 +104,57 @@ fun ReadingOptionsSheet(
         onDismiss = onDismiss
     ) {
         // --- Layout -----------------------------------------------------------
+        // Two, because there are two surfaces. Anything that used to be a third
+        // - "per ayah" - is now the per-page mushaf with verses broken out,
+        // which is what it was drawing all along.
         GroupLabel(strings.more.selectLayoutTitle)
         Spacer(Modifier.height(space.xs))
         SegmentedOptions(
             options = listOf(
-                strings.more.reader.layoutPerAyah,
                 strings.more.reader.layoutPerPage,
                 strings.more.reader.layoutContinuousSurah
             ),
-            selectedIndex = when (options.layout) {
-                QuranReadingLayout.PER_AYAH -> 0
-                QuranReadingLayout.PER_PAGE -> 1
-                QuranReadingLayout.CONTINUOUS -> 2
-            },
+            selectedIndex = if (options.layout == QuranReadingLayout.PER_PAGE) 0 else 1,
             onSelect = { index ->
-                val next = when (index) {
-                    0 -> QuranReadingLayout.PER_AYAH
-                    1 -> QuranReadingLayout.PER_PAGE
-                    else -> QuranReadingLayout.CONTINUOUS
-                }
-                onOptionsChange(options.withLayout(next))
+                onOptionsChange(
+                    options.copy(
+                        layout = if (index == 0) {
+                            QuranReadingLayout.PER_PAGE
+                        } else {
+                            QuranReadingLayout.CONTINUOUS
+                        }
+                    )
+                )
             }
         )
 
+        // --- Verse presentation -----------------------------------------------
+        // Applies to whichever layout is above. Not a mode of its own.
+        Spacer(Modifier.height(space.xl))
+        ToggleRow(
+            title = strings.more.reader.perVerseTitle,
+            subtitle = strings.more.reader.perVerseDescription,
+            checked = options.perVerse,
+            onCheckedChange = { onOptionsChange(options.copy(perVerse = it)) },
+            testTag = "options_per_verse"
+        )
+
         // --- Axis -------------------------------------------------------------
+        // Always both. The old sheet disabled horizontal while continuous was
+        // chosen and printed a line explaining why, on the grounds that text
+        // without page breaks cannot scroll sideways. It can - it is one wide
+        // column you pan across - so there is nothing left to explain and
+        // nothing left to disable.
         Spacer(Modifier.height(space.xl))
         GroupLabel(strings.more.reader.scrollDirection)
         Spacer(Modifier.height(space.xs))
-        val horizontalAllowed = options.layout != QuranReadingLayout.CONTINUOUS
         SegmentedOptions(
             options = listOf(strings.more.reader.scrollVertical, strings.more.reader.scrollHorizontal),
             selectedIndex = if (options.scroll == QuranScrollDirection.VERTICAL) 0 else 1,
             onSelect = { index ->
                 onOptionsChange(
-                    options.withScroll(
-                        if (index == 0) {
+                    options.copy(
+                        scroll = if (index == 0) {
                             QuranScrollDirection.VERTICAL
                         } else {
                             QuranScrollDirection.HORIZONTAL
@@ -147,14 +163,6 @@ fun ReadingOptionsSheet(
                 )
             }
         )
-        if (!horizontalAllowed) {
-            Spacer(Modifier.height(space.xs))
-            Text(
-                text = strings.more.reader.continuousNeedsVertical,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
 
         // --- Arabic text ------------------------------------------------------
         Spacer(Modifier.height(space.xl))

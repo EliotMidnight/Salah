@@ -9,58 +9,187 @@ import org.junit.Test
  * The reader's own invariants.
  *
  * These are pure functions over the options value, and they are the rules the
- * UI depends on being true: that a pinch cannot leave a size the slider cannot
- * express, and that no combination of the three mode controls can produce a
- * reader that does not scroll.
+ * UI depends on being true:
+ *
+ * - a pinch cannot leave a size the slider cannot express;
+ * - every combination of layout, axis and per-verse is reachable and none of
+ *   them repairs another;
+ * - the retired `per_ayah` layout survives a reinstall as the thing it was
+ *   actually drawing.
  */
 class QuranReadingOptionsTest {
 
-    @Test
-    fun `continuous layout forces vertical scrolling`() {
-        val options = QuranReadingOptions(
-            layout = QuranReadingLayout.PER_AYAH,
-            scroll = QuranScrollDirection.HORIZONTAL
-        )
-        val continuous = options.withLayout(QuranReadingLayout.CONTINUOUS)
-
-        assertEquals(QuranReadingLayout.CONTINUOUS, continuous.layout)
-        assertEquals(
-            "Continuous text cannot turn sideways, so the axis must come back",
-            QuranScrollDirection.VERTICAL,
-            continuous.scroll
-        )
-    }
+    // --- Independence ---------------------------------------------------
+    //
+    // The whole point of the current model is that these four are independent
+    // answers. Each test below changes one and asserts the other three are
+    // untouched, because the failure mode being guarded against is a change
+    // that quietly drags a second control with it.
 
     @Test
-    fun `horizontal scroll with continuous layout falls back to per ayah`() {
-        // Reaching this state is only possible from storage written by an older
-        // build or hand-edited prefs, which is exactly why withScroll repairs it
-        // rather than trusting the caller.
-        val illegal = QuranReadingOptions(
-            layout = QuranReadingLayout.CONTINUOUS,
-            scroll = QuranScrollDirection.VERTICAL
-        )
-        val horizontal = illegal.withScroll(QuranScrollDirection.HORIZONTAL)
-
-        assertEquals(QuranScrollDirection.HORIZONTAL, horizontal.scroll)
-        assertEquals(QuranReadingLayout.PER_AYAH, horizontal.layout)
-    }
-
-    @Test
-    fun `per page keeps the axis it was given`() {
-        listOf(QuranReadingLayout.PER_AYAH, QuranReadingLayout.PER_PAGE).forEach { layout ->
-            listOf(
-                QuranScrollDirection.VERTICAL,
-                QuranScrollDirection.HORIZONTAL
-            ).forEach { scroll ->
-                val result = QuranReadingOptions()
-                    .withLayout(layout)
-                    .withScroll(scroll)
-                assertEquals(layout, result.layout)
-                assertEquals(scroll, result.scroll)
+    fun `every layout keeps the axis it was given`() {
+        QuranReadingLayout.entries.forEach { layout ->
+            QuranScrollDirection.entries.forEach { scroll ->
+                val options = QuranReadingOptions(layout = layout, scroll = scroll)
+                assertEquals(layout, options.layout)
+                assertEquals(scroll, options.scroll)
             }
         }
     }
+
+    @Test
+    fun `continuous text can scroll sideways`() {
+        // This combination is the one the old model refused to allow, on the
+        // grounds that text with no page breaks cannot scroll sideways. It can:
+        // it is one wide column you pan across. If this assertion ever fails,
+        // something has reintroduced a rule that rejects a real reading.
+        val options = QuranReadingOptions(
+            layout = QuranReadingLayout.CONTINUOUS,
+            scroll = QuranScrollDirection.HORIZONTAL
+        )
+
+        assertEquals(QuranScrollDirection.HORIZONTAL, options.scroll)
+        assertEquals(QuranReadingLayout.CONTINUOUS, options.layout)
+    }
+
+    @Test
+    fun `per verse applies to both layouts independently of the axis`() {
+        listOf(QuranReadingLayout.PER_PAGE, QuranReadingLayout.CONTINUOUS).forEach { layout ->
+            QuranScrollDirection.entries.forEach { scroll ->
+                val options = QuranReadingOptions(
+                    layout = layout,
+                    perVerse = true,
+                    scroll = scroll
+                )
+                assertEquals(
+                    "$layout/$scroll must be able to break verses out",
+                    layout,
+                    options.layout
+                )
+                assertTrue(options.perVerse)
+                assertEquals(scroll, options.scroll)
+            }
+        }
+    }
+
+    @Test
+    fun `all four layout axis and verse combinations are distinct and reachable`() {
+        // Guards against the shape of the old model, where some pairs could be
+        // expressed but not all, and the ones that could not were repaired into
+        // each other by normalise().
+        val reachable = QuranReadingLayout.entries.flatMap { layout ->
+            QuranScrollDirection.entries.map { scroll -> layout to scroll }
+        }
+
+        assertEquals(4, reachable.size)
+        assertEquals(
+            "each layout must offer both axes exactly once",
+            4,
+            reachable.toSet().size
+        )
+        reachable.forEach { (layout, scroll) ->
+            val options = QuranReadingOptions.normalise(
+                QuranReadingOptions(layout = layout, scroll = scroll)
+            )
+            assertEquals(
+                "normalise must not rewrite a legal combination",
+                layout,
+                options.layout
+            )
+            assertEquals(scroll, options.scroll)
+        }
+    }
+
+    // --- Defaults -------------------------------------------------------
+
+    @Test
+    fun `the default is the canonical mushaf, unbroken text, vertical`() {
+        val options = QuranReadingOptions()
+
+        assertEquals(QuranReadingLayout.PER_PAGE, options.layout)
+        assertFalse(options.perVerse)
+        assertEquals(QuranScrollDirection.VERTICAL, options.scroll)
+    }
+
+    // --- Legacy migration -----------------------------------------------
+
+    @Test
+    fun `the retired per ayah layout migrates to per page with verses broken out`() {
+        // This is what `per_ayah` was drawing: the per-page mushaf with each
+        // verse as its own unit. Migrating it to per-page + perVerse keeps the
+        // reader's appearance rather than resetting the reader to a default.
+        val migrated = QuranReadingOptions.normalise(
+            QuranReadingOptions(),
+            legacyLayoutKey = "per_ayah"
+        )
+
+        assertEquals(QuranReadingLayout.PER_PAGE, migrated.layout)
+        assertTrue(
+            "per_ayah meant broken-out verses, so the flag must come with it",
+            migrated.perVerse
+        )
+    }
+
+    @Test
+    fun `a legacy per ayah layout does not disturb the other preferences`() {
+        // Only the layout and the verse flag are implied by the old key. A
+        // reader who had chosen horizontal continuous text before upgrading had
+        // those repaired onto them by the old model; migrating must not silently
+        // change their text size, font or paper.
+        val before = QuranReadingOptions(
+            layout = QuranReadingLayout.CONTINUOUS,
+            scroll = QuranScrollDirection.HORIZONTAL,
+            arabicScale = 1.4f,
+            translationScale = 1.2f,
+            paper = QuranPaperTone.GREEN,
+            font = QuranFontFace.LATEEF,
+            showTranslation = true
+        )
+
+        val migrated = QuranReadingOptions.normalise(before, legacyLayoutKey = "per_ayah")
+
+        assertEquals(QuranReadingLayout.PER_PAGE, migrated.layout)
+        assertTrue(migrated.perVerse)
+        assertEquals(before.scroll, migrated.scroll)
+        assertEquals(before.arabicScale, migrated.arabicScale, 0.001f)
+        assertEquals(before.translationScale, migrated.translationScale, 0.001f)
+        assertEquals(before.paper, migrated.paper)
+        assertEquals(before.font, migrated.font)
+        assertEquals(before.showTranslation, migrated.showTranslation)
+    }
+
+    @Test
+    fun `a current layout key leaves the verse flag alone`() {
+        // The migration is one-way. Per-page with verses already broken out must
+        // not be re-migrated into something else, and a current key must not
+        // turn the flag on.
+        val off = QuranReadingOptions.normalise(
+            QuranReadingOptions(layout = QuranReadingLayout.PER_PAGE, perVerse = false),
+            legacyLayoutKey = "per_page"
+        )
+        assertFalse(off.perVerse)
+
+        // Already migrated in an earlier session: the flag is on and stays on.
+        val on = QuranReadingOptions.normalise(
+            QuranReadingOptions(layout = QuranReadingLayout.PER_PAGE, perVerse = true),
+            legacyLayoutKey = "per_page"
+        )
+        assertTrue(on.perVerse)
+        assertEquals(QuranReadingLayout.PER_PAGE, on.layout)
+    }
+
+    @Test
+    fun `per verse already true survives the legacy migration idempotently`() {
+        val once = QuranReadingOptions.normalise(
+            QuranReadingOptions(perVerse = true),
+            legacyLayoutKey = "per_ayah"
+        )
+        val twice = QuranReadingOptions.normalise(once, legacyLayoutKey = "per_ayah")
+
+        assertEquals(once, twice)
+    }
+
+    // --- Scale clamping -------------------------------------------------
 
     @Test
     fun `normalise clamps scales into the range the sliders express`() {
@@ -76,15 +205,17 @@ class QuranReadingOptionsTest {
     }
 
     @Test
-    fun `normalise repairs an illegal stored combination`() {
+    fun `normalise does not repair a legal stored combination`() {
         val stored = QuranReadingOptions(
             layout = QuranReadingLayout.CONTINUOUS,
-            scroll = QuranScrollDirection.HORIZONTAL
+            scroll = QuranScrollDirection.HORIZONTAL,
+            perVerse = true
         )
-        val repaired = QuranReadingOptions.normalise(stored)
 
-        assertEquals(QuranScrollDirection.VERTICAL, repaired.scroll)
+        assertEquals(stored, QuranReadingOptions.normalise(stored))
     }
+
+    // --- Keys -----------------------------------------------------------
 
     @Test
     fun `every layout key round trips`() {
@@ -93,10 +224,22 @@ class QuranReadingOptionsTest {
         }
         assertEquals(
             "an unknown key must not throw",
-            QuranReadingLayout.PER_AYAH,
+            QuranReadingLayout.PER_PAGE,
             QuranReadingLayout.fromKey("something-from-the-future")
         )
-        assertEquals(QuranReadingLayout.PER_AYAH, QuranReadingLayout.fromKey(null))
+        assertEquals(QuranReadingLayout.PER_PAGE, QuranReadingLayout.fromKey(null))
+    }
+
+    @Test
+    fun `the retired per ayah key is not selectable as a layout`() {
+        // It must migrate rather than resolve. If `fromKey("per_ayah")` ever
+        // returned a real layout, the flag migration in normalise would stop
+        // running and the reader would silently lose its per-verse setting.
+        assertFalse(QuranReadingLayout.entries.any { it.key == "per_ayah" })
+        assertEquals(
+            QuranReadingLayout.PER_PAGE,
+            QuranReadingLayout.fromKey("per_ayah")
+        )
     }
 
     @Test
@@ -108,6 +251,32 @@ class QuranReadingOptionsTest {
     }
 
     @Test
+    fun `the two pinch targets stay distinct`() {
+        // Resizing text and magnifying the view look the same on screen and are
+        // not: one reflows the line breaks, the other does not. A default that
+        // collapses them makes the setting meaningless.
+        assertFalse(QuranPinchTarget.TEXT_SIZE == QuranPinchTarget.VIEW_SCALE)
+        assertEquals(QuranPinchTarget.TEXT_SIZE, QuranPinchTarget.fromKey(null))
+    }
+
+    @Test
+    fun `magnification and text size are bounded separately`() {
+        // Magnification is temporary and view-only; text size is the persisted
+        // preference. They must not share a range, or one gesture would silently
+        // start writing the other.
+        assertFalse(
+            QuranReadingOptions.ViewScaleRange == QuranReadingOptions.ArabicScaleRange
+        )
+        assertEquals(1f, QuranReadingOptions.ViewScaleRange.start, 0.001f)
+        assertTrue(
+            "magnification that cannot magnify is not a feature",
+            QuranReadingOptions.ViewScaleRange.endInclusive > 1f
+        )
+    }
+
+    // --- Paper and type -------------------------------------------------
+
+    @Test
     fun `the wheel is exactly seven colours plus default`() {
         assertEquals(7, QuranPaperTone.wheel.size)
         assertEquals(7, QuranPaperTone.wheel.distinct().size)
@@ -117,32 +286,7 @@ class QuranReadingOptionsTest {
     }
 
     @Test
-    fun `isPaged is true whenever the page indicator has something to say`() {
-        val paged = mapOf(
-            QuranReadingLayout.PER_PAGE to QuranReadingOptions.ViewScaleRange,
-            QuranReadingLayout.CONTINUOUS to QuranReadingOptions.ViewScaleRange
-        )
-        // Explicit pairs, because the rule is about the *pair* not either half.
-        assertTrue(
-            QuranReadingOptions(layout = QuranReadingLayout.PER_PAGE, scroll = QuranScrollDirection.VERTICAL).isPaged
-        )
-        assertTrue(
-            QuranReadingOptions(layout = QuranReadingLayout.PER_AYAH, scroll = QuranScrollDirection.HORIZONTAL).isPaged
-        )
-        assertFalse(
-            QuranReadingOptions(layout = QuranReadingLayout.PER_AYAH, scroll = QuranScrollDirection.VERTICAL).isPaged
-        )
-        assertFalse(
-            QuranReadingOptions(layout = QuranReadingLayout.CONTINUOUS, scroll = QuranScrollDirection.VERTICAL).isPaged
-        )
-        assertTrue(paged.isNotEmpty())
-    }
-
-    @Test
     fun `the bundled faces are a strict subset of the offered faces`() {
-        // Offered but not bundled is the normal state: the picker shows all
-        // seven and marks the ones without a file. What must never happen is
-        // the reverse - a bundled face that is not selectable.
         assertTrue(QuranFontFace.bundled.isNotEmpty())
         assertTrue(QuranFontFace.bundled.all { it in QuranFontFace.entries })
         assertTrue(QuranFontFace.entries.size > QuranFontFace.bundled.size)
@@ -168,7 +312,6 @@ class QuranReadingOptionsTest {
                 face.lineHeightFactor <= 3f
             )
         }
-        // Nastaliq descenders need materially more room than a Naskh face.
         assertTrue(
             QuranFontFace.NASKH_NASTALEEQ.lineHeightFactor >
                 QuranFontFace.AMIRI.lineHeightFactor

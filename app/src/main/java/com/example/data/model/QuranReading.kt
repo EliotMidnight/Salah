@@ -1,31 +1,40 @@
 package com.example.data.model
 
 /**
- * How the text of a passage is presented.
+ * How much of the text is on screen at once.
  *
- * Three layouts, because they are three different tasks rather than three
+ * Exactly two, because these are two genuinely different surfaces and not two
  * preferences:
  *
- * - [PER_AYAH] gives every verse its own block with its actions attached. This
- *   is the working mode: you can read one verse, play it, save it, copy it.
- * - [PER_PAGE] is the real mushaf. It follows the canonical 604-page
- *   partition, so a page boundary is where the printed page actually breaks,
- *   and a page can begin or end mid-surah.
- * - [CONTINUOUS] renders a whole surah as one flowing surface with no breaks
- *   at all, which is what reading straight through actually feels like.
+ * - [PER_PAGE] is the real mushaf: the canonical 604-page partition, one page at
+ *   a time. A page may begin or end mid-surah, exactly as the printed one does.
+ * - [CONTINUOUS] is a whole surah as one unbroken flow, with no page breaks at
+ *   all - which is what reading straight through actually feels like.
  *
- * [CONTINUOUS] only exists in one scroll axis - see [QuranScrollDirection].
+ * How a verse is *presented* - as its own selectable unit, or as part of the
+ * running text - is not a layout. It is [QuranReadingOptions.perVerse], which
+ * applies to either of these, because it is a separate question and answering it
+ * with a third layout is what produced "per ayah", "horizontal per page" and
+ * every other combination pretending to be its own mode.
  */
 enum class QuranReadingLayout(val key: String) {
-    PER_AYAH("per_ayah"),
     PER_PAGE("per_page"),
     CONTINUOUS("continuous");
 
     companion object {
         fun fromKey(key: String?): QuranReadingLayout =
-            entries.firstOrNull { it.key == key } ?: PER_AYAH
+            entries.firstOrNull { it.key == key } ?: PER_PAGE
     }
 }
+
+/**
+ * The retired `per_ayah` layout, stored by earlier builds.
+ *
+ * A per-ayah layout is not a third surface - it is the per-page mushaf with
+ * verses broken out - so it migrates to exactly that rather than being dropped
+ * on the floor or kept as an entry the reader can still select.
+ */
+internal const val LegacyPerAyahKey = "per_ayah"
 
 /**
  * Which way the passage moves under the finger.
@@ -163,8 +172,21 @@ enum class QuranFontFace(
  * The reader's preferences, as one value.
  *
  * Grouped so that a change to any of them is a single write and a single
- * recomposition, and so that the invariants below can be enforced in exactly
- * one place instead of at every call site.
+ * recomposition, and so that [normalise] has exactly one place to enforce the
+ * invariants.
+ *
+ * ### Four independent answers, not one mode
+ *
+ * [layout] and [perVerse] decide what is on screen; [scroll] decides which way it
+ * moves; [pinchTarget] decides what a pinch means. None of them constrains any
+ * other, and there is deliberately no code here that repairs one by changing
+ * another. That repair is what made the reader offer "horizontal per page" and
+ * "vertical continuous" as though they were modes a reader had to choose between:
+ * choosing continuous used to silently drag the axis back to vertical, because
+ * the model had decided continuous text *cannot* scroll sideways.
+ *
+ * It can. It is one wide column you pan across. So there are two layouts, two
+ * axes, and every combination is reachable and behaves as itself.
  *
  * [arabicScale] and [translationScale] are multiples, not point sizes, and they
  * are clamped to [ArabicScaleRange] / [TranslationScaleRange] on the way in -
@@ -172,7 +194,9 @@ enum class QuranFontFace(
  * user cannot undo.
  */
 data class QuranReadingOptions(
-    val layout: QuranReadingLayout = QuranReadingLayout.CONTINUOUS,
+    val layout: QuranReadingLayout = QuranReadingLayout.PER_PAGE,
+    /** Break every verse out as its own selectable unit. Works in either layout. */
+    val perVerse: Boolean = false,
     val scroll: QuranScrollDirection = QuranScrollDirection.VERTICAL,
     val pinchTarget: QuranPinchTarget = QuranPinchTarget.TEXT_SIZE,
     val paper: QuranPaperTone = QuranPaperTone.DEFAULT,
@@ -181,38 +205,6 @@ data class QuranReadingOptions(
     val translationScale: Float = 1f,
     val showTranslation: Boolean = false
 ) {
-    /** True when the current layout is drawn as discrete screens, not a scroll. */
-    val isPaged: Boolean
-        get() = layout == QuranReadingLayout.PER_PAGE || scroll == QuranScrollDirection.HORIZONTAL
-
-    /**
-     * Applies a layout change, repairing anything it makes impossible.
-     *
-     * Continuous text has no page boundaries and no page turns, so it cannot
-     * scroll sideways. Asking for it while horizontal would otherwise leave the
-     * reader with a gesture that does nothing - so the axis is pulled back to
-     * vertical, and the scroll setting is reported back to the caller so the
-     * segmented control shows what actually happened rather than what was asked.
-     */
-    fun withLayout(next: QuranReadingLayout): QuranReadingOptions {
-        if (next != QuranReadingLayout.CONTINUOUS) return copy(layout = next)
-        return copy(layout = next, scroll = QuranScrollDirection.VERTICAL)
-    }
-
-    /** Applies a scroll change, repairing anything it makes impossible. */
-    fun withScroll(next: QuranScrollDirection): QuranReadingOptions = when {
-        next == QuranScrollDirection.HORIZONTAL &&
-            layout == QuranReadingLayout.CONTINUOUS -> copy(
-            // Reached from an illegal state rather than through the controls.
-            // Continuous survives by demoting to per-ayah, which is the layout
-            // closest to it that can turn pages.
-            layout = QuranReadingLayout.PER_AYAH,
-            scroll = next
-        )
-
-        else -> copy(scroll = next)
-    }
-
     companion object {
         val ArabicScaleRange = 0.7f..2.0f
         val TranslationScaleRange = 0.8f..1.8f
@@ -226,18 +218,29 @@ data class QuranReadingOptions(
         /** The scale a pinch on the *view* is allowed to reach. */
         val ViewScaleRange = 1.0f..2.2f
 
-        fun normalise(options: QuranReadingOptions): QuranReadingOptions {
-            val base = QuranReadingOptions()
-            return options.copy(
-                arabicScale = options.arabicScale.coerceIn(ArabicScaleRange),
-                translationScale = options.translationScale.coerceIn(TranslationScaleRange),
-                // Run both repairs so a stored value from an older build cannot
-                // restore an illegal combination on launch.
-                layout = options.layout.takeIf { it != QuranReadingLayout.CONTINUOUS } ?: base.layout,
-                scroll = options.scroll.takeIf {
-                    it == QuranScrollDirection.VERTICAL || options.layout != QuranReadingLayout.CONTINUOUS
-                } ?: QuranScrollDirection.VERTICAL
-            )
-        }
+        /**
+         * Builds options from stored values, migrating anything an older build
+         * wrote.
+         *
+         * Two migrations, both one-way:
+         *
+         * - a stored `per_ayah` layout becomes the per-page mushaf with
+         *   [perVerse] on, which is what that layout was drawing;
+         * - the scales are re-clamped, so a value that a previous build could
+         *   write but this one cannot express cannot survive a reinstall.
+         */
+        fun normalise(
+            options: QuranReadingOptions,
+            legacyLayoutKey: String? = null
+        ): QuranReadingOptions = options.copy(
+            layout = if (legacyLayoutKey == LegacyPerAyahKey) {
+                QuranReadingLayout.PER_PAGE
+            } else {
+                options.layout
+            },
+            perVerse = options.perVerse || legacyLayoutKey == LegacyPerAyahKey,
+            arabicScale = options.arabicScale.coerceIn(ArabicScaleRange),
+            translationScale = options.translationScale.coerceIn(TranslationScaleRange)
+        )
     }
 }

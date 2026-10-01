@@ -79,6 +79,7 @@ class SalahRepository(
 
     private companion object Keys {
         const val KEY_QURAN_LAYOUT = "pref_quran_layout"
+        const val KEY_QURAN_PER_VERSE = "pref_quran_per_verse"
         const val KEY_QURAN_SCROLL = "pref_quran_scroll"
         const val KEY_QURAN_PINCH = "pref_quran_pinch_target"
         const val KEY_QURAN_PAPER = "pref_quran_paper"
@@ -313,33 +314,46 @@ class SalahRepository(
     //
     // One value, persisted key by key. Grouping them in a single data class
     // ([QuranReadingOptions]) means the reader is handed a coherent set rather
-    // than seven independent flows that can disagree with each other - and
-    // [saveQuranReadingOptions] is the only writer, so the invariant repairs in
-    // `withLayout` / `withScroll` cannot be bypassed by a caller that forgets.
-    // -------------------------------------------------------------------------
+    // than seven independent flows that can disagree with each other.
+    //
+    // The invariants that do remain - the scales stay inside the range the
+    // sliders can express, and the retired per-ayah layout becomes per-page
+    // with verses broken out - live in [QuranReadingOptions.normalise], which
+    // both this loader and [saveQuranReadingOptions] go through. There are no
+    // rules about layout and axis any more, because there are no combinations
+    // to repair: both axes work in both layouts.
+    // ---------------------------------------------------------------------
 
-    private fun loadQuranReadingOptions(): QuranReadingOptions = QuranReadingOptions.normalise(
-        QuranReadingOptions(
-            layout = QuranReadingLayout.fromKey(prefs.getString(KEY_QURAN_LAYOUT, null)),
-            scroll = QuranScrollDirection.fromKey(prefs.getString(KEY_QURAN_SCROLL, null)),
-            pinchTarget = QuranPinchTarget.fromKey(prefs.getString(KEY_QURAN_PINCH, null)),
-            paper = QuranPaperTone.fromKey(prefs.getString(KEY_QURAN_PAPER, null)),
-            font = QuranFontFace.fromKey(prefs.getString(KEY_QURAN_FONT, null)),
-            // Migrated, not shared. The reader's Arabic size used to live in
-            // `pref_quran_scale`; it now lives with the rest of the reading
-            // options. Reading the old key on the way in means someone who set
-            // 130% before this change keeps 130% instead of silently snapping
-            // back to 100%. The two are then independent, and the old slider in
-            // Settings is a summary rather than a second writer.
-            arabicScale = if (prefs.contains(KEY_QURAN_ARABIC_SCALE)) {
-                prefs.getFloat(KEY_QURAN_ARABIC_SCALE, 1f)
-            } else {
-                prefs.getFloat("pref_quran_scale", 1f)
-            },
-            translationScale = prefs.getFloat(KEY_QURAN_TRANSLATION_SCALE, 1f),
-            showTranslation = prefs.getBoolean(KEY_QURAN_SHOW_TRANSLATION, false)
+    private fun loadQuranReadingOptions(): QuranReadingOptions {
+        // The raw key is read separately from the parsed layout because the one
+        // value that no longer parses - the retired per-ayah layout - still has
+        // to be recognised in order to migrate it.
+        val legacyLayoutKey = prefs.getString(KEY_QURAN_LAYOUT, null)
+        return QuranReadingOptions.normalise(
+            QuranReadingOptions(
+                layout = QuranReadingLayout.fromKey(legacyLayoutKey),
+                perVerse = prefs.getBoolean(KEY_QURAN_PER_VERSE, false),
+                scroll = QuranScrollDirection.fromKey(prefs.getString(KEY_QURAN_SCROLL, null)),
+                pinchTarget = QuranPinchTarget.fromKey(prefs.getString(KEY_QURAN_PINCH, null)),
+                paper = QuranPaperTone.fromKey(prefs.getString(KEY_QURAN_PAPER, null)),
+                font = QuranFontFace.fromKey(prefs.getString(KEY_QURAN_FONT, null)),
+                // Migrated, not shared. The reader's Arabic size used to live in
+                // `pref_quran_scale`; it now lives with the rest of the reading
+                // options. Reading the old key on the way in means someone who set
+                // 130% before this change keeps 130% instead of silently snapping
+                // back to 100%. The two are then independent, and the old slider in
+                // Settings is a summary rather than a second writer.
+                arabicScale = if (prefs.contains(KEY_QURAN_ARABIC_SCALE)) {
+                    prefs.getFloat(KEY_QURAN_ARABIC_SCALE, 1f)
+                } else {
+                    prefs.getFloat("pref_quran_scale", 1f)
+                },
+                translationScale = prefs.getFloat(KEY_QURAN_TRANSLATION_SCALE, 1f),
+                showTranslation = prefs.getBoolean(KEY_QURAN_SHOW_TRANSLATION, false)
+            ),
+            legacyLayoutKey = legacyLayoutKey
         )
-    )
+    }
 
     fun saveQuranReadingOptions(options: QuranReadingOptions) {
         // Normalised on the way in as well as on the way out. A value that
@@ -347,6 +361,7 @@ class SalahRepository(
         val safe = QuranReadingOptions.normalise(options)
         prefs.edit()
             .putString(KEY_QURAN_LAYOUT, safe.layout.key)
+            .putBoolean(KEY_QURAN_PER_VERSE, safe.perVerse)
             .putString(KEY_QURAN_SCROLL, safe.scroll.key)
             .putString(KEY_QURAN_PINCH, safe.pinchTarget.key)
             .putString(KEY_QURAN_PAPER, safe.paper.key)

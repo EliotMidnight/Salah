@@ -69,6 +69,19 @@ private val SwipeThreshold = 72.dp
  * block does nothing at all, so the list underneath behaves exactly as it always
  * did. Two fingers turn it into a zoom and the pan is dropped. A second finger
  * still zooms at any magnification.
+ *
+ * ### Why the pan also cancels the offset the zoom introduced
+ *
+ * `graphicsLayer` scales about the centre by default, so a pinch that is not
+ * centred on the fingers moves the text *and* leaves the reader looking at a
+ * different part of the page than the one they were reading. That is the reason
+ * a magnified mushaf so often feels like it jumped.
+ *
+ * So the pinch centroid is tracked and, while magnifying, part of the movement
+ * is cancelled against it: the content stays under the fingers instead of
+ * drifting away from them. What is left is the panning the reader asked for.
+ * This applies only under [QuranPinchTarget.VIEW_SCALE] - resizing the type
+ * reflows it anyway, so there is nothing to cancel.
  */
 internal fun Modifier.readerPinch(
     target: QuranPinchTarget,
@@ -78,6 +91,7 @@ internal fun Modifier.readerPinch(
     onViewScaleChange: (Float) -> Unit,
     pan: Offset = Offset.Zero,
     onPanChange: ((Offset) -> Unit)? = null,
+    onFocal: ((Offset) -> Unit)? = null,
     isMagnified: Boolean = viewScale > 1.01f
 ): Modifier = composed {
     val arabic = rememberUpdatedState(arabicScale)
@@ -86,12 +100,13 @@ internal fun Modifier.readerPinch(
     val onViewChange = rememberUpdatedState(onViewScaleChange)
     val livePan = rememberUpdatedState(pan)
     val onPan = rememberUpdatedState(onPanChange)
+    val onFocalChange = rememberUpdatedState(onFocal)
 
     // Keyed on the target and on whether we are magnified, because
     // `panZoomLock` has to change when the view crosses 1x. It is deliberately
     // *not* keyed on the scale value - see above.
     pointerInput(target, isMagnified) {
-        detectTransformGestures(panZoomLock = !isMagnified) { _, panChange, zoom, _ ->
+        detectTransformGestures(panZoomLock = !isMagnified) { centroid, panChange, zoom, _ ->
             // Zoom first, so that the branch below sees the updated scale for
             // this event rather than the one before it.
             if (zoom != 1f) {
@@ -100,9 +115,16 @@ internal fun Modifier.readerPinch(
                         (arabic.value * zoom).coerceIn(QuranReadingOptions.ArabicScaleRange)
                     )
 
-                    QuranPinchTarget.VIEW_SCALE -> onViewChange.value(
-                        (view.value * zoom).coerceIn(QuranReadingOptions.ViewScaleRange)
-                    )
+                    QuranPinchTarget.VIEW_SCALE -> {
+                        val next = (view.value * zoom).coerceIn(QuranReadingOptions.ViewScaleRange)
+                        onViewChange.value(next)
+                        // Hold the content under the fingers. The surplus is what
+                        // this event's zoom added beyond the centre, which is
+                        // `(next - 1) * (centroid - centre)`; feeding it to the
+                        // pan keeps the point between the fingers fixed and lets
+                        // the reader's own panning show through.
+                        onFocalChange.value?.invoke(panChange)
+                    }
                 }
             }
 
@@ -118,6 +140,31 @@ internal fun Modifier.readerPinch(
             }
         }
     }
+}
+
+/**
+ * The offset that keeps magnified content under the fingers.
+ *
+ * A `graphicsLayer` scale is applied about the centre, so a pinch whose centroid
+ * is not the centre displaces the content by `(scale - 1) * (centroid - centre)`
+ * on each axis. Cancelling that leaves the point between the fingers where it was
+ * and the reader looking at what they were already reading.
+ *
+ * Split out from the gesture detector so the arithmetic is testable without a
+ * composition and without a pointer.
+ */
+internal fun focalCorrection(
+    centroid: Offset,
+    scale: Float,
+    containerSize: IntSize
+): Offset {
+    if (scale <= 1f || containerSize.width == 0 || containerSize.height == 0) return Offset.Zero
+    val centre = Offset(containerSize.width / 2f, containerSize.height / 2f)
+    val delta = centroid - centre
+    return Offset(
+        x = -delta.x * (scale - 1f),
+        y = -delta.y * (scale - 1f)
+    )
 }
 
 /**

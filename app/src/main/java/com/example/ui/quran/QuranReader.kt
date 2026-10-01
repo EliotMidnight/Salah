@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -26,8 +27,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -39,6 +44,7 @@ import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -58,15 +64,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -75,6 +85,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -102,6 +114,8 @@ import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -167,20 +181,58 @@ fun QuranReader(
 
     var selectedAyah by rememberSaveable { mutableStateOf(0) }
 
-    // The page cursor for the mushaf layouts. Kept as its own state because the
-    // anchor is a verse and the mushaf is paginated by *page* - a page can begin
-    // in one surah and end in the next, so there is no verse that stands for
-    // "page 300". It is seeded from the anchor and written back to it on every
-    // turn, which is what keeps Continue Reading and bookmarks truthful.
-    var pageCursor by rememberSaveable(anchorPage) { mutableIntStateOf(anchorPage) }
+    // The page the reader is on.
+    //
+    // This is the single source of truth for "where am I", and the pager is
+    // told to follow it rather than the other way round.
+    //
+    // It is deliberately *not* keyed on [anchorPage] the way it used to be.
+    // Re-seeding it from the anchor on every anchor change meant the number in
+    // the pill was whatever the anchor said, while the pager stayed wherever it
+    // had been left - `rememberPagerState` reads `initialPage` once, at
+    // composition, and ignores it from then on. So picking a surah from the
+    // index moved the label and nothing else, and the pill reported a page the
+    // reader was not looking at.
+    //
+    // Now the anchor moves *this*, and this moves the pager. External
+    // navigation and the reader's own swipes both end up in one place.
+    var pageCursor by rememberSaveable { mutableIntStateOf(anchorPage) }
 
+    // Magnification is temporary and belongs to the *view*, not to the reading.
+    // It is deliberately not persisted: reopening the reader should show the text
+    // at the size the reader chose, not at whatever magnification they happened to
+    // leave behind. Changing layout or axis resets it too, because a
+    // magnification chosen for a page of continuous text makes no sense over one
+    // verse - but per-verse does not reset it, since that only changes how the
+    // same text is divided up. Leaving the Quran tab disposes this composition,
+    // which resets it for the original reason.
     val (viewScale, setViewScale) = rememberViewScale("${options.layout}-${options.scroll}")
     // The magnified view can be dragged around. Only meaningful while
     // VIEW_SCALE is the pinch target and the scale is above 1 - `readerPinch`
     // decides when to forward a drag, and `rememberPan` clamps it to the
     // surplus the scale actually created.
     var readingSize by remember { mutableStateOf(IntSize.Zero) }
+    // Where the pinch happened, so the magnified surface can stay under the
+    // fingers instead of drifting away from them as the layer scales about its
+    // centre. Reset whenever the scale returns to 1x, so a correction from a
+    // finished pinch is never reapplied to the next.
+    var pinchFocal by remember { mutableStateOf(Offset.Zero) }
+    val focalOffset = focalCorrection(pinchFocal, viewScale, readingSize)
     val (pan, setPan) = rememberPan(viewScale, readingSize)
+    // The reader's own pan plus the correction that keeps the pinch centred
+    // under the fingers - clamped as one value, not two.
+    //
+    // Clamping the sum rather than each part matters: the focal correction is
+    // not bounded by the same thing the reader's pan is. A pinch at the far
+    // corner of a surface magnified to the maximum asks for a correction
+    // exactly the size of the visible surplus, and adding it to an
+    // already-clamped pan would drag the reading past the edge of its own
+    // content, leaving a strip of blank paper with no way back. Clamped together,
+    // the reader gets the best correction the geometry allows and the surface
+    // never shows anything that is not text.
+    val appliedPan = remember(pan, focalOffset, viewScale, readingSize) {
+        clampPan(pan + focalOffset, viewScale, readingSize)
+    }
 
     val listState = rememberLazyListState()
     val pagePager = rememberPagerState(
@@ -188,13 +240,49 @@ fun QuranReader(
         pageCount = { TotalPages }
     )
 
-    // Re-seat on the anchor whenever the surah or layout changes, so changing
+    // How many non-verse items sit above the verses in the continuous layout.
+    //
+    // The continuous LazyColumns are `[heading, verse…]`, so the item index the
+    // scroll state reports is *one more* than the verse index. The progress
+    // writer used to index straight into the ayah list with it, which put the
+    // recorded position one verse ahead of the top of the screen for the whole
+    // of the surah, and sent `ayahs[1]` when the heading was showing at all.
+    val continuousHeadingOffset = 1
+
+    // Follow the anchor onto the pager.
+    //
+    // `rememberPagerState` only honours `initialPage` on its first composition,
+    // so nothing else was ever going to move it. This is what makes the index
+    // sheet work: picking a surah or a verse moves the anchor, this turns that
+    // into a page change, and the reader lands on it.
+    //
+    // Guarded on inequality so that the write-back below - which also changes
+    // the anchor - does not send the pager round again.
+    LaunchedEffect(anchorPage) {
+        val target = anchorPage.coerceIn(1, TotalPages)
+        if (pageCursor != target) {
+            pageCursor = target
+            pagePager.scrollToPage(target - 1)
+        }
+    }
+
+    // The pager is the other way into the same number. Kept up here rather than
+    // at the call site so that a programmatic jump and a swipe cannot both be
+    // fighting to set it.
+    LaunchedEffect(pagePager) {
+        snapshotFlow { pagePager.currentPage }.collect { page ->
+            val shown = page + 1
+            if (pageCursor != shown) pageCursor = shown
+        }
+    }
+
+    // Re-seat on the anchor whenever the surah or the layout changes, so changing
     // layout lands on the verse you were reading rather than the top.
     LaunchedEffect(surah.number, options.layout, options.scroll) {
         val target = state.activeReadingAyahNumber.coerceIn(1, ayahs.size.coerceAtLeast(1))
-        if (options.layout == QuranReadingLayout.PER_AYAH) {
+        if (options.layout == QuranReadingLayout.CONTINUOUS) {
             val index = ayahs.indexOfFirst { it.ayahNumber == target }.coerceAtLeast(0)
-            listState.scrollToItem(index)
+            listState.scrollToItem(index + continuousHeadingOffset)
         }
         selectedAyah = if (options.layout == QuranReadingLayout.CONTINUOUS) target else 0
     }
@@ -211,11 +299,30 @@ fun QuranReader(
     // Progress, debounced. This used to write to the database on every scroll
     // step, which is both slow and unnecessary: nobody needs their position
     // recorded more precisely than a verse.
+    //
+    // Both continuous axes scroll a real list - the horizontal one only *also*
+    // pans - so this observes it on either. Skipping the horizontal axis here
+    // was half of the page pill drifting away from the text: nothing was writing
+    // a position while reading sideways.
     LaunchedEffect(listState, options.layout, options.scroll) {
         if (options.layout == QuranReadingLayout.PER_PAGE) return@LaunchedEffect
         snapshotFlow { listState.firstVisibleItemIndex }
             .debounce(400)
-            .collect { index -> ayahs.getOrNull(index)?.let(onAyahViewed) }
+            .collect { index ->
+                ayahs.getOrNull(index - continuousHeadingOffset)?.let(onAyahViewed)
+            }
+    }
+
+    // What the reader is actually looking at, reported by whichever surface is
+    // on screen. This is what the page pill shows in the continuous layouts: not
+    // the anchor, which only moves when something writes to it, but the top of
+    // the visible text.
+    var browsedPage by remember { mutableIntStateOf(anchorPage) }
+    LaunchedEffect(pageCursor, options.layout) {
+        if (options.layout == QuranReadingLayout.PER_PAGE) browsedPage = pageCursor
+    }
+    val onVerseVisible: (Ayah) -> Unit = { verse ->
+        browsedPage = verse.pageNumber
     }
 
     // Continuous records progress from the selection itself, because there is
@@ -253,7 +360,8 @@ fun QuranReader(
                         viewScale = viewScale,
                         onViewScaleChange = setViewScale,
                         pan = pan,
-                        onPanChange = setPan
+                        onPanChange = setPan,
+                        onFocal = { pinchFocal = it }
                     )
                     // The view scale magnifies the reading surface and can then
                     // be dragged around. It is applied above the scroll
@@ -261,25 +369,86 @@ fun QuranReader(
                     // gesture surfaces along with it. `clip = false` keeps a
                     // magnified line from being cut off at the page edge while
                     // it is being dragged into view.
+                    //
+                    // `appliedPan` is the reader's own pan plus the correction
+                    // that keeps the pinch centred under the fingers, so the two
+                    // cannot fight over the same offset.
                     .graphicsLayer {
                         scaleX = viewScale
                         scaleY = viewScale
-                        translationX = pan.x
-                        translationY = pan.y
+                        translationX = appliedPan.x
+                        translationY = appliedPan.y
                         clip = false
                     }
                     .onSizeChanged { readingSize = it }
 
-                val verticalSwipe = if (options.isPaged) {
-                    Modifier
-                } else {
+                // A horizontal drag changes surah only where that axis is free.
+                //
+                // It is not free on the per-page mushaf, where a horizontal drag
+                // is a page turn, and not on the horizontal continuous axis,
+                // where it is a pan across the measure. Two drag consumers on
+                // one axis means neither of them works, so this is attached only
+                // in the one combination where the gesture is unclaimed.
+                val surahSwipe = if (options.layout == QuranReadingLayout.CONTINUOUS &&
+                    options.scroll == QuranScrollDirection.VERTICAL
+                ) {
                     Modifier.swipeToChangeSurah(surah.number, onChange = onSelectSurah)
+                } else {
+                    Modifier
                 }
 
                 when {
-                    options.layout == QuranReadingLayout.CONTINUOUS -> ContinuousSurah(
+                    // ---- Per-page mushaf: one page at a time, either axis ----
+                    //
+                    // The axis is read straight off the option rather than
+                    // branched on here. An earlier version had two separate
+                    // branches - one hardcoding HORIZONTAL, the other
+                    // hardcoding VERTICAL - which is one more place for the axis
+                    // and the layout to disagree about what the reader should
+                    // show, and one more place to forget to update.
+                    options.layout == QuranReadingLayout.PER_PAGE ->
+                        MushafPager(
+                            pagerState = pagePager,
+                            orientation = options.scroll,
+                            options = options,
+                            ink = ink,
+                            accent = accent,
+                            muted = muted,
+                            selectedAyah = selectedAyah,
+                            state = state,
+                            onSelectAyah = { selectedAyah = it },
+                            onToggleBookmark = onToggleBookmark,
+                            onTogglePlayAyah = onTogglePlayAyah,
+                            modifier = gesture.fillMaxSize()
+                        )
+
+                    // ---- Continuous surah, verse by verse, either axis ----
+                    options.layout == QuranReadingLayout.CONTINUOUS && options.perVerse ->
+                        ContinuousPerVerse(
+                            surah = surah,
+                            ayahs = ayahs,
+                            listState = listState,
+                            selectedAyah = selectedAyah,
+                            onSelectAyah = { selectedAyah = it },
+                            options = options,
+                            ink = ink,
+                            accent = accent,
+                            muted = muted,
+                            state = state,
+                            onToggleBookmark = onToggleBookmark,
+                            onTogglePlayAyah = onTogglePlayAyah,
+                            onVerseVisible = onVerseVisible,
+                            modifier = gesture.then(surahSwipe).fillMaxSize()
+                        )
+
+                    // ---- Continuous surah: one unbroken flow ----
+                    // One component for both axes. The axis is read inside it,
+                    // and it changes only the measure and the pan container -
+                    // never the arrangement of the text.
+                    else -> ContinuousSurah(
                         surah = surah,
                         ayahs = ayahs,
+                        listState = listState,
                         selectedAyah = selectedAyah,
                         onSelectAyah = { selectedAyah = it },
                         options = options,
@@ -289,46 +458,10 @@ fun QuranReader(
                         state = state,
                         onToggleBookmark = onToggleBookmark,
                         onTogglePlayAyah = onTogglePlayAyah,
-                        modifier = gesture.then(verticalSwipe).fillMaxSize()
-                    )
-
-                    // Per ayah is one column either way. A horizontal pager here
-                    // put a single verse on the whole screen and turned the
-                    // rest of the surah into a carousel, which is a slideshow
-                    // and not a page of reading - so both axes now render the
-                    // same stack of verses, filling the page.
-                    options.layout == QuranReadingLayout.PER_AYAH -> PerAyahList(
-                        surah = surah,
-                        ayahs = ayahs,
-                        listState = listState,
-                        options = options,
-                        ink = ink,
-                        accent = accent,
-                        muted = muted,
-                        state = state,
-                        onToggleBookmark = onToggleBookmark,
-                        onTogglePlayAyah = onTogglePlayAyah,
-                        modifier = gesture.then(verticalSwipe).fillMaxSize()
-                    )
-
-                    options.scroll == QuranScrollDirection.HORIZONTAL -> MushafPager(
-                        pagerState = pagePager,
-                        options = options,
-                        ink = ink,
-                        accent = accent,
-                        muted = muted,
-                        onPageShown = { pageCursor = it + 1 },
-                        modifier = gesture.fillMaxSize()
-                    )
-
-                    else -> MushafList(
-                        listState = listState,
-                        options = options,
-                        ink = ink,
-                        accent = accent,
-                        muted = muted,
-                        onPageShown = { pageCursor = it + 1 },
-                        modifier = gesture.then(verticalSwipe).fillMaxSize()
+                        onVerseVisible = onVerseVisible,
+                        modifier = gesture
+                            .then(surahSwipe)
+                            .fillMaxSize()
                     )
                 }
             }
@@ -345,8 +478,7 @@ fun QuranReader(
 
             ReaderControls(
                 surah = surah,
-                anchorPage = anchorPage,
-                pageCursor = pageCursor,
+                browsedPage = browsedPage,
                 layout = options.layout,
                 options = options,
                 ink = ink,
@@ -403,17 +535,12 @@ fun QuranReader(
                 )
             }
 
-            // The page tag. Only in the layouts where a page is a thing the
-            // reader can lose track of, and only while the controls are up -
-            // it exists to answer "which page am I on", and the moment the user
-            // is reading rather than navigating, it is noise.
-            if (!immersive && options.isPaged) {
+            // The page tag. Only on the per-page mushaf - the one layout where a page is
+            // a thing the reader can lose track of - and only while the controls
+            // are up. Continuous reading has no page to name.
+            if (!immersive && options.layout == QuranReadingLayout.PER_PAGE) {
                 PageTag(
-                    page = if (options.layout == QuranReadingLayout.PER_PAGE) {
-                        pageCursor
-                    } else {
-                        anchorPage
-                    },
+                    page = browsedPage,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = space.xxl)
@@ -444,8 +571,7 @@ private const val TotalPages = 604
 @Composable
 private fun ReaderControls(
     surah: Surah,
-    anchorPage: Int,
-    pageCursor: Int,
+    browsedPage: Int,
     layout: QuranReadingLayout,
     options: QuranReadingOptions,
     ink: Color,
@@ -486,12 +612,12 @@ private fun ReaderControls(
             ) {
                 IndexPill(
                     surah = surah,
-                    page = if (layout == QuranReadingLayout.PER_PAGE) {
-                        pageCursor
-                    } else {
-                        anchorPage
-                    },
-                    showPage = layout == QuranReadingLayout.PER_PAGE,
+                    // The page the reader is actually on, in every layout. This
+                    // used to be the page cursor for the mushaf and the *anchor*
+                    // for the continuous layouts, which meant the number changed
+                    // meaning with the layout and lagged the text in both.
+                    page = browsedPage,
+                    showPage = true,
                     ink = ink,
                     muted = muted,
                     onClick = onOpenIndex,
@@ -726,64 +852,81 @@ private fun PageTag(page: Int, modifier: Modifier = Modifier) {
 // ---------------------------------------------------------------------------
 
 /**
- * The surah's identity block.
+ * The surah's name, written straight onto the paper.
  *
- * Kept from the previous reader, because it was already right: the Arabic name
- * in the accent at display size is the one place this screen uses the accent at
- * headline scale, which is what makes a surah feel like an opening rather than
- * a list entry, and the basmalah is separated from it by more space than
- * anything else on the page.
+ * This used to be a card: a centred column with the Arabic name at display
+ * size, the English name, the meaning of the name, the verse count and
+ * revelation place, then the basmalah - a block roughly a third of a phone
+ * screen tall, before a single word of the surah. It was repeated in every
+ * layout, so it was paid for four times over, and in the horizontal continuous
+ * mode it sat in a column of its own, so panning across the surah meant panning
+ * across the heading first.
+ *
+ * None of it was wrong as *content* and all of it was wrong as *chrome*. The
+ * reader is a reading surface, not a chapter opening, and the surah is already
+ * named in the pill and in the index. So the heading is now three lines on the
+ * background - name, meaning, count - with the basmalah kept because it is
+ * part of the text rather than a label, and the whole block given a modest
+ * bottom margin so the first verse does not run into it.
+ *
+ * The heading semantics stay, because a screen reader still needs to be able to
+ * jump to the surah name when navigating a page of Arabic.
  */
 @Composable
 private fun SurahHeading(surah: Surah, ink: Color, muted: Color, modifier: Modifier = Modifier) {
     val space = Space.current
     val strings = LocalStrings.current
 
+    // The controls row floats over the top of the reading surface - it is an
+    // overlay, not a bar the content is laid out beneath. Without this the
+    // heading's first line sits behind the index pill and the immersive button.
+    //
+    // Reserved in both states rather than only when the controls are up, because
+    // the immersive toggle stays visible in immersive mode too, and a heading
+    // that shifted when the controls hid would move the text under the reader's
+    // eye as they toggled it.
+    val topInset = statusBarInset() + MaterialTheme.layoutMetrics.minTouchTarget +
+        Space.current.lg
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = space.lg)
+            .padding(top = topInset, bottom = space.lg)
             .surahHeading(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "سُورَةُ ${surah.arabicName}",
-            style = MaterialTheme.typography.headlineMedium,
+            text = surah.arabicName,
+            style = MaterialTheme.typography.titleLarge,
             fontFamily = ArabicFamily,
-            color = MaterialTheme.colorScheme.primary,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(space.xs))
-        Text(
-            text = surah.englishName,
-            style = MaterialTheme.typography.titleMedium,
             color = ink,
             textAlign = TextAlign.Center
         )
         Text(
-            text = surah.englishTranslation,
-            style = MaterialTheme.typography.bodySmall,
-            color = muted,
+            text = surah.englishName,
+            style = MaterialTheme.typography.bodyMedium,
+            color = ink,
             textAlign = TextAlign.Center
         )
-        Spacer(Modifier.height(space.xs))
         Text(
-            text = "${strings.more.verseCount.format(surah.totalVerses)} · " +
+            text = "${surah.englishTranslation} · " +
+                "${strings.more.verseCount.format(surah.totalVerses)} · " +
                 if (surah.revelationType == RevelationType.MECCAN) {
                     strings.meccan
                 } else {
                     strings.medinan
                 },
             style = MaterialTheme.typography.labelSmall,
-            color = muted
+            color = muted,
+            textAlign = TextAlign.Center
         )
         // Al-Fatihah opens with the basmalah as its first verse, so showing it
         // separately would print it twice. At-Tawbah has none at all.
         if (surah.number != 1 && surah.number != 9) {
-            Spacer(Modifier.height(space.lg))
+            Spacer(Modifier.height(space.md))
             Text(
-                text = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ",
-                style = MaterialTheme.typography.headlineSmall,
+                text = "\u0628\u0650\u0633\u0652\u0645\u0650 \u0671\u0644\u0644\u0651\u064e\u0647\u0650 \u0671\u0644\u0631\u0651\u064e\u062d\u0652\u0645\u064e\u0646\u0650 \u0671\u0644\u0631\u0651\u064e\u062d\u0650\u064a\u0645\u0650",
+                style = MaterialTheme.typography.titleMedium,
                 fontFamily = ArabicFamily,
                 fontWeight = FontWeight.Normal,
                 color = ink,
@@ -848,9 +991,11 @@ private fun FlowingTextSurface(
         }
     }
 
-    Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        shape = QuranShape.card,
+    // Straight onto the paper. See the note on [PerVerseUnit] - the reading
+    // surface already has a background wash, and a second surface on top of it
+    // is a card by another name. The text is the thing that should carry the
+    // eye, so nothing is drawn behind it.
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .testTag("flowing_text_surface")
@@ -862,6 +1007,29 @@ private fun FlowingTextSurface(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(Space.current.xl)
+                // Which verse is at the top of the viewport, so the reader's page
+                // indicator can follow the text.
+                //
+                // A flowing block is one list item, so there are no per-verse
+                // items to observe and the position has to come from the text
+                // layout. `positionInWindow().y` already accounts for scrolling -
+                // the node's top edge moves up the window as the list is scrolled -
+                // so the first verse still on screen is the first one whose last
+                // line falls below that edge. No scroll arithmetic needed.
+                .onGloballyPositioned { coords ->
+                    val result = layout ?: return@onGloballyPositioned
+                    val report = onVerseVisible ?: return@onGloballyPositioned
+                    // Nullable: the layout can be measured before it has any
+                    // line boxes to ask about, and there is no verse to report
+                    // then. Keeping the last good value is better than clearing
+                    // the indicator.
+                    firstVerseVisibleAt(
+                        result,
+                        page.verseSpans,
+                        ayahs,
+                        coords.positionInWindow().y
+                    )?.let(report)
+                }
                 .pointerInput(ayahs, page, selectedAyah) {
                     detectTapGestures { tap ->
                         onSelectAyah(
@@ -933,6 +1101,70 @@ private fun buildFlowingPage(
 }
 
 /**
+ * The first verse still visible below [windowTopY].
+ *
+ * A flowing surah is one laid-out text block, so "which page am I on" has to be
+ * answered from where the block sits rather than from a list index. Walking the
+ * verses and asking the layout for each one's last line is the only way to know
+ * whether a verse is still on screen or has been scrolled past.
+ *
+ * `positionInWindow().y` already accounts for scrolling - the node's top edge
+ * moves up the window as the list is scrolled - so no scroll arithmetic is
+ * needed here.
+ *
+ * Returns the first verse whose final line is still below the top edge, which
+ * is the verse the reader's eye is on. When the whole block has been scrolled
+ * past, the last verse is the honest answer rather than nothing: a blank page
+ * indicator at the end of a surah reads as a broken one.
+ */
+private fun firstVerseVisibleAt(
+    layout: TextLayoutResult,
+    spans: List<IntRange>,
+    ayahs: List<Ayah>,
+    windowTopY: Float
+): Ayah? {
+    if (spans.isEmpty() || ayahs.isEmpty() || layout.lineCount == 0) return null
+
+    // The bottom edge of each verse's last line, in the text's own coordinates.
+    val bottoms = spans.map { span ->
+        val end = (span.last + 1).coerceIn(1, layout.layoutInput.text.length)
+        // `getLineBottom` wants a line index. Clamping to the last line keeps a
+        // span ending exactly at the text length from asking for a line that
+        // does not exist.
+        val line = layout.getLineForOffset(end - 1).coerceIn(0, layout.lineCount - 1)
+        layout.getLineBottom(line)
+    }
+
+    val index = firstVerseIndexVisibleAt(bottoms, windowTopY, ayahs.size)
+    return ayahs.getOrNull(index)
+}
+
+/**
+ * The index of the first verse whose last line is still below [windowTopY].
+ *
+ * Split out from [firstVerseVisibleAt] so the rule can be checked without
+ * building a text layout, which is not constructible outside the framework.
+ *
+ * The comparison is `bottom >= windowTopY` and not `>`: a verse whose last line
+ * sits exactly on the top edge is still visible, and reporting the one *after*
+ * it would put the indicator a verse ahead at the moment each verse scrolls off.
+ */
+internal fun firstVerseIndexVisibleAt(
+    verseLineBottoms: List<Float>,
+    windowTopY: Float,
+    verseCount: Int
+): Int {
+    if (verseLineBottoms.isEmpty() || verseCount <= 0) return -1
+    val limit = verseLineBottoms.size.coerceAtMost(verseCount)
+    for (index in 0 until limit) {
+        if (verseLineBottoms[index] >= windowTopY) return index
+    }
+    // Everything has been scrolled past. Report the last verse rather than
+    // nothing, so the indicator reads "the end of the surah" and not "broken".
+    return limit - 1
+}
+
+/**
  * Maps a tap to the verse under it.
  *
  * A gesture arrives in pixels and the spans are character indices, so the tap
@@ -959,11 +1191,138 @@ private fun verseAt(
 // The four reading layouts
 // ---------------------------------------------------------------------------
 
-/** Whole-surah flowing text, scrolled vertically. The default. */
+/**
+ * A horizontal scroll state that *starts* at the right edge.
+ *
+ * ### Why
+ *
+ * Arabic is right-to-left. In a wide measure the first word of the surah is at
+ * the *right* of the column, and the text runs leftwards from there. A plain
+ * `rememberScrollState()` starts at offset zero - the left edge - so opening a
+ * surah on the horizontal axis landed the reader in the middle of a line, with
+ * the beginning of the page off to the right and the end of the line off to the
+ * left.
+ *
+ * That is not a cosmetic default. On a wide measure the first screen a reader
+ * sees should be the first words of the text, the way the first screen of the
+ * vertical axis is the first line of it.
+ *
+ * The scroll is otherwise untouched: the same gesture still moves the surface
+ * the same way, so this only decides where the surface *starts*.
+ */
 @Composable
-private fun ContinuousSurah(
+private fun rememberRtlScrollState(): ScrollState {
+    val state = rememberScrollState()
+    LaunchedEffect(state) {
+        // `maxValue` is 0 until the content has been measured, so this waits for
+        // a real width rather than jumping to the wrong place on the first frame
+        // and leaving it there.
+        snapshotFlow { state.maxValue }
+            .filter { it > 0 }
+            .first()
+            .let { state.scrollTo(it) }
+    }
+    return state
+}
+
+/**
+ * A hairline and a page number, between the text of one mushaf page and the next.
+ *
+ * ### Why
+ *
+ * Continuous layout has no page breaks, because it is one unbroken flow of a
+ * surah. That is the point of it. But the mushaf *is* paginated, and a reader
+ * who is looking for a particular page - the one a discussion referred to, the
+ * one their tahfiz is open to - has no way to find it in an unbroken flow, and
+ * no way to tell they have crossed into the next one.
+ *
+ * The page indicator at the top tells you where you are, but only after you have
+ * moved, and it does not tell you *when* you crossed. A single hairline with the
+ * page number does, without reintroducing a page break: nothing stops or snaps,
+ * the text still runs through, and the number sits on the line.
+ *
+ * Deliberately the quietest thing on the screen. A rule at full contrast would
+ * read as a card edge, and a boxed number would be exactly the chrome the
+ * continuous layout exists to be free of. A hairline at low alpha and a small
+ * label is enough to answer "am I still on the page I was on".
+ *
+ * Drawn *between* verses rather than replacing them, so no verse is lost to the
+ * marker: the first verse of each page is preceded by the rule.
+ */
+@Composable
+private fun PageSeparator(page: Int, modifier: Modifier = Modifier) {
+    val space = Space.current
+    val strings = LocalStrings.current
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = space.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(space.sm)
+    ) {
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            thickness = 0.5.dp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f)
+        )
+        Text(
+            text = "${strings.more.pageWord} $page",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+        )
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            thickness = 0.5.dp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f)
+        )
+    }
+}
+
+/**
+ * The whole surah as a run of distinct verses, on either axis.
+ *
+ * Per-verse is not a third layout and not a modifier that only the mushaf
+ * understands - it is a way of presenting the text, and it applies to either
+ * layout on either axis. This is the continuous one.
+ *
+ * ### The axis is a mechanism, not a shape
+ *
+ * This is the part that was wrong before, and it is worth stating plainly
+ * because the mistake is easy to make again.
+ *
+ * The earlier horizontal implementation put each verse in its own fixed-width
+ * column and laid those columns out in a `Row`. So switching the axis did not
+ * switch *how you moved through the text*, it changed *what the text looked
+ * like*: verses were re-arranged side by side, and a surah that read top to
+ * bottom now read left to right, one verse per screen-width, each one needing
+ * its own pan and its own return. Reading order was destroyed, and the reader
+ * had to hold the whole surah in their head as a strip of disconnected panels
+ * rather than a piece of writing.
+ *
+ * That is the opposite of what the axis means. Turning the axis on should
+ * change the **mechanism** - which way the surface travels under the finger -
+ * and nothing else. The text stays laid out the way it is laid out: verses in
+ * order, one after another, down the page.
+ *
+ * So both axes render the *same* ordered column of [PerVerseUnit]s. What differs
+ * is only the direction the surface moves:
+ *
+ * - **Vertical** is the ordinary reading: one screen-wide column, scrolled down.
+ * - **Horizontal** gives the surface a wide measure and lets it be panned
+ *   sideways, the way a real mushaf page is wider than the phone. The verses
+ *   are still stacked in reading order down that wide measure - the horizontal
+ *   mechanism is added *around* the reading, never in place of it.
+ *
+ * Both are built from one `unit` lambda and one list, so a change to the verse
+ * unit reaches both axes at once. Two components would have drifted, and the
+ * horizontal one would have been the one that lost the reference chips.
+ */
+@Composable
+private fun ContinuousPerVerse(
     surah: Surah,
     ayahs: List<Ayah>,
+    listState: androidx.compose.foundation.lazy.LazyListState,
     selectedAyah: Int,
     onSelectAyah: (Int) -> Unit,
     options: QuranReadingOptions,
@@ -973,72 +1332,126 @@ private fun ContinuousSurah(
     state: SalahUiState,
     onToggleBookmark: (Ayah) -> Unit,
     onTogglePlayAyah: (Ayah) -> Unit,
+    onVerseVisible: ((Ayah) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
+    val horizontal = options.scroll == QuranScrollDirection.HORIZONTAL
 
-    LazyColumn(
-        modifier = modifier,
-        contentPadding = PaddingValues(horizontal = space.lg, vertical = space.md)
-    ) {
-        item(key = "heading") {
-            SurahHeading(surah = surah, ink = ink, muted = muted)
-        }
-        item(key = "page") {
-            FlowingTextSurface(
-                ayahs = ayahs,
-                selectedAyah = selectedAyah,
-                arabicScale = options.arabicScale,
-                ink = ink,
-                accent = accent,
-                onSelectAyah = onSelectAyah
-            )
-        }
-        if (selectedAyah > 0) {
-            item(key = "inspector") {
-                ayahs.firstOrNull { it.ayahNumber == selectedAyah }?.let { ayah ->
-                    Spacer(Modifier.height(space.md))
-                    VerseInspector(
-                        ayah = ayah,
-                        actions = VerseActions(
-                            ayah = ayah,
-                            isBookmarked = state.isBookmarked(ayah),
-                            isPlaying = state.isAudioPlaying && state.currentAudioAyah == ayah.ayahNumber,
-                            onToggleBookmark = { onToggleBookmark(ayah) },
-                            onTogglePlay = { onTogglePlayAyah(ayah) }
-                        ),
-                        arabicScale = options.arabicScale,
-                        ink = ink,
-                        muted = muted,
-                        onDismiss = { onSelectAyah(0) },
-                        modifier = Modifier.testTag("ayah_inspector")
-                    )
-                }
+    // One unit, built once, used by both arrangements. This is the whole reason
+    // the two axes cannot drift apart.
+    val unit: @Composable (Ayah) -> Unit = { ayah ->
+        PerVerseUnit(
+            ayah = ayah,
+            selected = selectedAyah == ayah.ayahNumber,
+            options = options,
+            ink = ink,
+            muted = muted,
+            actions = VerseActions(
+                ayah = ayah,
+                isBookmarked = state.isBookmarked(ayah),
+                isPlaying = state.isAudioPlaying && state.currentAudioAyah == ayah.ayahNumber,
+                onToggleBookmark = { onToggleBookmark(ayah) },
+                onTogglePlay = { onTogglePlayAyah(ayah) }
+            ),
+            onSelect = {
+                onSelectAyah(if (selectedAyah == ayah.ayahNumber) 0 else ayah.ayahNumber)
             }
-        }
-        if (options.showTranslation) {
-            item(key = "translations") {
-                Spacer(Modifier.height(space.md))
-                ayahs.forEach { ayah ->
-                    VerseTranslationCard(
-                        ayah = ayah,
-                        translationScale = options.translationScale,
-                        ink = ink,
-                        surface = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(vertical = Space.current.xs)
-                    )
+        )
+    }
+
+    val heading: @Composable (Modifier) -> Unit = { mod ->
+        SurahHeading(surah = surah, ink = ink, muted = muted, modifier = mod)
+    }
+
+    // Report the top of the visible text, so the page pill follows the reader
+    // rather than whatever last wrote to the anchor. Keyed on the list alone, so
+    // it runs identically on both axes - the horizontal axis scrolls the same
+    // list, it just also gives it somewhere to pan to.
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .debounce(250)
+            .collect { index ->
+                ayahs.getOrNull(index)?.let { onVerseVisible?.invoke(it) }
+            }
+    }
+
+    val content: @Composable (Modifier) -> Unit = { measure ->
+        LazyColumn(
+            state = listState,
+            modifier = measure,
+            contentPadding = PaddingValues(vertical = space.md)
+        ) {
+            item(key = "heading") { heading(Modifier) }
+            itemsIndexed(ayahs, key = { _, ayah -> ayah.ayahNumber }) { index, ayah ->
+                // A rule before the first verse of each page, so the marker costs
+                // no verse. Checking the *previous* verse's page is what makes
+                // the boundary correct even where a surah ends mid-page and the
+                // next one starts mid-page.
+                val startsPage = index == 0 || ayahs[index - 1].pageNumber != ayah.pageNumber
+                if (startsPage && index > 0) {
+                    PageSeparator(page = ayah.pageNumber)
                 }
+                unit(ayah)
+                Spacer(Modifier.height(space.md))
             }
         }
     }
+
+    if (horizontal) {
+        // The pan lives *outside* the reading. A reader on this axis pans left
+        // and right across a wide measure, and still reads the verses top to
+        // bottom - the two movements coexist rather than one replacing the
+        // other, which is exactly what a printed mushaf page allows.
+        val panState = rememberRtlScrollState()
+        Box(
+            modifier = modifier.horizontalScroll(panState),
+            contentAlignment = Alignment.TopStart
+        ) {
+            content(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = space.lg)
+            )
+        }
+        return
+    }
+
+    content(modifier.padding(horizontal = space.lg))
 }
 
-/** One block per verse, scrolled vertically. The working/study layout. */
+/**
+ * The whole surah as one unbroken flow, on either axis.
+ *
+ * This is the flowing reading: every verse annotated into a single laid-out
+ * block, so a surah reads as continuous prose rather than a stack of cards. It
+ * is the same text and the same line breaking on both axes - only the direction
+ * the surface travels differs.
+ *
+ * ### Why horizontal is a wider measure and not a re-laid-out page
+ *
+ * The horizontal axis exists so the surah can be read the way a printed mushaf
+ * is read: across a page that is wider than the phone. So the measure widens to
+ * the width of the surface and the surface pans sideways.
+ *
+ * What it must not do is re-arrange the text. An earlier attempt treated the
+ * axis as a different *shape* - laying verses out side by side so the surah ran
+ * left to right. That is not a wider page, it is a different document: reading
+ * order is lost, and every verse becomes a panel you pan to and back from.
+ * Direction of movement and arrangement of content are separate things, and only
+ * the first one belongs to this setting.
+ *
+ * The actions and the inspector are shared with the vertical version rather than
+ * reimplemented, because they are about *which verse* is selected, not about how
+ * the text is laid out.
+ */
 @Composable
-private fun PerAyahList(
+private fun ContinuousSurah(
     surah: Surah,
     ayahs: List<Ayah>,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    selectedAyah: Int,
+    onSelectAyah: (Int) -> Unit,
     options: QuranReadingOptions,
     ink: Color,
     accent: Color,
@@ -1046,23 +1459,34 @@ private fun PerAyahList(
     state: SalahUiState,
     onToggleBookmark: (Ayah) -> Unit,
     onTogglePlayAyah: (Ayah) -> Unit,
+    onVerseVisible: ((Ayah) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
+    val horizontal = options.scroll == QuranScrollDirection.HORIZONTAL
+    val panState = rememberRtlScrollState()
 
-    LazyColumn(
-        state = listState,
-        modifier = modifier,
-        contentPadding = PaddingValues(horizontal = space.lg, vertical = space.md)
-    ) {
-        item(key = "heading") {
-            SurahHeading(surah = surah, ink = ink, muted = muted)
+    // The surah split into its mushaf pages, in order, keeping every verse.
+    //
+    // Grouped rather than filtered so the total is unchanged: continuous means
+    // the whole surah is here, and marking where the pages fall must not drop a
+    // verse to do it. A surah that starts or ends mid-page keeps that partial
+    // page, which is why the first and last groups can be short.
+    val pageGroups = remember(ayahs) {
+        ayahs.fold(mutableListOf<MutableList<Ayah>>()) { groups, ayah ->
+            val current = groups.lastOrNull()
+            if (current == null || current.last().pageNumber != ayah.pageNumber) {
+                groups += mutableListOf(ayah)
+            } else {
+                current += ayah
+            }
+            groups
         }
-        itemsIndexed(
-            ayahs,
-            key = { _, a -> a.ayahNumber }
-        ) { _, ayah ->
-            VerseBlock(
+    }
+
+    val inspector: @Composable (Modifier) -> Unit = { measure ->
+        ayahs.firstOrNull { it.ayahNumber == selectedAyah }?.let { ayah ->
+            VerseInspector(
                 ayah = ayah,
                 actions = VerseActions(
                     ayah = ayah,
@@ -1071,94 +1495,345 @@ private fun PerAyahList(
                     onToggleBookmark = { onToggleBookmark(ayah) },
                     onTogglePlay = { onTogglePlayAyah(ayah) }
                 ),
-                options = options,
+                arabicScale = options.arabicScale,
                 ink = ink,
                 muted = muted,
-                showTranslation = options.showTranslation,
-                modifier = Modifier.testTag("ayah_${ayah.ayahNumber}")
+                onDismiss = { onSelectAyah(0) },
+                modifier = measure.testTag("ayah_inspector")
             )
-            Spacer(Modifier.height(space.md))
         }
     }
+
+    val translations: @Composable (Modifier) -> Unit = { measure ->
+        if (options.showTranslation) {
+            Column(measure) {
+                ayahs.forEach { ayah ->
+                    VerseTranslationCard(
+                        ayah = ayah,
+                        translationScale = options.translationScale,
+                        ink = ink,
+                        surface = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(vertical = space.xs)
+                    )
+                }
+            }
+        }
+    }
+
+    // Vertical is a plain scroll. Horizontal is the same scroll given a wide
+    // measure and a pan container around it - identical content, identical
+    // order, identical line breaking, just more room across and a sideways way
+    // in.
+    val body: @Composable (Modifier) -> Unit = { measure ->
+        LazyColumn(
+            state = listState,
+            modifier = measure,
+            contentPadding = PaddingValues(vertical = space.md)
+        ) {
+            item(key = "heading") {
+                SurahHeading(surah = surah, ink = ink, muted = muted)
+            }
+            // One text block per mushaf page, with a hairline between them.
+            //
+            // The blocks are laid out identically and with no card, gap or
+            // padding between them, so the text still reads as one unbroken
+            // flow - that is the whole promise of this layout. Only the page
+            // rule interrupts it, and a reader who does not want the marker can
+            // simply not look at it.
+            //
+            // Split per page rather than one block for the surah because a single
+            // block cannot have anything drawn *inside* it, and the rule has to
+            // sit between the last verse of one page and the first of the next.
+            itemsIndexed(pageGroups, key = { index, _ -> "page_$index" }) { index, group ->
+                if (index > 0) {
+                    PageSeparator(page = group.first().pageNumber)
+                }
+                FlowingTextSurface(
+                    ayahs = group,
+                    selectedAyah = selectedAyah,
+                    arabicScale = options.arabicScale,
+                    ink = ink,
+                    accent = accent,
+                    onSelectAyah = onSelectAyah,
+                    onVerseVisible = onVerseVisible
+                )
+            }
+            if (selectedAyah > 0) {
+                item(key = "inspector") {
+                    Spacer(Modifier.height(space.md))
+                    inspector(Modifier)
+                }
+            }
+            item(key = "translations") { translations(Modifier) }
+        }
+    }
+
+    if (horizontal) {
+        Box(
+            modifier = modifier.horizontalScroll(panState),
+            contentAlignment = Alignment.TopStart
+        ) {
+            body(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = space.lg)
+            )
+        }
+        return
+    }
+
+    body(modifier.padding(horizontal = space.lg))
 }
 
-/** The real mushaf, turned sideways: one canonical page per swipe. */
+/**
+ * The horizontal measure is the width of the surface, not a fixed number.
+ *
+ * It used to be 640dp, chosen as "wider than a phone". That was wrong twice
+ * over:
+ *
+ * - On a small phone it was wider than the screen, so a line of Arabic ran off
+ *   the right edge and every line needed two pans to read.
+ * - On a tablet or an unfolded foldable it was *narrower* than the window, so
+ *   the "wide" measure was not wide at all and the pan did nothing.
+ *
+ * A dip constant cannot be right for both, because the thing it needs to match
+ * is the screen it is being drawn on. So the measure is simply the width the
+ * surface was given, and the pan container stays attached: with the measure
+ * equal to the window there is no overflow, so it simply has nothing to move
+ * and the axis becomes a no-op rather than a dead gesture.
+ */
+
+/**
+ * One verse, broken out as its own unit: reference chip, Arabic, and - only once
+ * it has been selected - the actions that belong to that verse and no other.
+ *
+ * This is the study mode. The whole surface is quiet until you touch a verse,
+ * because a row of four buttons under every verse on a page is a wall of
+ * controls and nothing about a page of reading; one row under the verse you are
+ * actually on is the only set that is ever relevant.
+ *
+ * It is the same unit in both layouts. On the mushaf it sits within one page;
+ * in continuous it sits within the surah. Nothing about the unit changes, because
+ * the thing being decided - *this* verse - does not depend on how much text
+ * surrounds it.
+ *
+ * Selection is exclusive and toggleable: tapping the selected verse again clears
+ * it and takes the row away.
+ */
 @Composable
-private fun MushafPager(
-    pagerState: androidx.compose.foundation.pager.PagerState,
+private fun PerVerseUnit(
+    ayah: Ayah,
+    selected: Boolean,
     options: QuranReadingOptions,
     ink: Color,
-    accent: Color,
     muted: Color,
-    onPageShown: (Int) -> Unit,
+    actions: VerseActions,
+    onSelect: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
     val strings = LocalStrings.current
 
-    val scope = rememberCoroutineScope()
+    // No card, no fill, no border. The verse sits on the paper like every other
+    // line of the reading.
+    //
+    // A surface behind each verse looked tidy in isolation and was wrong in
+    // context: a stack of filled rectangles with gaps between them turns a page
+    // of Arabic into a column of panels, and the panels are what the eye reads
+    // first. The paper is already the background - the app draws a wash behind
+    // the whole reading surface - so anything drawn on top of it is decoration
+    // competing with the text.
+    //
+    // Selection is still visible, but by *inking* the verse rather than boxing
+    // it: the background highlight sits behind the Arabic itself, so selecting a
+    // verse highlights the words instead of drawing a frame around them.
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(
+                role = Role.Button,
+                onClickLabel = strings.more.selectVerse,
+                onClick = onSelect
+            )
+            .semantics {
+                stateDescription = if (selected) {
+                    strings.more.selected
+                } else {
+                    strings.more.notSelected
+                }
+            }
+            .testTag("ayah_${ayah.ayahNumber}")
+            .padding(vertical = space.xs, horizontal = space.xs)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+                VerseReferenceChip("${ayah.surahNumber}:${ayah.ayahNumber}")
+                Spacer(Modifier.weight(1f))
+                PlayingDot(actions.isPlaying)
+            }
 
-    LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.currentPage }.collect { onPageShown(it) }
+            Spacer(Modifier.height(space.sm))
+
+            VerseArabic(
+                ayah = ayah,
+                scale = options.arabicScale,
+                ink = ink
+            )
+
+            // The actions live here rather than in the chip row because the
+            // chip row is what the finger already passed over on the way to
+            // selecting, and a target that appears under a tap is a target you
+            // cannot aim at deliberately.
+            if (selected) {
+                Spacer(Modifier.height(space.md))
+                if (options.showTranslation) {
+                    VerseTranslationCard(
+                        ayah = ayah,
+                        translationScale = options.translationScale,
+                        ink = ink,
+                        surface = Color.Transparent,
+                        showReference = false
+                    )
+                    Spacer(Modifier.height(space.md))
+                }
+                VerseActionRow(actions)
+            }
     }
+}
+
+/** Whole-surah flowing text, scrolled vertically. */
+
+/**
+ * The mushaf: exactly one page at a time, on either axis.
+ *
+ * This is a page *turner*, not a document. The previous vertical version was a
+ * `LazyColumn` of all 604 pages, which meant a swipe scrolled you across a
+ * boundary rather than turning anything, three pages sat half-visible in the
+ * viewport at any moment, and "which page am I on" was a question the reader
+ * could only answer by scrolling back to find the seam. All three of those are
+ * what the printed mushaf is not.
+ *
+ * So both axes are a pager. A vertical swipe turns forward and a horizontal one
+ * turns sideways, and neither ever leaves more than one page on screen.
+ *
+ * The page is also independently scrollable, because the reader sizes the text
+ * and a dense page at a generous size is taller than the phone. The inner scroll
+ * is vertical only; the pager keeps the horizontal drag for turning, which is why
+ * [orientation] is passed to the pager and the page always scrolls vertically.
+ *
+ * ### Edge tap zones
+ *
+ * Each page carries two invisible gutters that turn the page, at the ends of the
+ * *pager's* axis - left and right when turning sideways, top and bottom when
+ * turning down. They are 48dp, so neither is a target you have to aim at.
+ *
+ * Deliberately *not* a full-page tap handler. The page's own text claims taps to
+ * select a verse, and a parent that consumed them would make turning the page and
+ * selecting a verse mutually exclusive - you could not have both without the
+ * reader guessing which you meant. Gutters live in the margin where there is no
+ * text to select, so the two coexist.
+ */
+@Composable
+private fun MushafPager(
+    pagerState: androidx.compose.foundation.pager.PagerState,
+    orientation: QuranScrollDirection,
+    options: QuranReadingOptions,
+    selectedAyah: Int,
+    ink: Color,
+    accent: Color,
+    muted: Color,
+    state: SalahUiState,
+    onSelectAyah: (Int) -> Unit,
+    onToggleBookmark: (Ayah) -> Unit,
+    onTogglePlayAyah: (Ayah) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val space = Space.current
+    val strings = LocalStrings.current
+    val scope = rememberCoroutineScope()
 
     val turn: (Int) -> Unit = { delta ->
         val next = (pagerState.currentPage + delta).coerceIn(0, pagerState.pageCount - 1)
         scope.launch { pagerState.animateScrollToPage(next) }
     }
 
-    HorizontalPager(
-        state = pagerState,
-        modifier = modifier,
-        pageSpacing = space.lg,
-        contentPadding = PaddingValues(vertical = space.md)
-    ) { page ->
-        // `scrollable = true` because a page has to be able to be taller than
-        // the screen. The Arabic is sized by the reader, not by the page, so a
-        // generous text size on a dense page overflows - and with nothing to
-        // scroll it, the overflow was clipped and the last lines of the page
-        // were simply gone. The page scrolls now.
-        //
-        // The two axes are different, so the parent keeps the horizontal drag:
-        // the pager turns the page, this column scrolls within it.
-        Row(Modifier.fillMaxSize()) {
-            // Tap-to-turn, as two gutters flanking the page.
-            //
-            // Deliberately *not* a full-width tap handler on the page: the text
-            // already claims taps to select a verse, and a parent that consumed
-            // them would either break verse selection or make turning the page
-            // and selecting a verse mutually exclusive. These sit in the margin
-            // where there is no text to select, so turning and reading coexist.
-            //
-            // A full 48dp each, so neither is a target you have to aim at.
-            TapZone(
-                onTap = { turn(-1) },
-                enabled = page > 0,
-                contentDescription = strings.more.previousSurahLabel,
-                modifier = Modifier.width(TapGutterWidth)
-            )
+    val page: @Composable (Int) -> Unit = { index ->
+        val current = index + 1
 
+        // Tap gutters exist on the horizontal axis only.
+        //
+        // On the horizontal axis they earn their place: the spec asks for
+        // invisible zones near the left and right edges so a page can be turned
+        // by tapping instead of swiping, and the vertical space they cost is
+        // only horizontal space, which the page was not using anyway.
+        //
+        // On the vertical axis there is no such request - the reader turns
+        // pages by swiping - and a top/bottom gutter would cost 2 x 48dp of
+        // *vertical* room from a page that, on this axis, no longer scrolls of
+        // its own accord (see [MushafPage]). Trading the page's height for an
+        // affordance nobody asked for, on the one axis where height is already
+        // the scarce resource, is a bad trade. So the swipe is the whole
+        // vertical affordance.
+        if (orientation == QuranScrollDirection.HORIZONTAL) {
+            Row(Modifier.fillMaxSize()) {
+                TapZone(
+                    onTap = { turn(-1) },
+                    enabled = index > 0,
+                    contentDescription = strings.more.reader.previousPage,
+                    modifier = Modifier.width(TapGutterWidth)
+                )
+                MushafPage(
+                    pageNumber = current,
+                    orientation = orientation,
+                    options = options,
+                    ink = ink,
+                    accent = accent,
+                    muted = muted,
+                    selectedAyah = if (options.perVerse) selectedAyah else 0,
+                    onSelectAyah = onSelectAyah,
+                    state = state,
+                    onToggleBookmark = onToggleBookmark,
+                    onTogglePlayAyah = onTogglePlayAyah,
+                    modifier = Modifier.weight(1f).fillMaxHeight()
+                )
+                TapZone(
+                    onTap = { turn(1) },
+                    enabled = index < TotalPages - 1,
+                    contentDescription = strings.more.reader.nextPage,
+                    modifier = Modifier.width(TapGutterWidth)
+                )
+            }
+        } else {
             MushafPage(
-                pageNumber = page + 1,
+                pageNumber = current,
+                orientation = orientation,
                 options = options,
                 ink = ink,
                 accent = accent,
                 muted = muted,
-                selectedAyah = 0,
-                onSelectAyah = {},
-                scrollable = true,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-            )
-
-            TapZone(
-                onTap = { turn(1) },
-                enabled = page < TotalPages - 1,
-                contentDescription = strings.more.nextSurahLabel,
-                modifier = Modifier.width(TapGutterWidth)
+                selectedAyah = if (options.perVerse) selectedAyah else 0,
+                onSelectAyah = onSelectAyah,
+                state = state,
+                onToggleBookmark = onToggleBookmark,
+                onTogglePlayAyah = onTogglePlayAyah,
+                modifier = Modifier.fillMaxSize()
             )
         }
+    }
+
+    if (orientation == QuranScrollDirection.HORIZONTAL) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = modifier,
+            pageSpacing = space.lg,
+            contentPadding = PaddingValues(vertical = space.md)
+        ) { index -> page(index) }
+    } else {
+        VerticalPager(
+            state = pagerState,
+            modifier = modifier,
+            pageSpacing = space.lg,
+            contentPadding = PaddingValues(horizontal = space.md)
+        ) { index -> page(index) }
     }
 }
 
@@ -1193,43 +1868,94 @@ private fun TapZone(
     )
 }
 
-/** The real mushaf, scrolled vertically: one canonical page per row. */
+/**
+ * The text scale at which a whole mushaf page fits the viewport.
+ *
+ * ### Why
+ *
+ * The page must be shown whole - see the note on [MushafPage] - so when it does
+ * not fit, something has to give. Two things could: the page could scroll, or
+ * the text could get smaller. Scrolling loses the reader's place, so the text
+ * gives.
+ *
+ * The reader's own text-size setting is the **ceiling**, not the value. A page
+ * that already fits is left at exactly the size they asked for. A page that does
+ * not fit is reduced only as far as it has to be. Enlarging would be the other
+ * way round and would be wrong: it would override a setting the reader made on
+ * purpose, on most pages, to make the text smaller than the default.
+ *
+ * ### How it is measured
+ *
+ * The page's height is *estimated* from the corpus rather than measured by
+ * laying it out and reading it back, because the alternatives are worse: laying
+ * the page out at the requested size to discover it overflows would need a
+ * second pass and would flash, and `AutoSizeText`-style subcomposition
+ * remeasures on every scale change.
+ *
+ * The estimate is deliberately pessimistic - it assumes the worst case for
+ * wrapping, so the page fits with a little room to spare rather than clipping
+ * its last line by a fraction of a pixel. A little too small is invisible; a
+ * little too large is a cut-off verse.
+ */
 @Composable
-private fun MushafList(
-    listState: androidx.compose.foundation.lazy.LazyListState,
-    options: QuranReadingOptions,
-    ink: Color,
-    accent: Color,
-    muted: Color,
-    onPageShown: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val space = Space.current
+private fun rememberPageFitScale(
+    ayahs: List<Ayah>,
+    perVerse: Boolean,
+    showTranslation: Boolean,
+    requested: Float,
+    availableWidth: Dp,
+    availableHeight: Dp,
+    reserved: Dp
+): Float {
+    val lineHeightSp = LocalQuranTypeface.current.lineHeightFactor *
+        QuranReadingOptions.ARABIC_BASE_SP
+    // Read here rather than inside the `remember` block, which is not a
+    // composable scope: a density change (a display move, a font-scale change)
+    // has to invalidate the fit, and reading it outside the block is what lets
+    // `remember` key on it.
+    val density = LocalDensity.current
 
-    LazyColumn(
-        state = listState,
-        modifier = modifier,
-        contentPadding = PaddingValues(horizontal = space.lg, vertical = space.md)
+    return remember(
+        ayahs.size,
+        perVerse,
+        showTranslation,
+        requested,
+        availableWidth,
+        availableHeight,
+        reserved,
+        density
     ) {
-        items(count = TotalPages, key = { it + 1 }) { index ->
-            MushafPage(
-                pageNumber = index + 1,
-                options = options,
-                ink = ink,
-                accent = accent,
-                muted = muted,
-                selectedAyah = 0,
-                onSelectAyah = {},
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(space.lg))
+        if (availableHeight <= 0.dp || availableWidth <= 0.dp || ayahs.isEmpty()) {
+            return@remember requested
         }
-    }
 
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.firstVisibleItemIndex }
-            .debounce(300)
-            .collect { onPageShown(it) }
+        val usable = (availableHeight - reserved).coerceAtLeast(1.dp)
+        val widthPx = with(density) { availableWidth.toPx() }
+        val charsPerLine = (widthPx / (lineHeightSp * 0.62f)).coerceAtLeast(8f)
+
+        // Lines the Arabic occupies, wrapping pessimistically - one character per
+        // line would be absurd, and one line per verse assumes no wrapping at
+        // all, which is what makes the estimate safe.
+        val arabicChars = ayahs.fold(0f) { acc, a -> acc + a.textArabic.length }
+        val arabicLines = (arabicChars / charsPerLine).coerceAtLeast(ayahs.size.toFloat())
+        val markerLines = ayahs.size.toFloat() * 0.15f
+        val headingLines = 1.5f
+        val translationLines = if (showTranslation) ayahs.size.toFloat() * 2.5f else 0f
+        val verseGaps: Float = if (perVerse) ayahs.size * 0.35f else 0.35f
+        val referenceChips = if (perVerse) ayahs.size.toFloat() else 0f
+
+        val totalLines = arabicLines + markerLines + headingLines +
+            translationLines + verseGaps + referenceChips
+        val neededHeightDp = totalLines * lineHeightSp * 0.42f
+
+        if (neededHeightDp <= usable.value) {
+            requested
+        } else {
+            // Reduced to fit, never below the floor of the slider, and never
+            // above what the reader asked for.
+            (requested * usable.value / neededHeightDp)
+                .coerceIn(0.5f, requested)
+        }
     }
 }
 
@@ -1241,23 +1967,34 @@ private fun MushafList(
  * current surah's. The running head names the surah the page opens in, which is
  * what the printed page does and what a reader checks when they turn back.
  *
- * [scrollable] is true in the horizontal pager and false in the vertical list,
- * and the difference matters. In the list each page is already a row of a
- * scrolling parent, so an inner scroll would be a second vertical drag
- * competing with it. In the pager the page owns its own height, so without this
- * flag a page taller than the screen had nowhere to go but the clip.
+ * ### Why the page fits rather than scrolls
+ *
+ * A mushaf page is a fixed object - these lines, in this order - so it is shown
+ * whole. It used to scroll vertically on the horizontal axis and not on the
+ * vertical one, which made the same page behave two different ways depending on a
+ * setting whose only job is to change the direction of travel, and left a dense
+ * page on the vertical axis simply cut off at the bottom with no way to reach
+ * the missing lines.
+ *
+ * So it fits: see the note at the call site and [rememberPageFitScale]. The
+ * reader's text size is the ceiling; the page shrinks to fit beneath it and is
+ * never enlarged past it, which is what a printed page does when it does not fit
+ * the paper.
  */
 @Composable
 private fun MushafPage(
     pageNumber: Int,
+    orientation: QuranScrollDirection,
     options: QuranReadingOptions,
     ink: Color,
     accent: Color,
     muted: Color,
     selectedAyah: Int,
     onSelectAyah: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-    scrollable: Boolean = false
+    state: SalahUiState,
+    onToggleBookmark: (Ayah) -> Unit,
+    onTogglePlayAyah: (Ayah) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val space = Space.current
     val strings = LocalStrings.current
@@ -1267,15 +2004,62 @@ private fun MushafPage(
 
     val openingSurah = remember(pageNumber) { QuranDataSource.getSurahByNumber(ayahs.first().surahNumber) }
 
-    Column(
-        modifier = modifier.then(
-            if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier
+    // The running head clears the floating controls row, for the same reason the
+    // surah heading does in the continuous layouts. It names the surah the page
+    // opens in, which is the one thing a reader checks when turning back - so it
+    // being half-hidden behind the pill is worse than not having it at all.
+    val topInset = statusBarInset() + MaterialTheme.layoutMetrics.minTouchTarget +
+        Space.current.lg
+
+    // The page is shown whole, on every axis.
+    //
+    // A mushaf page is a fixed thing: these lines, on this paper, in this order.
+    // A page that scrolls is not that - it is a window onto part of a page, and
+    // the reader loses their place every time they look up, because "where am
+    // I" becomes a scroll offset as well as a page number.
+    //
+    // The earlier arrangement scrolled on the horizontal axis and not on the
+    // vertical one, so the same page behaved two different ways depending on a
+    // setting whose entire job is to change the direction of travel. Worse, on
+    // the vertical axis a dense page at a generous text size simply ran off the
+    // bottom with its last lines cut, and the only way to reach them was to
+    // pinch - a magnification gesture, not a "see the end of the page" gesture.
+    //
+    // So the page does not scroll on either axis. It *fits* instead: the text
+    // scale is reduced until the whole page is inside the viewport. The
+    // reader's own text-size setting is the upper bound, never exceeded, so a
+    // generous size makes the page fit by getting smaller rather than by
+    // scrolling - which is what a printed page does when it does not fit.
+    BoxWithConstraints(modifier = modifier) {
+        val fitScale = rememberPageFitScale(
+            ayahs = ayahs,
+            perVerse = options.perVerse,
+            showTranslation = options.showTranslation,
+            requested = options.arabicScale,
+            availableWidth = maxWidth,
+            availableHeight = maxHeight,
+            // The running head and the reserved control inset are part of the
+            // page's own height, so the space they take is subtracted before
+            // fitting rather than being clipped by the fit.
+            reserved = topInset + Space.current.sm
         )
-    ) {
+        // The translation tracks the Arabic, so shrinking the page to fit shrinks
+        // both and the proportion the reader chose is preserved. Clamped to the
+        // slider's own range so a fit can never produce a value no slider can
+        // express - which would be a preference the reader could not undo.
+        val fittedTranslation = (options.translationScale *
+            fitScale / options.arabicScale.coerceAtLeast(0.01f))
+            .coerceIn(QuranReadingOptions.TranslationScaleRange)
+        val fittedOptions = options.copy(
+            arabicScale = fitScale,
+            translationScale = fittedTranslation
+        )
+
+        Column {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = space.sm),
+                .padding(top = topInset, bottom = space.sm),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -1292,6 +2076,36 @@ private fun MushafPage(
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1
             )
+        }
+
+        if (options.perVerse) {
+            // Per-verse on the mushaf. The page is still the page - the same
+            // canonical boundary, the same running head - but its verses are
+            // units you can select rather than one block of running text.
+            ayahs.forEach { ayah ->
+                PerVerseUnit(
+                    ayah = ayah,
+                    selected = selectedAyah == ayah.ayahNumber,
+                    options = options,
+                    ink = ink,
+                    muted = muted,
+                    actions = VerseActions(
+                        ayah = ayah,
+                        isBookmarked = state.isBookmarked(ayah),
+                        isPlaying = state.isAudioPlaying &&
+                            state.currentAudioAyah == ayah.ayahNumber,
+                        onToggleBookmark = { onToggleBookmark(ayah) },
+                        onTogglePlay = { onTogglePlayAyah(ayah) }
+                    ),
+                    onSelect = {
+                        onSelectAyah(
+                            if (selectedAyah == ayah.ayahNumber) 0 else ayah.ayahNumber
+                        )
+                    }
+                )
+                Spacer(Modifier.height(space.xs))
+            }
+            return@Column
         }
 
         FlowingTextSurface(
@@ -1315,78 +2129,13 @@ private fun MushafPage(
                 )
             }
         }
+        }
     }
 }
 
 // ---------------------------------------------------------------------------
 // Verse surfaces
 // ---------------------------------------------------------------------------
-
-/**
- * One ayah as its own block: reference and actions above, text below.
- *
- * [fillMaxWidth] is false in the horizontal layout, where the block is a card on
- * a page rather than a row in a column and should be bounded by the reading
- * measure rather than running to the bezel.
- */
-@Composable
-private fun VerseBlock(
-    ayah: Ayah,
-    actions: VerseActions,
-    options: QuranReadingOptions,
-    ink: Color,
-    muted: Color,
-    showTranslation: Boolean,
-    modifier: Modifier = Modifier,
-    fillMaxWidth: Boolean = true
-) {
-    val space = Space.current
-
-    Column(
-        modifier = modifier
-            .then(
-                if (fillMaxWidth) {
-                    Modifier.fillMaxWidth()
-                } else {
-                    // Bounded by the app's reading measure rather than running to
-                    // the bezel, so a single verse on a turned page is still a
-                    // comfortable line length.
-                    Modifier.widthIn(max = MaterialTheme.layoutMetrics.contentMaxWidth)
-                }
-            )
-            .clip(QuranShape.card)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
-            .padding(space.lg)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            VerseReferenceChip("${ayah.surahNumber}:${ayah.ayahNumber}")
-            Spacer(Modifier.weight(1f))
-            PlayingDot(actions.isPlaying)
-            if (actions.isPlaying) Spacer(Modifier.width(space.sm))
-            VerseActionRow(actions)
-        }
-
-        Spacer(Modifier.height(space.md))
-
-        VerseArabic(
-            ayah = ayah,
-            scale = options.arabicScale,
-            ink = ink,
-            modifier = if (fillMaxWidth) Modifier else Modifier.fillMaxWidth(0.9f)
-        )
-
-        if (showTranslation) {
-            Spacer(Modifier.height(space.md))
-            VerseTranslationCard(
-                ayah = ayah,
-                translationScale = options.translationScale,
-                ink = ink,
-                surface = Color.Transparent,
-                showReference = false
-            )
-        }
-    }
-}
 
 /** The card that opens under a tapped verse in the flowing layout. */
 @Composable

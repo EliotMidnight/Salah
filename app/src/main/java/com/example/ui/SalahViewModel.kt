@@ -705,14 +705,30 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         repository.saveQuranReadingOptions(options)
     }
 
-    /** Convenience for the segmented layout control. */
+    /**
+     * Sets the layout, and nothing else.
+     *
+     * This used to reach into the scroll axis to repair the combination, which is
+     * how choosing continuous quietly turned horizontal reading off. Layout and
+     * axis are independent answers now, so this writes one field.
+     */
     fun setQuranLayout(layout: QuranReadingLayout) {
-        setQuranReadingOptions(_uiState.value.quranReadingOptions.withLayout(layout))
+        setQuranReadingOptions(_uiState.value.quranReadingOptions.copy(layout = layout))
     }
 
-    /** Convenience for the segmented scroll control. */
+    /** Sets the axis, and nothing else. Same reasoning as [setQuranLayout]. */
     fun setQuranScroll(direction: QuranScrollDirection) {
-        setQuranReadingOptions(_uiState.value.quranReadingOptions.withScroll(direction))
+        setQuranReadingOptions(_uiState.value.quranReadingOptions.copy(scroll = direction))
+    }
+
+    /**
+     * Breaks every verse out as its own selectable unit, in either layout.
+     *
+     * Not a third layout: it is a question about verse presentation, answerable
+     * on top of the per-page mushaf and on top of a continuous surah alike.
+     */
+    fun setQuranPerVerse(perVerse: Boolean) {
+        setQuranReadingOptions(_uiState.value.quranReadingOptions.copy(perVerse = perVerse))
     }
 
     fun setQuranPinchTarget(target: QuranPinchTarget) {
