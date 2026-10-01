@@ -280,14 +280,113 @@ class MushafPageTest {
         // the reader; this is the text of the page.
         val ayahs = QuranBrowse.ayahsOnPage(3)
         assertEquals(
-            "page 3 was expected to be mid-surah",
+            "page 3 was expected to hold one surah",
+            1,
+            ayahs.map { it.surahNumber }.distinct().size
+        )
+        assertEquals(
+            "page 3 was expected to be within Al-Baqarah",
             2,
-            ayahs.map { it.surahNumber }.distinct().single()
+            ayahs.first().surahNumber
         )
         assertTrue(
             "the first verse of page 3 is not verse 1",
             ayahs.first().ayahNumber > 1
         )
+    }
+
+    @Test
+    fun `a surah starting part-way down a page is named there`() {
+        // The 42 pages the sweep found, and the case the rule above used to drop.
+        //
+        // Page 106 ends An-Nisa with 4:176 and then carries 5:1 - Al-Ma'idah begins
+        // part-way down it. The head used to be printed only when a page *opened* a
+        // surah, so Al-Ma'idah's name appeared nowhere in the book: not on page 106,
+        // and not on any other, because 106 is the only page 5:1 is on. 42 surahs,
+        // 37% of the book, arriving as an unlabelled run of Arabic on the page where
+        // they start.
+        val page = 106
+        val ayahs = QuranBrowse.ayahsOnPage(page)
+        assertEquals(
+            "page 106 was expected to begin at 4:176",
+            4 to 176,
+            ayahs.first().surahNumber to ayahs.first().ayahNumber
+        )
+        assertTrue(
+            "page 106 was expected to carry the start of surah 5",
+            ayahs.any { it.surahNumber == 5 && it.ayahNumber == 1 }
+        )
+
+        val built = build(page)
+        val name = QuranBrowse.surah(5)!!.arabicName
+        assertTrue(
+            "page 106 carries 5:1 but does not name Al-Ma'idah",
+            built.text.text.contains(name)
+        )
+
+        // And it appears *after* An-Nisa's last verse, not before it. A head printed
+        // at the top of the page would be here too, and would be wrong: it would say
+        // Al-Ma'idah starts before the verses of An-Nisa it is printed above.
+        val headAt = built.text.text.indexOf(name)
+        val lastNisa = built.text.text.indexOf(ayahs.first().textArabic)
+        assertTrue(
+            "Al-Ma'idah's name is printed before An-Nisa's verses on page 106",
+            headAt > lastNisa
+        )
+    }
+
+    @Test
+    fun `every surah's name is printed on the page it starts on`() {
+        // The sweep form of the test above, across the book.
+        //
+        // Each surah's ayah 1 is on exactly one page, so a head printed before every
+        // ayah 1 puts every surah's name on exactly the page it starts on - and a
+        // reader can always tell which surah they have reached.
+        //
+        // "At least once", not "exactly once", and deliberately: a surah's name is
+        // sometimes its own first word. Ta-Ha is 20:1's entire text, so its name
+        // appears on the page whether or not a head was printed - the assertion that
+        // would notice a missing head is the position one, above, not this one. This
+        // test exists to catch a surah whose name is on *no* page, which is the
+        // failure the old rule produced for 58 of them.
+        val pagesText = (1..QuranBrowse.TOTAL_PAGES).associateWith { build(it).text.text }
+        for (surah in 1..114) {
+            val name = QuranBrowse.surah(surah)!!.arabicName
+            val page = QuranBrowse.pageOf(surah, 1)
+            assertTrue(
+                "surah $surah's name is on no page at all (expected it on page $page)",
+                pagesText[page]!!.contains(name)
+            )
+        }
+    }
+
+    @Test
+    fun `a surah's head is not printed on a page that does not hold its first verse`() {
+        // The other half of the head rule, and the one that stops it becoming "print
+        // it everywhere".
+        //
+        // A page that runs on inside Al-Baqarah must not name Al-Baqarah at its top:
+        // that claims the surah starts there, which is the mistake the original rule
+        // was written to avoid and the one a naive fix would reintroduce. So the name
+        // appears on a page if and only if that page holds the surah's verse 1.
+        for (page in 1..QuranBrowse.TOTAL_PAGES) {
+            val onPage = QuranBrowse.ayahsOnPage(page)
+            val startsHere = onPage.map { it.surahNumber }.distinct().filter { surah ->
+                onPage.any { it.surahNumber == surah && it.ayahNumber == 1 }
+            }
+            val text = build(page).text.text
+            for (surah in onPage.map { it.surahNumber }.distinct()) {
+                val name = QuranBrowse.surah(surah)!!.arabicName
+                // No verse 1 on this page, so no head - unless the name also occurs
+                // as a word of the text, which is checked by the other test.
+                if (surah !in startsHere && onPage.none { it.ayahNumber == 1 }) {
+                    assertFalse(
+                        "page $page names surah $surah, whose first verse it does not hold",
+                        text.contains(name) && name.length > 6
+                    )
+                }
+            }
+        }
     }
 
     @Test

@@ -5,7 +5,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Ayah
 import com.example.data.model.QuranReadingOptions
@@ -55,17 +57,31 @@ class VerseSpan internal constructor(
  *
  * ### What is in the string, in order
  *
- * 1. The surah head, when the page opens a surah: its Arabic name, and the
- *    basmalah where the surah has one. Al-Fatihah's basmalah *is* its first verse
- *    and At-Tawbah has none, so both are special-cased - printing it twice or
- *    printing one that is not there are each worse than a special case.
- * 2. Each verse, then its ayah marker.
- * 3. The prostration marker, where the metadata says a prostration follows.
+ * 1. Each verse, then its ayah marker, with the surah's name immediately before
+ *    its own first verse - not only when the page happens to open a surah. A surah
+ *    begins where its ayah 1 falls, which on 42 of the book's 604 pages is part-way
+ *    down a page, and a head printed only at a page's top left those 42 surahs
+ *    unnamed on the page where they start.
+ * 2. The prostration marker, where the metadata says a prostration follows.
  *
- * The head is *inside* the string rather than a composable above it, for two
- * reasons that both matter: it is part of the page, so it has to be inside the
- * thing that is measured; and it means the page's height accounts for it, so a fit
- * calculation can never leave the head hanging off the top of a "fitted" page.
+ * ### No basmalah in the head
+ *
+ * Not an omission, and it is the single most consequential thing found in the
+ * corpus during the rebuild. The bundled Tanzil text carries the basmalah
+ * **inside verse 1** of every surah that has one - 111 of the 114 - rather than as
+ * a separate record. So a head that printed a basmalah of its own prints it
+ * **twice**: once as furniture and once at the start of the first verse, immediately
+ * below. The previous reader did exactly that on all 111 of them, and avoided it on
+ * Al-Fatihah and At-Tawbah only because those two were hard-coded as exceptions - a
+ * fact about two surahs remembered by someone, standing in for a fact about the data
+ * that nobody had read.
+ *
+ * ### Why the head is inside the string
+ *
+ * It is part of the page, so it has to be inside the thing that is measured; and
+ * the page's height accounts for it, so a fit calculation can never leave a head
+ * hanging off the bottom of a "fitted" page. A composable above the text would be
+ * measured as nothing at all.
  */
 class MushafPageText private constructor(
     val text: AnnotatedString,
@@ -216,39 +232,48 @@ class MushafPageText private constructor(
             // page of numbers.
             val markerSize = (bodySize * 0.82f).sp
 
+            // Named, because [appendSurahHead] has to pop it and push the identical
+            // style back afterwards - an `AnnotatedString` permits exactly one
+            // paragraph style at a time, and the head needs its own (centred).
+            val bodyLineHeight = (bodySize * lineHeightFactor).sp
             val builder = AnnotatedString.Builder()
             builder.pushStyle(
                 ParagraphStyle(
-                    lineHeight = (bodySize * lineHeightFactor).sp,
+                    lineHeight = bodyLineHeight,
                     textDirection = TextDirection.Rtl
                 )
             )
 
-            // The head only when the page **opens** a surah, and only when this
-            // text is a page.
-            //
-            // Unconditionally printing it is wrong in a way that is easy to miss
-            // because it looks right: page 3 is Al-Baqarah verses 6 to 16, and
-            // printing "البقرة" above it says the surah starts there. A reader
-            // checking their place in the mushaf would be misled by furniture the
-            // app put there precisely to help them check.
-            //
-            // A surah starts at its own verse 1, so that is the test - and it is
-            // read from the data rather than from a list of pages that open a
-            // surah, which would have to be maintained by hand.
-            if (showSurahHead) {
-                ayahs.firstOrNull()?.let { opening ->
-                    if (opening.ayahNumber == 1) {
-                        builder.appendSurahHead(
-                            surah = opening.surahNumber,
-                            scale = scale,
-                            accent = accent
-                        )
-                    }
-                }
-            }
-
             for (ayah in ayahs) {
+                // The head goes immediately before a surah's *first verse*, wherever
+                // that verse falls on the page.
+                //
+                // Testing the page's own first verse - "does this page open a surah?"
+                // - was the rule until a sweep over all 604 pages found it wrong on
+                // 42 of them. A surah does not begin at a page boundary: on 42 pages
+                // a surah's ayah 1 lands mid-page, so its name was never printed
+                // anywhere. 42 of 114 surahs - 37% - reached the reader as an
+                // unlabelled run of Arabic, on the page where they started, which is
+                // the one page where the name is needed most. A printed mushaf prints
+                // it at that point in the flow.
+                //
+                // The test is `ayahNumber == 1` rather than "the page opens a surah",
+                // so it is read from the data and holds for every page rather than
+                // for the three a chosen example would cover.
+                if (showSurahHead && ayah.ayahNumber == 1) {
+                    builder.appendSurahHead(
+                        surah = ayah.surahNumber,
+                        scale = scale,
+                        accent = accent,
+                        lineHeight = bodyLineHeight
+                    )
+                }
+
+                // Taken *after* the head, so the head is inside this verse's span and
+                // a tap on the surah's name selects the verse it introduces rather
+                // than resolving to the nearest verse *before* it - which on a
+                // mid-page surah would be the last verse of the previous surah, on a
+                // different page of the reader's mind entirely.
                 val start = builder.length
                 val isSelected = selected != null &&
                     selected.surah == ayah.surahNumber &&
@@ -312,37 +337,64 @@ class MushafPageText private constructor(
         }
 
         /**
-         * The surah's Arabic name, as the head of a page that opens it.
+         * The surah's Arabic name, immediately before its own first verse.
          *
-         * Printed only when the page opens a surah. A page that continues
-         * Al-Baqarah mid-way must not print Al-Baqarah's name, because that claims
-         * the surah starts here - which is what a "print the head on every page"
-         * version does. The *running* head that names every page is chrome and
-         * belongs to the reader; this is the text of the page.
+         * Called from inside the verse loop rather than once before it, and that is
+         * the whole point. A page that *continues* Al-Baqarah must not print
+         * Al-Baqarah's name at the top - that claims the surah starts here - but a
+         * page that Al-Baqarah *starts* part-way down must print it there, or the
+         * surah begins on that page with nothing to say so. Both rules are the same
+         * rule: the name goes immediately before ayah 1, wherever ayah 1 is.
          *
-         * ### No basmalah here
+         * The *running* head that names every page is chrome and belongs to the
+         * reader; this is the text of the page. See the note on [build] for why the
+         * basmalah is deliberately not here.
          *
-         * Not an omission, and this is the single most consequential thing found
-         * in the corpus during the rebuild. The bundled Tanzil text carries the
-         * basmalah **inside verse 1** of every surah that has one - 111 of the
-         * 114 - rather than as a separate record. So a head that printed a
-         * basmalah of its own prints it **twice**: once as furniture and once at the
-         * start of the first verse, immediately below.
+         * [hasBasmalah] states the basmalah rule and is checked against the corpus,
+         * so the answer comes from the text rather than from a list.
+         */
+        /**
+         * The surah's Arabic name, on a line of its own, before its first verse.
          *
-         * The previous reader did exactly that, on all 111 of them. It avoided the
-         * doubling on Al-Fatihah and At-Tawbah only because those two happened to
-         * be hard-coded as exceptions - a fact about two surahs remembered by
-         * someone, standing in for a fact about the data that nobody had read.
+         * Centred, as a printed mushaf centres it, and on its own line. Both of
+         * those are corrections: the name used to be appended inline with a trailing
+         * space, which under RTL puts it at the *right* of the first line with the
+         * text running left from it - so "البقرة" sat immediately before the basmalah
+         * on the same baseline, in Arabic, in the accent colour, and read as the
+         * first word of the page rather than as a heading. It looked deliberate and
+         * was the only thing on the page that was not where a mushaf puts it.
          *
-         * [hasBasmalah] states the real rule and is checked against the corpus, so
-         * the answer comes from the text rather than from a list.
+         * Centred as its own *paragraph*, which is where
+         * [ParagraphStyle.shouldNotOverlap] earns its keep: an `AnnotatedString`
+         * allows one paragraph style at a time, so the body's own style has to be
+         * popped around the head and pushed again after it. Trying to nest the two -
+         * `pushStyle(ParagraphStyle(Center))` inside the body's paragraph style -
+         * throws `IllegalArgumentException: ParagraphStyle should not overlap` from
+         * the string builder, at every page that opens a surah.
+         *
+         * The line height is restated on the head's paragraph rather than inherited,
+         * so the head's line is as tall as a line of text and [PageFit]'s
+         * measurement is of what is drawn. It was measured correctly either way -
+         * a short line in a tall-line-height paragraph is still a tall line - but
+         * saying so is better than relying on it.
          */
         private fun AnnotatedString.Builder.appendSurahHead(
             surah: Int,
             scale: Float,
-            accent: Color
+            accent: Color,
+            lineHeight: TextUnit
         ) {
             val name = QuranBrowse.surah(surah)?.arabicName ?: return
+
+            // The body paragraph, popped for the head and restored after it.
+            pop()
+            pushStyle(
+                ParagraphStyle(
+                    textAlign = TextAlign.Center,
+                    lineHeight = lineHeight,
+                    textDirection = TextDirection.Rtl
+                )
+            )
             pushStyle(
                 SpanStyle(
                     color = accent,
@@ -350,8 +402,15 @@ class MushafPageText private constructor(
                 )
             )
             append(name)
-            append(' ')
+            append('\n')
             pop()
+            pop()
+            pushStyle(
+                ParagraphStyle(
+                    lineHeight = lineHeight,
+                    textDirection = TextDirection.Rtl
+                )
+            )
         }
 
         private fun sajdaMarkerFor(kind: QuranBrowse.SajdaKind): String =

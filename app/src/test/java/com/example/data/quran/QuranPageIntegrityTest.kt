@@ -229,6 +229,134 @@ class QuranPageIntegrityTest {
     }
 
     @Test
+    fun `a surah starts on the page its first verse is on, and it is a page`() {
+        // The claim the running head rests on, checked for every surah.
+        //
+        // The interesting half is the count: a surah must not start mid-page in the
+        // sense of *belonging to no page*, and it must not be that two surahs claim
+        // the same page's start. What this suite exists to catch is the third case -
+        // a surah whose first verse is on a page that does not *begin* a surah, which
+        // is 42 pages' worth of surahs starting part-way down a page. Those are
+        // legitimate; they are simply the case a "print the head only when the page
+        // opens a surah" rule silently drops.
+        var midPageSurahs = 0
+        var pagesWithNoHeadAtAll = 0
+        for (surah in 1..114) {
+            val first = QuranBrowse.ayah(surah, 1)
+            assertTrue("surah $surah has no verse 1", first != null)
+            val page = QuranBrowse.pageOf(surah, 1)
+            assertTrue(
+                "surah $surah's first verse reports page $page, which is not a page",
+                page in 1..QuranBrowse.TOTAL_PAGES
+            )
+            assertEquals(
+                "surah $surah's first verse reports page ${first!!.pageNumber}",
+                page,
+                first.pageNumber
+            )
+            assertTrue(
+                "surah $surah is not on the page its first verse reports",
+                QuranBrowse.ayahOnPage(QuranRef(surah, 1, page), page)
+            )
+            val onPage = QuranBrowse.ayahsOnPage(page)
+            val indexOnPage = onPage.indexOfFirst {
+                it.surahNumber == surah && it.ayahNumber == 1
+            }
+            assertTrue(
+                "surah $surah's first verse is not on page $page",
+                indexOnPage >= 0
+            )
+            if (indexOnPage > 0) {
+                midPageSurahs++
+                // The worst of the two cases, and the one the old rule could not see:
+                // the page does not even *open* a surah, so a head printed at a
+                // page's top would not have named this one either.
+                if (onPage.first().ayahNumber != 1) pagesWithNoHeadAtAll++
+            }
+        }
+        // Pinned rather than left open, because these numbers are the entire case:
+        // 58 of 114 surahs begin part-way down a page, spread over 51 pages. On 42 of
+        // those pages the page opens no surah either, so a "print the head when the
+        // page opens a surah" rule would name 56 surahs and leave 58 unlabelled -
+        // and 45 of those 58 would be on a page that has no head at all, not merely
+        // at the wrong place on it.
+        //
+        // The 45 and the 42 differ because a page can start two surahs part-way down
+        // (page 604 carries both Al-Falaq and An-Nas after Al-Ikhlas's four verses),
+        // so the surah count is the larger of the two. Both are pinned because if
+        // either ever reached zero the old rule would become correct again by
+        // accident, and nobody would know why.
+        assertEquals(
+            "the number of surahs that start part-way down a page has changed; the " +
+                "head rule and this count are meant to be read together",
+            58,
+            midPageSurahs
+        )
+        assertEquals(
+            "the number of surahs that start on a page which opens no surah has " +
+                "changed",
+            45,
+            pagesWithNoHeadAtAll
+        )
+    }
+
+    @Test
+    fun `a page's place and its verses name the same verse`() {
+        // `placeAtPage`, `ayahsOnPage` and `pageOf` are three readers of one
+        // partition, asked in three different places - a page turn here, a drawn
+        // page there, the index sheet's page filter somewhere else. If any two
+        // disagree the reader turns to one page and is shown another. Asserted
+        // across the book, because it costs three lookups per page and the point is
+        // that nothing is left unchecked.
+        for (page in 1..QuranBrowse.TOTAL_PAGES) {
+            val onPage = QuranBrowse.ayahsOnPage(page)
+            val place = QuranBrowse.placeAtPage(page).verse
+            assertEquals(
+                "page $page's place is ${place.surah}:${place.ayah}, which is not its " +
+                    "first verse",
+                onPage.first().surahNumber to onPage.first().ayahNumber,
+                place.surah to place.ayah
+            )
+            for (ayah in onPage) {
+                assertEquals(
+                    "a verse on page $page reports page ${ayah.pageNumber}",
+                    page,
+                    QuranBrowse.pageOf(ayah.surahNumber, ayah.ayahNumber)
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `a page opens in the surah the index reports for it`() {
+        // The resolution a tap on a mushaf page is built on. A page opens in one
+        // surah and can carry two more, so "the surah of this page" has to be the
+        // page's *first* - and the pair it makes has to be a verse the page holds.
+        //
+        // Worth pinning because the alternative reads as harmless: resolving a tap
+        // against the reader's current surah instead. On the pages that cross a
+        // boundary that names a verse from the wrong surah, so a reader tapping a
+        // verse of the second surah on the page gets a highlight on a verse that is
+        // not the one they touched - and the bookmark action fires on that one.
+        // Neither throws and both look like a selection.
+        for (page in 1..QuranBrowse.TOTAL_PAGES) {
+            val onPage = QuranBrowse.ayahsOnPage(page)
+            assertEquals(
+                "page $page does not open in the surah the index reports",
+                onPage.first().surahNumber,
+                QuranBrowse.surahsOnPage(page).first().number
+            )
+            for (ayah in onPage) {
+                val ref = QuranRef(ayah.surahNumber, ayah.ayahNumber, page)
+                assertTrue(
+                    "$ref is on page $page but did not resolve from it",
+                    QuranBrowse.ayahOnPage(ref, page)
+                )
+            }
+        }
+    }
+
+    @Test
     fun `no verse is claimed by two different pages at once`() {
         // `ayahOnPage` is what decides whether a selection survives a turn, so it
         // has to be exact in both directions. A verse claimed by two pages would

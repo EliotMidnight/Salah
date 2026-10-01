@@ -64,8 +64,9 @@ class QuranReaderScreenshotTest {
     private var surahNumber = 112
     private var surah: Surah = QuranBrowse.surah(surahNumber)!!
     private var ayahs: List<Ayah> = QuranBrowse.ayahsInSurah(surahNumber)
+    private var ayahNumber = 1
 
-    private fun state(ayahNumber: Int = 1) = SalahUiState(
+    private fun state(ayahNumber: Int = this.ayahNumber) = SalahUiState(
         selectedSurah = surah,
         currentSurahAyahs = ayahs,
         activeReadingAyahNumber = ayahNumber
@@ -85,18 +86,33 @@ class QuranReaderScreenshotTest {
         ayahs = QuranBrowse.ayahsInSurah(number)
     }
 
+    /**
+     * Point the reader at a mushaf page rather than at a surah.
+     *
+     * Needed for the page cases, because they cannot be reached by choosing a surah:
+     * the surahs that start part-way down a page are not the surah the page is named
+     * after. The position is the page's own first verse, which is what a page turn
+     * writes, so this is the same thing a reader gets by turning there.
+     */
     private fun render(
         options: QuranReadingOptions,
         dark: Boolean,
         name: String,
-        surah: Int = surahNumber
+        surah: Int = surahNumber,
+        page: Int? = null
     ) {
-        openSurah(surah)
+        if (page != null) {
+            val ref = QuranBrowse.placeAtPage(page).verse
+            openSurah(ref.surah)
+            ayahNumber = ref.ayah
+        } else {
+            openSurah(surah)
+        }
         composeTestRule.setContent {
             SalahTheme(darkTheme = dark) {
                 ProvideAppLanguage(language = "English") {
                     QuranReader(
-                        state = state(),
+                        state = state(ayahNumber),
                         onSelectSurah = {},
                         onSelectSurahAyah = { _, _ -> },
                         onAyahViewed = {},
@@ -216,6 +232,21 @@ class QuranReaderScreenshotTest {
         dark = false,
         name = "quran_per_page_vertical_dense",
         surah = 2
+    )
+
+    // --- A surah that starts part-way down the page ----------------------
+
+    @Test
+    fun per_page_vertical_surah_starts_mid_page() = render(
+        QuranReadingOptions(layout = QuranReadingLayout.PER_PAGE),
+        dark = false,
+        name = "quran_per_page_vertical_surah_starts_mid_page",
+        // Page 106 ends An-Nisa with 4:176 and then carries 5:1, so Al-Ma'idah
+        // begins part-way down it. There are 45 surahs in this position, spread
+        // over 42 pages, and the rule that printed a surah's name only when the
+        // page *opened* one left every one of them unnamed - on the page where they
+        // start, which is the one page where the name is needed.
+        page = 106
     )
 
     // --- Dark, and a paper that is not the app default --------------------

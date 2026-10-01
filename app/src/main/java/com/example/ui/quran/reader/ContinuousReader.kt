@@ -121,6 +121,19 @@ internal fun ContinuousReader(
     val space = Space.current
     val horizontal = options.scroll == QuranScrollDirection.HORIZONTAL
 
+    // The flowing text's blocks, grouped once.
+    //
+    // It used to be written twice - once for the items and once *inside the item
+    // lambda*, to find the previous block's first verse for the page boundary. A
+    // `LazyColumn` composes an item on every scroll frame, so that was a fresh list
+    // of every block in the surah allocated per block per frame: for Al-Baqarah, 24
+    // lists of 286 verses each, every time the reader moved. Nothing about it looked
+    // wrong and the profile was the only place it appeared.
+    //
+    // Declared up here rather than inside the `LazyListScope` body, because that body
+    // is not a composable scope and so cannot `remember`.
+    val blocks = remember(ayahs) { ayahs.chunked(FLOW_BLOCK_VERSES) }
+
     // The verse at the top of the viewport is the reader's position.
     //
     // The list is `[heading, verse…]`, so the index the scroll state reports is one
@@ -187,11 +200,11 @@ internal fun ContinuousReader(
                 // Flowing text: one block, and a tap resolves through its layout
                 // exactly as a mushaf page's does.
                 itemsIndexed(
-                    ayahs.chunked(FLOW_BLOCK_VERSES),
+                    blocks,
                     key = { index, _ -> "flow_$index" }
                 ) { index, group ->
-                    if (index > 0 && group.first().pageNumber != ayahs
-                            .chunked(FLOW_BLOCK_VERSES)[index - 1].first().pageNumber
+                    if (index > 0 && group.first().pageNumber !=
+                        blocks[index - 1].first().pageNumber
                     ) {
                         PageRule(page = group.first().pageNumber)
                     }
@@ -201,16 +214,18 @@ internal fun ContinuousReader(
                         options = options,
                         ink = ink,
                         accent = accent,
+                        // The verse itself, not a number to go and look up. This
+                        // used to search the whole surah for a verse it was already
+                        // holding - a linear scan per tap, on a list of up to 286,
+                        // to recover fields it had just been handed.
                         onSelectVerse = { ayah ->
-                            ayahs.firstOrNull { it.ayahNumber == ayah.ayahNumber }?.let {
-                                position.toggleSelection(
-                                    QuranRef(
-                                        it.surahNumber,
-                                        it.ayahNumber,
-                                        it.pageNumber
-                                    )
+                            position.toggleSelection(
+                                QuranRef(
+                                    ayah.surahNumber,
+                                    ayah.ayahNumber,
+                                    ayah.pageNumber
                                 )
-                            }
+                            )
                         }
                     )
                 }
