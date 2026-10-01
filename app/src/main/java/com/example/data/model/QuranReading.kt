@@ -111,58 +111,106 @@ enum class QuranPaperTone(val key: String) {
 /**
  * A Quranic typeface.
  *
- * The five faces the reader offers by name, plus the two that can actually be
- * shipped today. That split is deliberate and is visible in the picker rather
- * than hidden: [fontRes] is null for any face whose own licence does not allow
- * redistribution, and the reader falls back to the app's Arabic serif for those
- * instead of drawing nothing.
+ * ### Every face here is bundled
  *
- * See `res/font/OFL.txt` for the licence each bundled face ships under and how
- * to enable one you hold permission for.
+ * The previous list offered seven faces and shipped two. The other five - KFGQ,
+ * MeQuran, Digital Khatt, Naskh Nastaleeq and Noorani - have licences that do not
+ * permit redistribution, so they resolved to a fallback and the picker offered a
+ * reader five choices that all drew the same face. A control that looks like a
+ * choice and is not one is worse than no control, and it cost the reader a settings
+ * screen to discover it.
  *
- * [lineHeightFactor] is per face and not a style constant. Nastaliq descenders
- * alone can eat a third of the line box, and a Naskh face set with a Nastaliq
- * leading looks like a mistake - so each face carries its own multiplier and
- * the reader never shares one value across all of them.
+ * So the list is now **only faces the app actually ships**, all under the SIL Open
+ * Font License, which permits redistribution inside an Apache-2.0 application. Five
+ * working faces instead of seven with five dead: Amiri, Amiri Quran, Lateef,
+ * Scheherazade New and Harmattan.
+ *
+ * Each was checked for **U+06DD**, the ayah-end ornament, before being added. That
+ * codepoint is a standalone ornament rather than a numeric placeholder, and a mushaf
+ * whose ayah markers are tofu boxes is not a mushaf. Reem Kufi was considered and
+ * rejected on exactly that: a beautiful face that cannot draw the mark.
+ *
+ * Adding a face later is a two-step change - drop the file into `res/font`, point
+ * the entry at it - and needs nothing else. Each face's licence is in
+ * `app/src/main/assets/quran_fonts_OFL.txt`.
+ *
+ * ### [lineHeightFactor] is per face, and not a style constant
+ *
+ * Nastaliq descenders alone can eat a third of the line box, and a Naskh face set
+ * with a Nastaliq leading looks like a mistake. Each face carries its own multiplier
+ * and the reader never shares one value across all of them. Harmattan is the extreme
+ * case here: it is a Naskh with a famously deep descender, and it needs more room
+ * than any other face in the set - which is the reason for the whole mechanism.
  */
 enum class QuranFontFace(
     val key: String,
-    val fontRes: Int?,
+    val fontRes: Int,
     val lineHeightFactor: Float,
     /** Baseline nudge, in sp at 100% size, for faces whose marks sit low. */
     val baselineShiftSp: Float = 0f
 ) {
-    /** King Fahd Glorious Quran Printing Complex Uthmanic script. */
-    KFGQ("kfgq", null, 1.85f),
-
     /**
-     * MeQuran. Marks sit noticeably below the baseline and need the extra
-     * leading to keep neighbouring lines off each other.
+     * Amiri - a Naskh revival by Khaled Hosny, and the app's default.
+     *
+     * The most traditional of the set and the most widely used for digital mushaf
+     * work, which is why it is the default rather than the prettiest.
      */
-    ME_QURAN("me_quran", null, 2.05f, baselineShiftSp = -1f),
-
-    /** Digital Khatt v2. */
-    DIGITAL_KHATT("digital_khatt", null, 1.95f),
-
-    /** Naskh Nastaleeq. Nastaliq needs by far the tallest line box of any of these. */
-    NASKH_NASTALEEQ("naskh_nastaleeq", null, 2.60f, baselineShiftSp = -2f),
-
-    /** Noorani Quran. */
-    NOORANI("noorani", null, 1.95f),
-
-    /** Amiri - Naskh revival, SIL OFL. Bundled. */
     AMIRI("amiri", com.example.R.font.quran_amiri, 2.00f, baselineShiftSp = -0.5f),
 
-    /** Lateef - SIL OFL, compact and highly legible. Bundled. */
-    LATEEF("lateef", com.example.R.font.quran_lateef, 1.90f);
+    /**
+     * Amiri Quran - the same revival cut specifically for Quranic text.
+     *
+     * A different design from plain Amiri rather than a variant of it: the
+     * letterforms are drawn to sit correctly at Quranic sizes. It is noticeably more
+     * compact vertically, so it needs less leading than plain Amiri.
+     */
+    AMIRI_QURAN(
+        "amiri_quran",
+        com.example.R.font.quran_amiri_quran,
+        1.90f,
+        baselineShiftSp = -0.5f
+    ),
 
-    /** True when the face is on disk and can actually be rendered. */
-    val isBundled: Boolean get() = fontRes != null
+    /**
+     * Lateef - a compact Naskh designed for legibility at small sizes.
+     *
+     * The most text-per-page of the set, which is what makes it the right face for
+     * a dense page on a small screen.
+     */
+    LATEEF("lateef", com.example.R.font.quran_lateef, 1.90f),
+
+    /**
+     * Scheherazade New - the modern revival of Scheherazade, SIL's classical Naskh.
+     *
+     * Wider than Amiri at the same size, so it needs slightly more leading and
+     * fits fewer words to a line.
+     */
+    SCHEHERAZADE_NEW(
+        "scheherazade_new",
+        com.example.R.font.quran_scheherazade_new,
+        2.05f
+    ),
+
+    /**
+     * Harmattan - SIL's Naskh, with the deepest descender in the set.
+     *
+     * Its marks and descenders reach well below the baseline, and a line box sized
+     * for Amiri puts neighbouring lines on top of them. It is the reason
+     * [lineHeightFactor] is per face at all.
+     */
+    HARMATTAN("harmattan", com.example.R.font.quran_harmattan, 2.35f, baselineShiftSp = -1f);
+
+    /**
+     * Always true, and that is the point: every face offered is one that can
+     * actually be drawn.
+     *
+     * Kept as a property rather than deleted because a caller asking "can this be
+     * rendered" is asking a real question, and the answer being constant is a change
+     * worth having.
+     */
+    val isBundled: Boolean get() = true
 
     companion object {
-        /** Ships with the app and works immediately. */
-        val bundled: List<QuranFontFace> = entries.filter { it.isBundled }
-
         fun fromKey(key: String?): QuranFontFace =
             entries.firstOrNull { it.key == key } ?: AMIRI
     }

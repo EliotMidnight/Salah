@@ -286,18 +286,49 @@ class QuranReadingOptionsTest {
     }
 
     @Test
-    fun `the bundled faces are a strict subset of the offered faces`() {
-        assertTrue(QuranFontFace.bundled.isNotEmpty())
-        assertTrue(QuranFontFace.bundled.all { it in QuranFontFace.entries })
-        assertTrue(QuranFontFace.entries.size > QuranFontFace.bundled.size)
+    fun `every face the picker offers is one the app can actually draw`() {
+        // The picker used to offer seven faces and ship two. The other five have
+        // licences that do not permit redistribution, so they resolved to a fallback
+        // and the reader saw five choices that all drew Amiri - a control that looks
+        // like a choice and is not one, discoverable only by opening a settings
+        // screen and choosing each in turn.
+        //
+        // So the invariant is now an equality: offering a face and being able to
+        // draw it are the same fact. If a future face needs a licence check, the
+        // honest answer is to leave it out of the enum rather than to ship a control
+        // that lies.
+        assertTrue(QuranFontFace.entries.isNotEmpty())
+        QuranFontFace.entries.forEach { face ->
+            assertTrue(
+                "${face.key} is offered but cannot be drawn",
+                face.isBundled
+            )
+            assertTrue(
+                "${face.key} has no font resource",
+                face.fontRes != 0
+            )
+        }
     }
 
     @Test
-    fun `the default face is one that can actually be drawn`() {
-        assertTrue(
-            "a default that silently falls back is a silent bug",
-            QuranReadingOptions().font.isBundled
+    fun `every face key round trips and no two faces share one`() {
+        // A shared key is a silent bug: the last face to be written wins the
+        // preference, and a reader who chose the other one gets it changed
+        // underneath them by a later save.
+        val keys = QuranFontFace.entries.map { it.key }
+        assertEquals(
+            "two faces share a key",
+            keys.size,
+            keys.distinct().size
         )
+        QuranFontFace.entries.forEach { face ->
+            assertEquals(face, QuranFontFace.fromKey(face.key))
+        }
+    }
+
+    @Test
+    fun `the default face is the one the app ships`() {
+        assertEquals(QuranFontFace.AMIRI, QuranReadingOptions().font)
     }
 
     @Test
@@ -312,9 +343,17 @@ class QuranReadingOptionsTest {
                 face.lineHeightFactor <= 3f
             )
         }
+        // Harmattan has the deepest descender in the set, and it is the reason the
+        // multiplier is per face at all: a line box sized for Amiri puts the
+        // neighbouring line on top of its descenders.
         assertTrue(
-            QuranFontFace.NASKH_NASTALEEQ.lineHeightFactor >
-                QuranFontFace.AMIRI.lineHeightFactor
+            "Harmattan's descenders need more room than Amiri's",
+            QuranFontFace.HARMATTAN.lineHeightFactor > QuranFontFace.AMIRI.lineHeightFactor
+        )
+        // And Amiri Quran is the compact cut of Amiri, so it needs less.
+        assertTrue(
+            "Amiri Quran is more compact than Amiri",
+            QuranFontFace.AMIRI_QURAN.lineHeightFactor <= QuranFontFace.AMIRI.lineHeightFactor
         )
     }
 }

@@ -281,10 +281,13 @@ private fun GroupLabel(text: String) {
  * the preview, so a Nastaliq tile is visibly taller than a Naskh one - which is
  * information, not a layout bug.
  *
- * A face whose file is not bundled still appears, marked, and still selects:
- * the setting is real and stored, and it starts rendering the moment the file
- * is added. Silently omitting it would make the option list depend on whatever
- * happened to be in the repository.
+ * ### Every face here is the real face
+ *
+ * The preview used to fall back to Amiri for any face whose file was not bundled,
+ * and five of the seven offered faces were exactly that - so five of the seven
+ * previews in the picker were the same picture under five different names. Every
+ * face in [QuranFontFace] now ships with the app, and this renders the face it
+ * names.
  */
 @Composable
 private fun FontFaceTile(
@@ -317,12 +320,10 @@ private fun FontFaceTile(
             .padding(vertical = space.sm, horizontal = space.xs),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Amiri covers the Quranic alphabet plus the ayah marker, so it is a
-        // fair stand-in for the sample while the real face loads.
-        QuranFonts.Provide(if (face.isBundled) face else QuranFontFace.AMIRI) {
+        QuranFonts.Provide(face) {
             Text(
                 text = "بِسْمِ",
-                style = QuranFonts.of(if (face.isBundled) face else QuranFontFace.AMIRI)
+                style = QuranFonts.of(face)
                     .arabicStyle(
                         scale = 0.62f,
                         color = if (selected) {
@@ -349,14 +350,6 @@ private fun FontFaceTile(
             overflow = TextOverflow.Ellipsis,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
-        if (!face.isBundled) {
-            Text(
-                text = strings.more.reader.fontNotBundled,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                maxLines = 1
-            )
-        }
     }
 }
 
@@ -364,15 +357,21 @@ private fun FontFaceTile(
 private fun borderColour(selected: Boolean) =
     if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
 
-/** Human name for a face, written out rather than showing its storage key. */
+/**
+ * Human name for a face, written out rather than showing its storage key.
+ *
+ * These are the fonts' own names, and they are proper nouns of their designers -
+ * "Scheherazade" and "Harmattan" are the names of a thirteenth-century copyist and
+ * a city, and transliterating or anglicising them would be a small dishonesty about
+ * who made them. They are not translated either: a font's name is not a word, and
+ * translating it would make a face unrecognisable to anyone who has seen it.
+ */
 internal fun faceLabel(face: QuranFontFace): String = when (face) {
-    QuranFontFace.KFGQ -> "KFGQ"
-    QuranFontFace.ME_QURAN -> "MeQuran"
-    QuranFontFace.DIGITAL_KHATT -> "Digital Khatt v2"
-    QuranFontFace.NASKH_NASTALEEQ -> "Naskh Nastaleeq"
-    QuranFontFace.NOORANI -> "Noorani Quran"
     QuranFontFace.AMIRI -> "Amiri"
+    QuranFontFace.AMIRI_QURAN -> "Amiri Quran"
     QuranFontFace.LATEEF -> "Lateef"
+    QuranFontFace.SCHEHERAZADE_NEW -> "Scheherazade New"
+    QuranFontFace.HARMATTAN -> "Harmattan"
 }
 
 /**

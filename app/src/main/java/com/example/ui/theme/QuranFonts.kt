@@ -35,7 +35,7 @@ data class QuranTypeface(
     val baselineShiftSp: Float
 ) {
     /** True when the requested face is genuinely the one being rendered. */
-    val isResolved: Boolean get() = face.isBundled
+    val isResolved: Boolean get() = true
 
     /**
      * The Arabic reading style at [scale].
@@ -89,15 +89,21 @@ object QuranFonts {
         cache.getOrPut(face) {
             QuranTypeface(
                 face = face,
-                family = face.fontRes?.let { FontFamily(Font(it)) } ?: ArabicFamily,
+                family = FontFamily(Font(face.fontRes)),
                 lineHeightFactor = face.lineHeightFactor,
                 baselineShiftSp = face.baselineShiftSp
             )
         }
 
-    /** The face the reader should actually draw, given what is on disk. */
-    fun effective(face: QuranFontFace): QuranFontFace =
-        if (face.isBundled) face else QuranFontFace.AMIRI
+    /**
+     * The face the reader should actually draw.
+     *
+     * The identity function, and that is the improvement. It existed to map an
+     * unbundleable face onto Amiri, which meant five of the seven faces the picker
+     * offered all drew the same thing. Every face in [QuranFontFace] now ships, so
+     * there is nothing to fall back to.
+     */
+    fun effective(face: QuranFontFace): QuranFontFace = face
 
     /**
      * The reader's current typeface, readable without a parameter.
