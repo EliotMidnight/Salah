@@ -37,6 +37,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.model.Ayah
@@ -153,13 +154,31 @@ fun VerseTranslationCard(
                 )
                 Spacer(Modifier.height(space.xs))
             }
+            // `textDirection = Content` on the translation itself.
+            //
+            // The translation is *English* wherever it appears, so its paragraph
+            // direction must not be the interface's. Without this the Arabic
+            // interface placed an English sentence in an RTL paragraph, and the
+            // neutral characters at its edges - the trailing full stop, an opening
+            // quote - are resolved by paragraph direction, so the period jumped to
+            // the front of the line and the quotes swapped ends:
+            // `,"Say, "He is Allah, [who is] One` instead of `Say, "He is
+            // Allah..."`. The words stayed in order, which is why it reads as
+            // almost-right rather than as broken.
+            //
+            // This is the one place in the reader that must force a direction
+            // against the ambient one, and it is why the card takes it rather than
+            // assuming it: a translation is LTR whatever the reader's interface is,
+            // and the mushaf page's Arabic is RTL whatever it is.
             Text(
                 text = ayah.textEnglish,
                 style = base.copy(
                     fontSize = base.fontSize * translationScale,
-                    lineHeight = base.lineHeight * translationScale
+                    lineHeight = base.lineHeight * translationScale,
+                    textDirection = TextDirection.Content
                 ),
                 color = ink,
+                textAlign = TextAlign.Start,
                 modifier = Modifier.semantics { contentDescription = ayah.textEnglish }
             )
         }
@@ -189,7 +208,16 @@ internal fun VerseArabic(
 ) {
     Text(
         text = if (showEndMarker) {
-            "${ayah.textArabic} ۝${ArabicDigits.ayahMarker(ayah.ayahNumber)}"
+            // `ayahMarker` already carries the U+06DD ornament. This used to write a
+            // literal ۝ and *then* call it, so every per-verse block ended with two
+            // ayah circles - the per-page mushaf does not, because
+            // `MushafPageText` calls the same function once.
+            //
+            // It is only visible in RTL. In an LTR context the second circle is set
+            // inside the first and the pair reads as one ornament drawn thick; under
+            // RTL the pair resolves as two separate glyphs at the start of the line,
+            // which is where the Arabic screenshot found it.
+            "${ayah.textArabic} ${ArabicDigits.ayahMarker(ayah.ayahNumber)}"
         } else {
             ayah.textArabic
         },

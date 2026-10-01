@@ -119,7 +119,18 @@ fun PrayerScreen(
     }
     val prayers = dayTimes?.prayers ?: emptyList()
 
-    val hijri = remember(selectedDate) { HijriCalendarEngine.getHijriDate(selectedDate) }
+    // The reader's Hijri adjustment, applied here as it is on the Today page.
+    //
+    // Same reason: the adjustment used to be applied in exactly one place in the app -
+    // a state field nothing read - so it did nothing at all. Two screens rendering the
+    // same date is the situation where that is visible, since a reader comparing the
+    // Today page with the Prayer tab would see two different Hijri dates for the same
+    // day and have no way to know which was right.
+    val hijri = remember(selectedDate, state.hijriAdjustment) {
+        HijriCalendarEngine.getHijriDate(
+            selectedDate.plusDays(state.hijriAdjustment.toLong())
+        )
+    }
 
     // No header. The bottom navigation already says "Prayer", and the method it
     // used to carry in the subtitle is shown as a labelled row further down this
@@ -150,7 +161,18 @@ fun PrayerScreen(
                     if (index > 0) RowDivider()
                     PrayerTimeRow(
                         prayerTime = prayerTime,
-                        isNext = isToday && prayerTime.isNext,
+                        // The live next prayer from the ticker, not
+                        // `PrayerTime.isNext`.
+                        //
+                        // `isNext` is stamped when `calculatePrayerTimes` runs and
+                        // never revised, because that only happens on a settings or
+                        // location change and at midnight. So the two screens
+                        // disagreed for hours at a time: open the app at 15:00 and at
+                        // 17:40 the Today page says "next: Isha" - because it recomputes
+                        // every second - while this row still highlighted Maghrib, from
+                        // a calculation made at 15:00. A reader comparing the two tabs
+                        // had no way to tell which was current.
+                        isNext = isToday && state.nextPrayer?.prayer == prayerTime.prayer,
                         time = prayerTime.time.format(timeFormatter)
                     )
                 }

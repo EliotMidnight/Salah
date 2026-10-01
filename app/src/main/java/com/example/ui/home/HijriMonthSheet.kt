@@ -79,6 +79,16 @@ fun HijriMonthSheet(
     madhhab: Madhhab,
     adjustments: PrayerAdjustments,
     timeFormatter: DateTimeFormatter,
+    /**
+     * The reader's Hijri adjustment, in days.
+     *
+     * Passed in rather than read from a global, because the month grid and the
+     * adjustment have to agree: the heading, the day numbers and the month the arrows
+     * page between are all the same question, and a sheet that read the adjustment
+     * from one place and the grid from another draws the month boundary in the wrong
+     * place.
+     */
+    hijriAdjustment: Int = 0,
     onSelectDate: (LocalDate) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -94,10 +104,11 @@ fun HijriMonthSheet(
     val anchor = monthAnchor ?: date
     LaunchedEffect(date) { monthAnchor = date }
 
-    val selected = remember(anchor) { HijriCalendarEngine.getHijriDate(anchor) }
+    val selected = remember(anchor, hijriAdjustment) { hijriOf(anchor, hijriAdjustment) }
     // Walk the Gregorian days that make up that Hijri month: from the first day
-    // to the last, found by asking the engine where each day lands.
-    val days = remember(anchor) { hijriMonthDays(anchor) }
+    // to the last, found by asking the engine where each day lands - with the same
+    // adjustment, or the grid belongs to a different month than the heading.
+    val days = remember(anchor, hijriAdjustment) { hijriMonthDays(anchor, hijriAdjustment) }
 
     val times = remember(anchor, location, method, madhhab, adjustments) {
         PrayerCalculationEngine.calculatePrayerTimes(
@@ -123,7 +134,7 @@ fun HijriMonthSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
-                    onClick = { monthAnchor = shiftHijriMonth(anchor, -1) },
+                    onClick = { monthAnchor = shiftHijriMonth(anchor, -1, hijriAdjustment) },
                     modifier = Modifier.size(MaterialTheme.layoutMetrics.minTouchTarget)
                 ) {
                     Icon(
@@ -151,7 +162,7 @@ fun HijriMonthSheet(
                     )
                 }
                 IconButton(
-                    onClick = { monthAnchor = shiftHijriMonth(anchor, 1) },
+                    onClick = { monthAnchor = shiftHijriMonth(anchor, 1, hijriAdjustment) },
                     modifier = Modifier.size(MaterialTheme.layoutMetrics.minTouchTarget)
                 ) {
                     Icon(
@@ -199,6 +210,7 @@ fun HijriMonthSheet(
                                 madhhab = madhhab, adjustments = adjustments
                             )
                         },
+                        hijriAdjustment = hijriAdjustment,
                         onClick = { onSelectDate(day) }
                     )
                 }
@@ -230,10 +242,11 @@ private fun HijriDayCell(
     isSelected: Boolean,
     isToday: Boolean,
     times: PrayerTimesDay,
+    hijriAdjustment: Int,
     onClick: () -> Unit
 ) {
     val space = Space.current
-    val hijri = remember(day) { HijriCalendarEngine.getHijriDate(day) }
+    val hijri = remember(day, hijriAdjustment) { hijriOf(day, hijriAdjustment) }
     val onSurface = MaterialTheme.colorScheme.onSurface
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val accent = MaterialTheme.colorScheme.primary
@@ -334,19 +347,19 @@ private fun PrayerTimesCompact(times: PrayerTimesDay, timeFormatter: DateTimeFor
  * it wrong puts a day in two months or none. Asking the engine is cheap here -
  * it runs once, for the whole sheet, and is remembered.
  */
-private fun hijriMonthDays(date: LocalDate): List<LocalDate> {
-    val target = HijriCalendarEngine.getHijriDate(date)
+private fun hijriMonthDays(date: LocalDate, adjustment: Int): List<LocalDate> {
+    val target = hijriOf(date, adjustment)
     val days = mutableListOf<LocalDate>()
     // Backwards from [date] inclusive. Seeding the list with [date] and then
     // looping from it as well would put the selected day in the grid twice.
     var cursor = date
-    while (sameHijriMonth(cursor, target)) {
+    while (sameHijriMonth(cursor, target, adjustment)) {
         days.add(cursor)
         cursor = cursor.minusDays(1)
     }
     days.reverse()
     cursor = date.plusDays(1)
-    while (sameHijriMonth(cursor, target)) {
+    while (sameHijriMonth(cursor, target, adjustment)) {
         days.add(cursor)
         cursor = cursor.plusDays(1)
     }
@@ -361,29 +374,51 @@ private fun hijriMonthDays(date: LocalDate): List<LocalDate> {
  * a year the arrows land in the wrong month. Walking to the neighbouring month
  * and sliding back to its first day cannot drift.
  */
-private fun shiftHijriMonth(from: LocalDate, steps: Int): LocalDate {
-    val current = HijriCalendarEngine.getHijriDate(from)
+private fun shiftHijriMonth(from: LocalDate, steps: Int, adjustment: Int): LocalDate {
+    val current = hijriOf(from, adjustment)
     val target = current.year * 12 + current.monthNumber + steps
 
     var probe = from
     // 400 days covers a year plus a margin; the loops are bounded so a broken
     // engine cannot spin here.
     var guard = 0
-    while (hijriMonthIndex(probe) < target && guard++ < 400) probe = probe.plusDays(1)
-    while (hijriMonthIndex(probe) > target && guard++ < 800) probe = probe.minusDays(1)
+    while (hijriMonthIndex(probe, adjustment) < target && guard++ < 400) {
+        probe = probe.plusDays(1)
+    }
+    while (hijriMonthIndex(probe, adjustment) > target && guard++ < 800) {
+        probe = probe.minusDays(1)
+    }
     // Now inside the target month; back up to its first day.
-    while (hijriMonthIndex(probe.minusDays(1)) == target && guard++ < 800) {
+    while (hijriMonthIndex(probe.minusDays(1), adjustment) == target && guard++ < 800) {
         probe = probe.minusDays(1)
     }
     return probe
 }
 
-private fun hijriMonthIndex(date: LocalDate): Int {
-    val h = HijriCalendarEngine.getHijriDate(date)
+private fun hijriMonthIndex(date: LocalDate, adjustment: Int): Int {
+    val h = hijriOf(date, adjustment)
     return h.year * 12 + h.monthNumber
 }
 
-private fun sameHijriMonth(candidate: LocalDate, month: HijriDate): Boolean {
-    val h = HijriCalendarEngine.getHijriDate(candidate)
+private fun sameHijriMonth(candidate: LocalDate, month: HijriDate, adjustment: Int): Boolean {
+    val h = hijriOf(candidate, adjustment)
     return h.monthNumber == month.monthNumber && h.year == month.year
 }
+
+/**
+ * The Hijri date of a Gregorian day, with the reader's adjustment applied.
+ *
+ * One function, so "what Hijri month is this day in" has one answer in this file.
+ * Before it, the sheet mixed an adjusted `selected` with an unadjusted grid: the
+ * heading said one month and the days under it were gathered by another, which is a
+ * month boundary drawn in the wrong place - and only visible to a reader who has set
+ * an adjustment of ±2 days, which is to say to a reader following a local calendar.
+ *
+ * The grid still shows *Gregorian* days, because the reader's choice is a Gregorian
+ * day - prayer times, the app's date switcher and every other screen work in that
+ * calendar. So the adjustment shifts which Hijri month a day belongs to, and the
+ * dates on offer do not move. That is what an adjustment means: a disagreement about
+ * *today's* Hijri date, not about which days exist.
+ */
+private fun hijriOf(date: LocalDate, adjustment: Int): HijriDate =
+    HijriCalendarEngine.getHijriDate(date.plusDays(adjustment.toLong()))

@@ -36,7 +36,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import com.example.data.model.Ayah
 import com.example.data.model.QuranReadingOptions
@@ -49,6 +51,7 @@ import com.example.ui.localization.LocalStrings
 import com.example.ui.quran.VerseActions
 import com.example.ui.quran.VerseArabic
 import com.example.ui.quran.VerseReferenceChip
+import com.example.ui.quran.VerseTranslationCard
 import com.example.ui.theme.ArabicFamily
 import com.example.ui.theme.QuranFonts
 import com.example.ui.theme.Space
@@ -431,18 +434,42 @@ internal fun SurahHeading(
             color = ink,
             textAlign = TextAlign.Center
         )
-        Text(
-            text = "${surah.englishTranslation} · " +
-                "${strings.more.verseCount.format(surah.totalVerses)} · " +
-                if (surah.revelationType == RevelationType.MECCAN) {
-                    strings.meccan
-                } else {
-                    strings.medinan
-                },
-            style = MaterialTheme.typography.labelSmall,
-            color = muted,
-            textAlign = TextAlign.Center
-        )
+        // One part per line, each its own paragraph.
+        //
+        // This used to be three parts joined with " · " into one string. A single
+        // string is a single bidirectional paragraph, and under RTL that is not three
+        // phrases in a row: the Latin and the digits each take their own run, and the
+        // order the reader sees is the *visual* order. The line came out as
+        // "4 · آية · The Sincerity" - reversed, with the count first and the meaning in
+        // the middle.
+        //
+        // Splitting the paragraphs is the whole fix, and no direction override is
+        // needed or wanted: `TextStyle.textDirection` already defaults to `Content`,
+        // which resolves each paragraph from its own first strong character, so a
+        // Latin line reads left-to-right inside an RTL interface and an Arabic line
+        // reads right-to-left inside an LTR one. That is the correct behaviour for both
+        // and it is what per-part `Text`s get for free.
+        //
+        // The `·` separators go with the join: there is nothing to separate any more,
+        // and a line per part reads better than three fragments with rules between
+        // them on a page that is otherwise only text.
+        listOf(
+            surah.englishTranslation,
+            strings.more.verseCount.format(surah.totalVerses),
+            if (surah.revelationType == RevelationType.MECCAN) {
+                strings.meccan
+            } else {
+                strings.medinan
+            }
+        ).forEach { line ->
+            Text(
+                text = line,
+                style = MaterialTheme.typography.labelSmall,
+                color = muted,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 }
 
@@ -501,6 +528,27 @@ internal fun VerseRow(
             scale = options.arabicScale,
             ink = ink
         )
+
+        // The translation, when the reader asked for it.
+        //
+        // It was missing here entirely, and invisibly: `showTranslation` is a reader
+        // setting with a control in the options sheet, and turning it on changed the
+        // flowing layout and the mushaf's selected-verse bar - but not a single
+        // per-verse row. A reader who asked for translations, chose per-ayah, and got
+        // Arabic only. Nothing errored; the option was just not connected here.
+        if (options.showTranslation) {
+            Spacer(Modifier.height(space.sm))
+            VerseTranslationCard(
+                ayah = ayah,
+                translationScale = options.translationScale,
+                ink = ink,
+                // No card, and no reference chip: the row already opens with
+                // "2:255", and a second one directly below it is a number repeated
+                // for no gain.
+                surface = Color.Transparent,
+                showReference = false
+            )
+        }
     }
 }
 

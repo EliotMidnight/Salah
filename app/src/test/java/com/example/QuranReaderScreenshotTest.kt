@@ -99,7 +99,8 @@ class QuranReaderScreenshotTest {
         dark: Boolean,
         name: String,
         surah: Int = surahNumber,
-        page: Int? = null
+        page: Int? = null,
+        language: String = "English"
     ) {
         if (page != null) {
             val ref = QuranBrowse.placeAtPage(page).verse
@@ -110,9 +111,9 @@ class QuranReaderScreenshotTest {
         }
         composeTestRule.setContent {
             SalahTheme(darkTheme = dark) {
-                ProvideAppLanguage(language = "English") {
+                ProvideAppLanguage(language = language) {
                     QuranReader(
-                        state = state(ayahNumber),
+                        state = state(ayahNumber).copy(language = language),
                         onSelectSurahAyah = { _, _ -> },
                         onAyahViewed = {},
                         onToggleBookmark = {},
@@ -273,6 +274,67 @@ class QuranReaderScreenshotTest {
         // page *opened* one left every one of them unnamed - on the page where they
         // start, which is the one page where the name is needed.
         page = 106
+    )
+
+    // --- RTL --------------------------------------------------------------
+
+    @Test
+    fun per_page_vertical_rtl() = render(
+        QuranReadingOptions(layout = QuranReadingLayout.PER_PAGE),
+        dark = false,
+        name = "quran_per_page_vertical_rtl",
+        language = "ar"
+    )
+
+    @Test
+    fun per_page_horizontal_rtl() = render(
+        QuranReadingOptions(
+            layout = QuranReadingLayout.PER_PAGE,
+            scroll = QuranScrollDirection.HORIZONTAL
+        ),
+        dark = false,
+        name = "quran_per_page_horizontal_rtl",
+        language = "ar"
+    )
+
+    @Test
+    fun continuous_vertical_rtl() = render(
+        QuranReadingOptions(layout = QuranReadingLayout.CONTINUOUS),
+        dark = false,
+        name = "quran_continuous_vertical_rtl",
+        language = "ar"
+    )
+
+    @Test
+    fun continuous_horizontal_rtl() = render(
+        QuranReadingOptions(
+            layout = QuranReadingLayout.CONTINUOUS,
+            scroll = QuranScrollDirection.HORIZONTAL
+        ),
+        dark = false,
+        name = "quran_continuous_horizontal_rtl",
+        // The horizontal axis is the case worth having in RTL: a right-to-left surface
+        // that starts at the *left* edge opens in the middle of a wide measure, so the
+        // first words of the surah are off to the right and the reader lands in the
+        // middle of a line.
+        language = "ar"
+    )
+
+    @Test
+    fun continuous_vertical_per_verse_rtl() = render(
+        QuranReadingOptions(
+            layout = QuranReadingLayout.CONTINUOUS,
+            perVerse = true,
+            showTranslation = true
+        ),
+        dark = false,
+        name = "quran_continuous_vertical_per_verse_rtl",
+        // Per-verse plus translation, because that is the layout with the most chrome
+        // per verse: a reference chip, the Arabic, and an English translation. Every
+        // one of those has to mirror, and the translation has to stay LTR while the
+        // page around it is RTL - which is the whole of the Arabic/English problem in
+        // one surface.
+        language = "ar"
     )
 
     // --- Dark, and a paper that is not the app default --------------------

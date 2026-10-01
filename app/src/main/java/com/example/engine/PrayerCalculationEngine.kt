@@ -188,22 +188,27 @@ object PrayerCalculationEngine {
             )
         )
 
-        // Highlight next, current, passed prayers
-        val decoratedList = if (isToday) {
-            val nextPrayerEnum = getNextPrayerEnum(currentTime, prayerList)
-            val currentPrayerEnum = getCurrentPrayerEnum(currentTime, prayerList)
-
-            prayerList.map { pt ->
-                val passed = currentTime.isAfter(pt.time)
-                pt.copy(
-                    isNext = pt.prayer == nextPrayerEnum,
-                    isCurrent = pt.prayer == currentPrayerEnum,
-                    isPassed = passed
-                )
-            }
-        } else {
-            prayerList
-        }
+        // Times, and nothing else.
+        //
+        // This used to also stamp `isNext`, `isCurrent` and `isPassed` onto each
+        // prayer, chosen from `currentTime` at the moment it was called. That made a
+        // *time* calculation carry a *clock* reading, which is the wrong shape for two
+        // reasons that both showed up on screen:
+        //
+        // - The stamp was only refreshed when this function ran - on a settings or
+        //   location change, and at midnight - so between those it went stale. The
+        //   Prayer tab highlighted whichever prayer was next at the last
+        //   recalculation, while the Today page recomputed every second and advanced.
+        //   Two tabs, two answers, for hours at a time.
+        // - `isToday` decided whether to stamp at all, so the same day carried the
+        //   fields or not depending on which calendar the caller asked about.
+        //
+        // "Which prayer is next" is a live reading, so it lives where live readings
+        // live: the ViewModel's one-second ticker, which publishes `nextPrayer` and
+        // `previousPrayer`. Screens ask that. This function answers the only question
+        // it can answer truthfully - what time is each prayer - and nothing about
+        // what time it is now.
+        val decoratedList = prayerList
 
         // Night divisions (Imsak = 10m before Fajr, Midnight = halfway between Maghrib and Fajr, Last Third)
         val imsakTime = fajrTime.minusMinutes(10)
@@ -284,24 +289,6 @@ object PrayerCalculationEngine {
         } else {
             String.format(Locale.US, "%02dm %02ds", minutes, secs)
         }
-    }
-
-    private fun getNextPrayerEnum(currentTime: LocalTime, list: List<PrayerTime>): Prayer {
-        for (pt in list) {
-            if (currentTime.isBefore(pt.time)) {
-                return pt.prayer
-            }
-        }
-        return Prayer.FAJR
-    }
-
-    private fun getCurrentPrayerEnum(currentTime: LocalTime, list: List<PrayerTime>): Prayer? {
-        for (i in list.indices.reversed()) {
-            if (currentTime.isAfter(list[i].time) || currentTime == list[i].time) {
-                return list[i].prayer
-            }
-        }
-        return Prayer.ISHA
     }
 
     private fun calculateHourAngle(alpha: Double, lat: Double, declination: Double): Double {

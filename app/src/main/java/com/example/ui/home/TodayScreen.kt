@@ -176,7 +176,22 @@ fun TodayScreen(
         countdown = ""
     }
 
-    val hijri = remember(date) { HijriCalendarEngine.getHijriDate(date) }
+    // The reader's Hijri adjustment is applied here, and this is the only place it is.
+    //
+    // The ViewModel also computes a Hijri date - the only one that honours the
+    // adjustment - and puts it in `state.hijriDate`. Nothing read it. So the control
+    // in Settings ("Hijri adjustment ±2") round-tripped all the way through
+    // preferences, the repository flow, a full prayer-time recalculation and the sun
+    // position, changed the number in the settings row, and changed nothing on any
+    // date the reader could see. A setting that provably does nothing is worse than
+    // no setting, because the row reads as "changed".
+    //
+    // So the adjustment is applied where the date is rendered, and the state field is
+    // gone rather than left as a second answer. `hijriAdjustment` is in the state, so
+    // the adjustment cannot go stale the way the field did.
+    val hijri = remember(date, state.hijriAdjustment) {
+        HijriCalendarEngine.getHijriDate(date.plusDays(state.hijriAdjustment.toLong()))
+    }
 
     // Following the Prayer tab means dropping our own walk, or the page would
     // quietly stay three days ahead of the date the switcher says.
@@ -284,6 +299,7 @@ fun TodayScreen(
             madhhab = state.madhhab,
             adjustments = state.adjustments,
             timeFormatter = timeFormatter,
+            hijriAdjustment = state.hijriAdjustment,
             onSelectDate = { dayOffset = (it.toEpochDay() - base.toEpochDay()).toInt() },
             onDismiss = { showMonth = false }
         )

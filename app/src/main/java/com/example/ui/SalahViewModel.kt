@@ -89,7 +89,16 @@ data class SalahUiState(
      * prayer and the "next" row beside it.
      */
     val countdownString: String = "00h 00m",
-    val hijriDate: HijriDate? = null,
+
+    /**
+     * The reader's Hijri adjustment, in days.
+     *
+     * The single source for "which Hijri date is it". Every surface applies this
+     * itself where it renders a date, because there is no one Hijri date in the app -
+     * only one Gregorian date and one adjustment, and a Hijri month that is a
+     * function of both.
+     */
+    val hijriAdjustment: Int = 0,
     /**
      * The day the Prayer times are being shown for, or null for today.
      *
@@ -121,7 +130,6 @@ data class SalahUiState(
     val quranScript: String = "Uthmani (Madani)",
     val timeFormat24h: Boolean = true,
     val adhanSound: String = "Makkah Al-Mukarramah",
-    val hijriAdjustment: Int = 0,
     val reciter: String = "Mishary Rashid Alafasy",
     val prePrayerOffsetMinutes: Int = 10,
     val adhanVolume: Float = 0.85f,
@@ -618,7 +626,17 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         val nextPt = PrayerCalculationEngine.getNextPrayer(calculatedToday, LocalTime.now())
         val prevPt = PrayerCalculationEngine.getPreviousPrayer(calculatedToday, LocalTime.now())
         val countdown = PrayerCalculationEngine.formatRemainingCountdown(nextPt.dateTime)
-        val hijri = HijriCalendarEngine.getHijriDate(today.plusDays(state.hijriAdjustment.toLong()))
+        // The Hijri date is deliberately **not** computed here.
+        //
+        // It used to be, and it was the only Hijri date in the app that honoured
+        // `hijriAdjustment` - and nothing read it. The adjustment therefore round-tripped
+        // through preferences, the repository flow and a full recalculation, changed
+        // the number in the Settings row, and changed nothing a reader could see.
+        // Two representations of "what Hijri date is it", one of them invisible.
+        //
+        // So each surface applies the adjustment where it renders the date, from the
+        // one `hijriAdjustment` in this state. See `TodayScreen`, `PrayerScreen` and
+        // `HijriMonthSheet`.
 
         val qiblaBearing = QiblaEngine.calculateQiblaBearing(state.location.latitude, state.location.longitude)
         val distanceKaaba = QiblaEngine.calculateDistanceToKaabaKm(state.location.latitude, state.location.longitude)
@@ -638,7 +656,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             nextPrayer = nextPt,
             previousPrayer = prevPt,
             countdownString = countdown,
-            hijriDate = hijri,
             qiblaBearing = qiblaBearing,
             distanceToKaabaKm = distanceKaaba,
             sunPosition = sun,

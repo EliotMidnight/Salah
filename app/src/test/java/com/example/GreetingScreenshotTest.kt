@@ -3,7 +3,6 @@ package com.example
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import com.example.data.model.CalculationMethod
-import com.example.data.model.HijriDate
 import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
 import com.example.data.model.PrayerAdjustments
@@ -45,9 +44,9 @@ class GreetingScreenshotTest {
     private fun sampleState(): SalahUiState {
         val date = LocalDate.of(2026, 9, 14)
         val prayers = listOf(
-            PrayerTime(Prayer.FAJR, LocalTime.of(5, 12), LocalDateTime.of(date, LocalTime.of(5, 12)), isPassed = true),
-            PrayerTime(Prayer.SUNRISE, LocalTime.of(6, 38), LocalDateTime.of(date, LocalTime.of(6, 38)), isPassed = true),
-            PrayerTime(Prayer.DHUHR, LocalTime.of(13, 20), LocalDateTime.of(date, LocalTime.of(13, 20)), isNext = true),
+            PrayerTime(Prayer.FAJR, LocalTime.of(5, 12), LocalDateTime.of(date, LocalTime.of(5, 12))),
+            PrayerTime(Prayer.SUNRISE, LocalTime.of(6, 38), LocalDateTime.of(date, LocalTime.of(6, 38))),
+            PrayerTime(Prayer.DHUHR, LocalTime.of(13, 20), LocalDateTime.of(date, LocalTime.of(13, 20))),
             PrayerTime(Prayer.ASR, LocalTime.of(16, 45), LocalDateTime.of(date, LocalTime.of(16, 45))),
             PrayerTime(Prayer.MAGHRIB, LocalTime.of(19, 25), LocalDateTime.of(date, LocalTime.of(19, 25))),
             PrayerTime(Prayer.ISHA, LocalTime.of(20, 48), LocalDateTime.of(date, LocalTime.of(20, 48)))
@@ -79,7 +78,6 @@ class GreetingScreenshotTest {
                 altitude = 34f,
                 isSunVisible = true
             ),
-            hijriDate = HijriDate(24, 3, "Rabi' al-Awwal", "ربيع الأول", 1448)
         )
     }
 

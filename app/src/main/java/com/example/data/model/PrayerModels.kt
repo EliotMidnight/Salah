@@ -25,13 +25,28 @@ enum class Prayer(
     ISHA("Isha", "العشاء", R.drawable.salah_times_isha)
 }
 
+/**
+ * One prayer's time.
+ *
+ * A *time*, and nothing about what time it is now.
+ *
+ * `isNext`, `isCurrent` and `isPassed` used to be here, stamped by the engine when it
+ * calculated the day. That put a clock reading inside a value describing a schedule,
+ * and the reading went stale immediately: the day is only recalculated on a settings
+ * or location change and at midnight, so "which prayer is next" froze at whatever it
+ * was at the last recalculation while the Today page recomputed it every second and
+ * moved on. Two tabs, two answers.
+ *
+ * "Which prayer is next" is a live reading. It lives in the ViewModel's one-second
+ * ticker, as `nextPrayer` and `previousPrayer`, and screens ask it there. Note that
+ * `isCompleted` *is* kept here, because it is not a reading of the clock - it is the
+ * reader's own tick, stored per day, and it is the same fact on every screen by
+ * construction because there is only one copy of it.
+ */
 data class PrayerTime(
     val prayer: Prayer,
     val time: LocalTime,
     val dateTime: LocalDateTime,
-    val isNext: Boolean = false,
-    val isCurrent: Boolean = false,
-    val isPassed: Boolean = false,
     val isCompleted: Boolean = false
 )
 
