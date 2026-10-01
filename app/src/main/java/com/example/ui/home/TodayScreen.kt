@@ -77,7 +77,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 /**
@@ -140,13 +139,41 @@ fun TodayScreen(
     // Maghrib anchors the clock, so a day without one has no anchor. Falling
     // back to noon keeps the page renderable rather than blank on partial data.
     val maghrib = times[Prayer.MAGHRIB] ?: LocalTime.NOON
-    val anchorTime = if (isToday) LocalTime.now() else maghrib
-    val now = anchorTime
-    val currentPrayer = remember(day, isToday) { currentPrayerOf(day, anchorTime) }
-    val nextPrayer = remember(day, isToday) { nextPrayerOf(day, anchorTime) }
-    val nextTime = nextPrayer?.let { times[it] }
-    val countdown = remember(day, isToday) {
-        if (isToday) countdownText(nextTime, LocalTime.now()) else ""
+
+    // For today, the live figures come from the state, which the ViewModel's
+    // one-second ticker already recomputes. They used to be computed here instead,
+    // inside `remember(day, isToday)` - and those keys do not change between
+    // seconds, so the page froze: the countdown stopped, and the headline prayer
+    // and the "next" row stayed on the answer that was true when the page was
+    // first composed. The three values the ticker was maintaining for exactly this
+    // purpose had no reader.
+    //
+    // A scrubbed date is the other case, and the state cannot help: there is no
+    // tomorrow or yesterday for the ViewModel to hold. Those days are anchored on
+    // Maghrib, which is deterministic and is what makes walking the arrows stable.
+    val currentPrayer: Prayer
+    val nextPrayer: Prayer?
+    val nextTime: LocalTime?
+    val countdown: String
+    if (isToday) {
+        val next = state.nextPrayer
+        val previous = state.previousPrayer
+        // Before the first tick lands there is nothing in the state yet. Computing
+        // from the same day keeps the page renderable in that window rather than
+        // blank, and the ticker replaces it a second later. Both fields are asked
+        // for together because the ticker writes them together: a next prayer with
+        // no previous prayer would mean a half-written state, not a real reading.
+        val live = next != null && previous != null
+        currentPrayer = if (live) previous!!.prayer
+        else currentPrayerOf(day, LocalTime.now())
+        nextPrayer = if (live) next.prayer else nextPrayerOf(day, LocalTime.now())
+        nextTime = next?.time
+        countdown = if (live) state.countdownString else ""
+    } else {
+        currentPrayer = currentPrayerOf(day, maghrib)
+        nextPrayer = nextPrayerOf(day, maghrib)
+        nextTime = nextPrayer?.let { times[it] }
+        countdown = ""
     }
 
     val hijri = remember(date) { HijriCalendarEngine.getHijriDate(date) }
@@ -663,31 +690,6 @@ private fun currentPrayerOf(day: PrayerTimesDay, at: LocalTime): Prayer =
 
 private fun nextPrayerOf(day: PrayerTimesDay, at: LocalTime): Prayer =
     PrayerCalculationEngine.getNextPrayer(day, at).prayer
-
-/**
- * The countdown, in the webapp's two-tier form: hours and minutes while there
- * are hours left, minutes and seconds once there are not.
- *
- * The switch is the point. An hour is too coarse to be worth watching when the
- * next prayer is four minutes out, and seconds are noise when it is six hours
- * away - so the last hour gets the seconds and the rest does not.
- */
-private fun countdownText(target: LocalTime?, at: LocalTime): String {
-    if (target == null) return ""
-    val seconds = ChronoUnit.SECONDS.between(at, target).let {
-        // A next-prayer time on the far side of midnight counts forwards, not
-        // backwards, so the countdown never reads as a large negative.
-        if (it < 0) it + 24 * 3600 else it
-    }
-    val hours = seconds / 3600
-    val minutes = (seconds % 3600) / 60
-    val secs = seconds % 60
-    return if (hours > 0) {
-        String.format(Locale.US, "%02dh %02dm", hours, minutes)
-    } else {
-        String.format(Locale.US, "%02dm %02ds", minutes, secs)
-    }
-}
 
 /** A past prayer is one that has already come round since [current]. */
 private fun isAfter(prayer: Prayer, current: Prayer, next: Prayer): Boolean {

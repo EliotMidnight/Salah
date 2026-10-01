@@ -68,11 +68,57 @@ class PrayerCalculationTest {
     }
 
     @Test
-    fun `countdown formats and clamps past times`() {
+    fun `countdown switches to seconds inside the last hour`() {
+        // Two tiers, and the switch is the whole point. The page used to carry a
+        // second, differently-formatted copy of this; the string the user watched
+        // was the one with no unit tests, which is how it ended up frozen inside a
+        // `remember` and nobody noticed.
         val now = LocalDateTime.of(date, LocalTime.of(12, 0))
-        val future = LocalDateTime.of(date, LocalTime.of(13, 30))
-        assertEquals("01:30:00", PrayerCalculationEngine.formatRemainingCountdown(future, now))
-        assertEquals("00:00:00", PrayerCalculationEngine.formatRemainingCountdown(now.minusMinutes(1), now))
+        assertEquals(
+            "01h 30m",
+            PrayerCalculationEngine.formatRemainingCountdown(
+                LocalDateTime.of(date, LocalTime.of(13, 30)), now
+            )
+        )
+        assertEquals(
+            "45m 00s",
+            PrayerCalculationEngine.formatRemainingCountdown(
+                LocalDateTime.of(date, LocalTime.of(12, 45)), now
+            )
+        )
+        assertEquals(
+            "00m 05s",
+            PrayerCalculationEngine.formatRemainingCountdown(
+                LocalDateTime.of(date, LocalTime.of(12, 0, 5)), now
+            )
+        )
+    }
+
+    @Test
+    fun `countdown counts forwards past midnight rather than backwards`() {
+        // Fajr after Isha belongs to tomorrow. A raw subtraction makes that a
+        // negative number of hours, and a reader watching the countdown would see
+        // it jump to eighteen hours and fall.
+        val tonight = LocalDateTime.of(date, LocalTime.of(23, 50))
+        val tomorrowFajr = LocalDateTime.of(date.plusDays(1), LocalTime.of(5, 10))
+        assertEquals(
+            "05h 20m",
+            PrayerCalculationEngine.formatRemainingCountdown(tomorrowFajr, tonight)
+        )
+    }
+
+    @Test
+    fun `countdown never exceeds a day`() {
+        // The other side of the wrap, which is the defensive one. A next-prayer time
+        // is always inside a day, so this only fires on bad input - but a raw
+        // subtraction would format it as "72h 00m", and "hours" above 24 is not a
+        // duration anyone counts down. Clamping to zero says "nothing sensible to
+        // count" instead of inventing one.
+        val now = LocalDateTime.of(date, LocalTime.of(12, 0))
+        assertEquals(
+            "00m 00s",
+            PrayerCalculationEngine.formatRemainingCountdown(now.plusDays(3), now)
+        )
     }
 
     @Test

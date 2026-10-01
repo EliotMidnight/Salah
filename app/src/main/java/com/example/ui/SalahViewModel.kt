@@ -38,14 +38,13 @@ import com.example.data.model.UserLocation
 import com.example.data.quran.QuranBrowse
 import com.example.data.quran.QuranDataSource
 import com.example.data.repository.SalahRepository
-import com.example.engine.AstronomicalSky
 import com.example.engine.HijriCalendarEngine
 import com.example.engine.MagneticFieldStatus
 import com.example.engine.PrayerCalculationEngine
 import com.example.engine.PrayerNotificationManager
 import com.example.engine.QiblaEngine
+import com.example.engine.QiblaGuidance
 import com.example.engine.QuranAudioPlayer
-import com.example.engine.SkyPeriod
 import com.example.engine.SunPosition
 import com.example.engine.AdhanAudioSynthesizer
 import com.example.service.PrayerAlarmScheduler
@@ -70,11 +69,26 @@ data class SalahUiState(
     val madhhab: Madhhab = Madhhab.STANDARD,
     val adjustments: PrayerAdjustments = PrayerAdjustments(),
     val todayPrayerTimes: PrayerTimesDay? = null,
+
+    /**
+     * The next prayer to come round, and the last one to have entered.
+     *
+     * The two halves of the live reading, and the page asks for both: the countdown
+     * alone cannot draw the day, because which row is highlighted depends on where
+     * between two prayers the reader is standing.
+     */
     val nextPrayer: PrayerTime? = null,
     val previousPrayer: PrayerTime? = null,
-    val countdownString: String = "00:00:00",
-    val skyPeriod: SkyPeriod = SkyPeriod.DHUHR_MIDDAY,
-    val celestialProgress: Float = 0.5f,
+    /**
+     * The time left until [nextPrayer], as the Today page shows it.
+     *
+     * Maintained here by the one-second ticker rather than computed in the page:
+     * the page used to compute its own inside a `remember(day, isToday)`, and those
+     * keys do not change between seconds, so the number froze on the value that
+     * happened to be true when the screen was composed. Same for the headline
+     * prayer and the "next" row beside it.
+     */
+    val countdownString: String = "00h 00m",
     val hijriDate: HijriDate? = null,
     /**
      * The day the Prayer times are being shown for, or null for today.
@@ -124,9 +138,18 @@ data class SalahUiState(
     // Qibla state & magnetic sensor diagnostics
     val compassAzimuth: Float = 0f,
     val qiblaBearing: Float = 0f,
-    val qiblaDelta: Float = 0f,
-    val relativeQiblaAngle: Float = 0f, // signed angle -180..+180 (0 is aligned straight ahead)
-    val isFacingQibla: Boolean = false,
+
+    /**
+     * Which way to turn to face the Kaaba, and by how much.
+     *
+     * This replaced two fields - a raw signed `relativeQiblaAngle` and an
+     * `isFacingQibla` boolean - because two fields carrying one fact is how they
+     * come to disagree. Everything that needs to know "am I aligned" reads
+     * [isFacingQibla] below, which is derived from this, and everything that needs
+     * to tell the reader which way to turn reads the direction and the magnitude.
+     */
+    val qiblaGuidance: QiblaGuidance = QiblaGuidance(QiblaGuidance.Direction.ON_TARGET, 0),
+
     val compassAccuracy: String = "HIGH ACCURACY",
     val magneticSensorAccuracy: Int = 3,
     val magneticFieldMagnitude: Float = 46.0f, // uT
@@ -169,7 +192,21 @@ data class SalahUiState(
     // Calendar selected date inspection
     val calendarSelectedDate: LocalDate = LocalDate.now(),
     val calendarSelectedDayPrayers: PrayerTimesDay? = null
-)
+) {
+    /**
+     * True once the Kaaba is inside the alignment window.
+     *
+     * Derived rather than stored. It used to be a second field written in the same
+     * `copy()` as the raw angle, which is how a boolean and the number it claims
+     * to summarise come to disagree - and a reader who sees a green dial beside a
+     * banner that still says "turn 5°" has been told two things at once.
+     *
+     * It stays a named property rather than becoming `qiblaGuidance.isAligned` at
+     * every call site, because "am I facing it" and "which way do I turn" are two
+     * different questions and the screen asks both.
+     */
+    val isFacingQibla: Boolean get() = qiblaGuidance.isAligned
+}
 
 class SalahViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
 
@@ -557,16 +594,12 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         val nextPt = PrayerCalculationEngine.getNextPrayer(day, now.toLocalTime())
         val prevPt = PrayerCalculationEngine.getPreviousPrayer(day, now.toLocalTime())
         val countdown = PrayerCalculationEngine.formatRemainingCountdown(nextPt.dateTime, now)
-        val sky = AstronomicalSky.determineSkyPeriod(now.toLocalTime(), day)
-        val celestialProgress = AstronomicalSky.getCelestialBodyProgress(now.toLocalTime(), day)
         val sun = QiblaEngine.calculateSunPosition(state.location, now)
 
         _uiState.value = state.copy(
             nextPrayer = nextPt,
             previousPrayer = prevPt,
             countdownString = countdown,
-            skyPeriod = sky,
-            celestialProgress = celestialProgress,
             sunPosition = sun
         )
     }
@@ -585,8 +618,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         val nextPt = PrayerCalculationEngine.getNextPrayer(calculatedToday, LocalTime.now())
         val prevPt = PrayerCalculationEngine.getPreviousPrayer(calculatedToday, LocalTime.now())
         val countdown = PrayerCalculationEngine.formatRemainingCountdown(nextPt.dateTime)
-        val sky = AstronomicalSky.determineSkyPeriod(LocalTime.now(), calculatedToday)
-        val celestial = AstronomicalSky.getCelestialBodyProgress(LocalTime.now(), calculatedToday)
         val hijri = HijriCalendarEngine.getHijriDate(today.plusDays(state.hijriAdjustment.toLong()))
 
         val qiblaBearing = QiblaEngine.calculateQiblaBearing(state.location.latitude, state.location.longitude)
@@ -607,8 +638,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             nextPrayer = nextPt,
             previousPrayer = prevPt,
             countdownString = countdown,
-            skyPeriod = sky,
-            celestialProgress = celestial,
             hijriDate = hijri,
             qiblaBearing = qiblaBearing,
             distanceToKaabaKm = distanceKaaba,
@@ -1149,9 +1178,18 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         }
 
         val qiblaBearing = _uiState.value.qiblaBearing
-        val delta = (qiblaBearing - finalAzimuth + 360f) % 360f
         val relativeAngle = QiblaEngine.calculateRelativeAngle(finalAzimuth, qiblaBearing)
-        val isFacing = kotlin.math.abs(relativeAngle) <= 4.0f
+
+        // Alignment is asked of QiblaGuidance rather than re-decided here.
+        //
+        // This used to be its own `abs(relativeAngle) <= 4.0f`, and the banner had a
+        // third answer again in the shape of the instruction it printed. Three
+        // tolerances cannot agree at the edge: at 4.5 degrees the dial's ring turned
+        // to the success colour, the check mark appeared in the middle of the dial,
+        // and the banner still said "turn 5°". Now the boolean, the needle, the
+        // number of degrees and the haptic all fall out of one value.
+        val guidance = QiblaGuidance.fromRelative(relativeAngle)
+        val isFacing = guidance.isAligned
 
         if (isFacing && !wasFacingQibla) {
             val now = System.currentTimeMillis()
@@ -1175,9 +1213,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
         _uiState.value = _uiState.value.copy(
             compassAzimuth = finalAzimuth,
-            qiblaDelta = delta,
-            relativeQiblaAngle = relativeAngle,
-            isFacingQibla = isFacing,
+            qiblaGuidance = guidance,
             magneticDeclination = declination,
             compassAccuracy = accuracyLabel
         )

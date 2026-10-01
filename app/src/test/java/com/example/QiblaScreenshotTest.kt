@@ -6,6 +6,8 @@ import com.example.data.model.CalculationMethod
 import com.example.data.model.Madhhab
 import com.example.data.model.PrayerAdjustments
 import com.example.data.model.UserLocation
+import com.example.engine.QiblaEngine
+import com.example.engine.QiblaGuidance
 import com.example.ui.SalahUiState
 import com.example.ui.localization.ProvideAppLanguage
 import com.example.ui.qibla.QiblaScreen
@@ -26,15 +28,29 @@ class QiblaScreenshotTest {
 
     @get:Rule val composeTestRule = createComposeRule()
 
+    /**
+     * Heading 40 with a Qibla of 118 is 78 degrees to the right, which is the
+     * searching state; an aligned state puts the heading on the bearing.
+     *
+     * The guidance is built through the engine rather than hand-written, because
+     * the states these screenshots are here to compare are precisely the ones
+     * where the banner, the ring colour and the check mark can disagree - and a
+     * hand-written fixture cannot drift into that disagreement the way a
+     * hand-written `isFacingQibla = false` next to a raw angle could.
+     */
     private fun state(facing: Boolean) = SalahUiState(
         location = UserLocation.RABAT,
         method = CalculationMethod.MOROCCO_MINISTRY,
         madhhab = Madhhab.STANDARD,
         adjustments = PrayerAdjustments(),
-        compassAzimuth = 40f,
+        compassAzimuth = if (facing) 118f else 40f,
         qiblaBearing = 118f,
-        relativeQiblaAngle = if (facing) 0f else 78f,
-        isFacingQibla = facing,
+        qiblaGuidance = QiblaGuidance.fromRelative(
+            QiblaEngine.calculateRelativeAngle(
+                currentHeading = if (facing) 118f else 40f,
+                targetBearing = 118f
+            )
+        ),
         useTrueNorth = true,
         distanceToKaabaKm = 4812,
         isDeviceLevel = true

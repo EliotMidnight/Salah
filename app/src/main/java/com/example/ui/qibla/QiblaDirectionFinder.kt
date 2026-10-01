@@ -65,6 +65,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.engine.MagneticFieldStatus
+import com.example.engine.QiblaGuidance
 import com.example.ui.SalahUiState
 import com.example.ui.components.ActionRow
 import com.example.ui.components.DetailList
@@ -77,7 +78,6 @@ import com.example.ui.theme.Space
 import com.example.ui.theme.Tonal
 import java.util.Locale
 
-import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -577,32 +577,36 @@ private fun QiblaGuidanceBanner(
     onShowCalibrationTip: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val relativeAngle = state.relativeQiblaAngle
-    val isFacing = state.isFacingQibla
+    // One guidance value, asked once. The banner's words, its colour and the
+    // dial's ring and check mark are then the same answer, which is the whole
+    // point: a banner that says "turn 5°" beside a dial that has already turned
+    // green is worse than either one alone.
+    val guidance = state.qiblaGuidance
+    val isFacing = guidance.isAligned
     val space = Space.current
     val successColors = Tonal.colors
     val colorScheme = MaterialTheme.colorScheme
     val strings = LocalStrings.current
 
-    val (bannerColor, contentColor, guidanceText) = when {
-        isFacing -> Triple(
+    val (bannerColor, contentColor, guidanceText) = when (guidance.direction) {
+        QiblaGuidance.Direction.ON_TARGET -> Triple(
             successColors.success,
             successColors.onSuccess,
             strings.more.alignedWithQibla
         )
-        relativeAngle > 0 -> Triple(
+        QiblaGuidance.Direction.RIGHT -> Triple(
             colorScheme.primaryContainer,
             colorScheme.onPrimaryContainer,
             strings.more.turnBy.format(
-                String.format(Locale.getDefault(), "%.0f°", abs(relativeAngle)),
+                "${guidance.degrees}°",
                 strings.more.rightOfQibla
             )
         )
-        else -> Triple(
+        QiblaGuidance.Direction.LEFT -> Triple(
             colorScheme.primaryContainer,
             colorScheme.onPrimaryContainer,
             strings.more.turnBy.format(
-                String.format(Locale.getDefault(), "%.0f°", abs(relativeAngle)),
+                "${guidance.degrees}°",
                 strings.more.leftOfQibla
             )
         )

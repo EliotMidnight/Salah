@@ -13,6 +13,7 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 import kotlin.math.acos
 import kotlin.math.asin
 import kotlin.math.atan
@@ -249,14 +250,40 @@ object PrayerCalculationEngine {
         return last.copy(dateTime = last.dateTime.minusDays(1))
     }
 
+    /**
+     * The time left until [targetTime], in the form the Today page shows it.
+     *
+     * ### Two tiers, and why not `HH:MM:SS`
+     *
+     * Hours and minutes while there are hours left; minutes and seconds once there
+     * are not. The switch is the point. An hour is too coarse to be worth watching
+     * when the next prayer is four minutes out, and seconds are noise when it is
+     * six hours away - so the last hour gets the seconds and the rest does not.
+     *
+     * This used to be `HH:MM:SS` here *and* a second, differently-formatted
+     * implementation inside `TodayScreen`. The page rendered the second one and this
+     * one had no reader at all, which is how a countdown ends up frozen: the page
+     * computed its own inside a `remember(day, isToday)`, whose keys do not change
+     * between seconds, so the number never moved while the headline prayer and the
+     * "next" row did not either. There is one countdown now, and it is computed once
+     * a second by the ticker that already runs.
+     *
+     * A target on the far side of midnight counts forwards rather than backwards,
+     * so the countdown never reads as a large negative.
+     */
     fun formatRemainingCountdown(targetTime: LocalDateTime, now: LocalDateTime = LocalDateTime.now()): String {
-        val seconds = ChronoUnit.SECONDS.between(now, targetTime)
-        if (seconds <= 0) return "00:00:00"
+        var seconds = ChronoUnit.SECONDS.between(now, targetTime)
+        if (seconds <= 0) seconds += 24 * 3600
+        if (seconds >= 24 * 3600) seconds = 0
 
         val hours = seconds / 3600
         val minutes = (seconds % 3600) / 60
         val secs = seconds % 60
-        return String.format("%02d:%02d:%02d", hours, minutes, secs)
+        return if (hours > 0) {
+            String.format(Locale.US, "%02dh %02dm", hours, minutes)
+        } else {
+            String.format(Locale.US, "%02dm %02ds", minutes, secs)
+        }
     }
 
     private fun getNextPrayerEnum(currentTime: LocalTime, list: List<PrayerTime>): Prayer {

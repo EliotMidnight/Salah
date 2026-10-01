@@ -10,7 +10,7 @@ import com.example.data.model.PrayerAdjustments
 import com.example.data.model.PrayerTime
 import com.example.data.model.PrayerTimesDay
 import com.example.data.model.UserLocation
-import com.example.engine.SkyPeriod
+import com.example.engine.SunPosition
 import com.example.ui.SalahUiState
 import com.example.ui.home.TodayScreen
 import com.example.ui.localization.ProvideAppLanguage
@@ -47,9 +47,9 @@ class GreetingScreenshotTest {
         val prayers = listOf(
             PrayerTime(Prayer.FAJR, LocalTime.of(5, 12), LocalDateTime.of(date, LocalTime.of(5, 12)), isPassed = true),
             PrayerTime(Prayer.SUNRISE, LocalTime.of(6, 38), LocalDateTime.of(date, LocalTime.of(6, 38)), isPassed = true),
-            PrayerTime(Prayer.DHUHR, LocalTime.of(13, 20), LocalDateTime.of(date, LocalTime.of(13, 20)), isPassed = true),
-            PrayerTime(Prayer.ASR, LocalTime.of(16, 45), LocalDateTime.of(date, LocalTime.of(16, 45)), isPassed = true),
-            PrayerTime(Prayer.MAGHRIB, LocalTime.of(19, 25), LocalDateTime.of(date, LocalTime.of(19, 25)), isNext = true),
+            PrayerTime(Prayer.DHUHR, LocalTime.of(13, 20), LocalDateTime.of(date, LocalTime.of(13, 20)), isNext = true),
+            PrayerTime(Prayer.ASR, LocalTime.of(16, 45), LocalDateTime.of(date, LocalTime.of(16, 45))),
+            PrayerTime(Prayer.MAGHRIB, LocalTime.of(19, 25), LocalDateTime.of(date, LocalTime.of(19, 25))),
             PrayerTime(Prayer.ISHA, LocalTime.of(20, 48), LocalDateTime.of(date, LocalTime.of(20, 48)))
         )
         return SalahUiState(
@@ -66,11 +66,19 @@ class GreetingScreenshotTest {
                 calculationMethod = CalculationMethod.MOROCCO_MINISTRY,
                 location = UserLocation.RABAT
             ),
-            nextPrayer = prayers[4],
-            previousPrayer = prayers[3],
-            countdownString = "00:37:12",
-            skyPeriod = SkyPeriod.MAGHRIB_SUNSET,
-            celestialProgress = 0.85f,
+            // These three are what the page actually reads for today, so the fixture
+            // is the reason the baseline is stable: the page used to compute its own
+            // from the wall clock, which meant every recording of this test baked in
+            // whatever time of day it was run at. It is Fajr-to-Dhuhr here, so the
+            // headline is Asr and Dhuhr is next.
+            nextPrayer = prayers[2],
+            previousPrayer = prayers[1],
+            countdownString = "01h 35m",
+            sunPosition = SunPosition(
+                azimuth = 148f,
+                altitude = 34f,
+                isSunVisible = true
+            ),
             hijriDate = HijriDate(24, 3, "Rabi' al-Awwal", "ربيع الأول", 1448)
         )
     }

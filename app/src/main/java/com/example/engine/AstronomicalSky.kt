@@ -1,117 +1,6 @@
 package com.example.engine
 
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import com.example.data.model.Prayer
-import com.example.data.model.PrayerTimesDay
-import java.time.LocalTime
-
-enum class SkyPeriod(
-    val title: String,
-    val arabicTitle: String,
-    val subtitle: String,
-    val isNight: Boolean,
-    val topColor: Color,
-    val middleColor: Color,
-    val horizonColor: Color,
-    val accentColor: Color,
-    val contentOnSkyColor: Color
-) {
-    FAJR_DAWN(
-        title = "Dawn",
-        arabicTitle = "الفجر",
-        subtitle = "First light breaks on the horizon",
-        isNight = false,
-        topColor = Color(0xFF141936),
-        middleColor = Color(0xFF28285C),
-        horizonColor = Color(0xFF6B436D),
-        accentColor = Color(0xFFFFD180),
-        contentOnSkyColor = Color(0xFFFFFFFF)
-    ),
-    SUNRISE(
-        title = "Sunrise",
-        arabicTitle = "الشروق",
-        subtitle = "The sun illuminates the world",
-        isNight = false,
-        topColor = Color(0xFF2E4068),
-        middleColor = Color(0xFFC07062),
-        horizonColor = Color(0xFFFFAE68),
-        accentColor = Color(0xFFFFE082),
-        contentOnSkyColor = Color(0xFFFFFFFF)
-    ),
-    MORNING(
-        title = "Morning",
-        arabicTitle = "الضحى",
-        subtitle = "Quiet expanse of the morning sky",
-        isNight = false,
-        topColor = Color(0xFF286299),
-        middleColor = Color(0xFF5B98C6),
-        horizonColor = Color(0xFFBCE3F5),
-        accentColor = Color(0xFFFFE082),
-        contentOnSkyColor = Color(0xFF0F263B)
-    ),
-    DHUHR_MIDDAY(
-        title = "Midday",
-        arabicTitle = "الظهر",
-        subtitle = "The sun reaches its zenith",
-        isNight = false,
-        topColor = Color(0xFF1E5F9E),
-        middleColor = Color(0xFF4288C4),
-        horizonColor = Color(0xFFA6D5F2),
-        accentColor = Color(0xFFFFF9C4),
-        contentOnSkyColor = Color(0xFF0C243C)
-    ),
-    ASR_AFTERNOON(
-        title = "Afternoon",
-        arabicTitle = "العصر",
-        subtitle = "Golden shadows lengthen across the day",
-        isNight = false,
-        topColor = Color(0xFF2D507B),
-        middleColor = Color(0xFF686C88),
-        horizonColor = Color(0xFFE4A470),
-        accentColor = Color(0xFFFFCC80),
-        contentOnSkyColor = Color(0xFFFFFFFF)
-    ),
-    MAGHRIB_SUNSET(
-        title = "Sunset",
-        arabicTitle = "المغرب",
-        subtitle = "The day folds into peaceful dusk",
-        isNight = true,
-        topColor = Color(0xFF17183B),
-        middleColor = Color(0xFF5A2A47),
-        horizonColor = Color(0xFFD46243),
-        accentColor = Color(0xFFFFAB91),
-        contentOnSkyColor = Color(0xFFFFFFFF)
-    ),
-    ISHA_TWILIGHT(
-        title = "Twilight",
-        arabicTitle = "العشاء",
-        subtitle = "Deep twilight gives way to the cosmos",
-        isNight = true,
-        topColor = Color(0xFF0B1021),
-        middleColor = Color(0xFF161F3D),
-        horizonColor = Color(0xFF2D325A),
-        accentColor = Color(0xFF90CAF9),
-        contentOnSkyColor = Color(0xFFFFFFFF)
-    ),
-    NIGHT(
-        title = "Night",
-        arabicTitle = "الليل",
-        subtitle = "Silent vigil under the starfield",
-        isNight = true,
-        topColor = Color(0xFF060914),
-        middleColor = Color(0xFF0D1527),
-        horizonColor = Color(0xFF151C33),
-        accentColor = Color(0xFFCE93D8),
-        contentOnSkyColor = Color(0xFFFFFFFF)
-    );
-
-    fun asBrush(): Brush {
-        return Brush.verticalGradient(
-            colors = listOf(topColor, middleColor, horizonColor)
-        )
-    }
-}
 
 data class MoonPhaseInfo(
     val day: Int,
@@ -139,6 +28,23 @@ data class SkyColorPalette(
     val isNight: Boolean
 )
 
+/**
+ * The sky, from one number.
+ *
+ * ### Why there is no `SkyPeriod` here any more
+ *
+ * There used to be an eight-case enum - Dawn, Sunrise, Morning, ... - each with its
+ * own hand-picked gradient, and a `determineSkyPeriod` that chose one from the hour
+ * of the day. It was a second answer to "what colour is the sky", and the wrong one
+ * twice over: it stepped at boundaries where the real sky does not, and nothing
+ * rendered it. The view has always used [calculateContinuousSkyColors], which takes
+ * the sun's actual altitude, so the enum was a palette that looked considered and
+ * was never consulted.
+ *
+ * There is one ramp now, continuous across the whole solar day, and every colour on
+ * screen comes out of it - the disc's own colour included, which is why the sun
+ * reddens at sunset for exactly the reason the horizon does.
+ */
 object AstronomicalSky {
 
     fun lerpColor(c1: Color, c2: Color, fraction: Float): Color {
@@ -278,61 +184,4 @@ object AstronomicalSky {
         }
     }
 
-    fun determineSkyPeriod(currentTime: LocalTime, prayerTimes: PrayerTimesDay?): SkyPeriod {
-        if (prayerTimes == null) {
-            val hour = currentTime.hour
-            return when (hour) {
-                in 5..6 -> SkyPeriod.FAJR_DAWN
-                7 -> SkyPeriod.SUNRISE
-                in 8..11 -> SkyPeriod.MORNING
-                in 12..15 -> SkyPeriod.DHUHR_MIDDAY
-                in 16..18 -> SkyPeriod.ASR_AFTERNOON
-                19 -> SkyPeriod.MAGHRIB_SUNSET
-                in 20..22 -> SkyPeriod.ISHA_TWILIGHT
-                else -> SkyPeriod.NIGHT
-            }
-        }
-
-        val fajr = prayerTimes.prayers.find { it.prayer == Prayer.FAJR }?.time ?: LocalTime.of(5, 0)
-        val sunrise = prayerTimes.prayers.find { it.prayer == Prayer.SUNRISE }?.time ?: LocalTime.of(6, 30)
-        val dhuhr = prayerTimes.prayers.find { it.prayer == Prayer.DHUHR }?.time ?: LocalTime.of(12, 30)
-        val asr = prayerTimes.prayers.find { it.prayer == Prayer.ASR }?.time ?: LocalTime.of(16, 0)
-        val maghrib = prayerTimes.prayers.find { it.prayer == Prayer.MAGHRIB }?.time ?: LocalTime.of(18, 45)
-        val isha = prayerTimes.prayers.find { it.prayer == Prayer.ISHA }?.time ?: LocalTime.of(20, 15)
-
-        return when {
-            currentTime.isBefore(fajr) -> SkyPeriod.NIGHT
-            currentTime.isBefore(sunrise) -> SkyPeriod.FAJR_DAWN
-            currentTime.isBefore(sunrise.plusMinutes(45)) -> SkyPeriod.SUNRISE
-            currentTime.isBefore(dhuhr) -> SkyPeriod.MORNING
-            currentTime.isBefore(asr) -> SkyPeriod.DHUHR_MIDDAY
-            currentTime.isBefore(maghrib) -> SkyPeriod.ASR_AFTERNOON
-            currentTime.isBefore(maghrib.plusMinutes(45)) -> SkyPeriod.MAGHRIB_SUNSET
-            currentTime.isBefore(isha.plusMinutes(60)) -> SkyPeriod.ISHA_TWILIGHT
-            else -> SkyPeriod.NIGHT
-        }
-    }
-
-    /**
-     * Normalized progress (0.0 to 1.0) of the sun across daylight hours
-     * or moon across nighttime hours.
-     */
-    fun getCelestialBodyProgress(currentTime: LocalTime, prayerTimes: PrayerTimesDay?): Float {
-        val sunrise = prayerTimes?.prayers?.find { it.prayer == Prayer.SUNRISE }?.time ?: LocalTime.of(6, 30)
-        val maghrib = prayerTimes?.prayers?.find { it.prayer == Prayer.MAGHRIB }?.time ?: LocalTime.of(18, 45)
-
-        val currentSec = currentTime.toSecondOfDay()
-        val sunriseSec = sunrise.toSecondOfDay()
-        val maghribSec = maghrib.toSecondOfDay()
-
-        return if (currentSec in sunriseSec..maghribSec) {
-            val totalDay = (maghribSec - sunriseSec).coerceAtLeast(1)
-            ((currentSec - sunriseSec).toFloat() / totalDay).coerceIn(0f, 1f)
-        } else {
-            // Nighttime progress
-            val totalNight = (86400 - maghribSec + sunriseSec).coerceAtLeast(1)
-            val elapsed = if (currentSec > maghribSec) currentSec - maghribSec else (86400 - maghribSec) + currentSec
-            (elapsed.toFloat() / totalNight).coerceIn(0f, 1f)
-        }
-    }
 }
