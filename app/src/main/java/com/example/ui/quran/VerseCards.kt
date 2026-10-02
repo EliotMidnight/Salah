@@ -352,5 +352,3 @@ internal fun PlayingDot(isPlaying: Boolean) {
     )
 }
 
-/** Marks a surface that names the surah currently being read. */
-internal fun Modifier.surahHeading() = semantics { heading() }

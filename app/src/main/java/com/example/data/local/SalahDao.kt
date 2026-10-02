@@ -37,14 +37,4 @@ interface SalahDao {
 
     @Query("SELECT COUNT(*) FROM bookmarks WHERE surahNumber = :surahNumber AND ayahNumber = :ayahNumber")
     suspend fun isBookmarked(surahNumber: Int, ayahNumber: Int): Int
-
-    // Cached Offline Location
-    @Query("SELECT * FROM cached_locations WHERE id = 1 LIMIT 1")
-    fun getCachedLocation(): Flow<CachedLocationEntity?>
-
-    @Query("SELECT * FROM cached_locations WHERE id = 1 LIMIT 1")
-    suspend fun getCachedLocationOnce(): CachedLocationEntity?
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertCachedLocation(cachedLocation: CachedLocationEntity)
 }

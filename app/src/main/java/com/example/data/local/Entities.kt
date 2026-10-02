@@ -1,6 +1,7 @@
 package com.example.data.local
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(tableName = "prayer_logs")
@@ -36,7 +37,24 @@ data class ContinueReadingEntity(
     val timestamp: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "bookmarks")
+/**
+ * A verse the reader saved.
+ *
+ * **The unique index on `(surahNumber, ayahNumber)` is the point of this table.** It
+ * had an `autoGenerate` primary key and no natural key, so `toggleBookmark`'s
+ * read-then-write could insert the same verse twice - two taps landing close together
+ * both read "not saved" and both inserted - and the Saved list showed the verse twice.
+ * Two consumers disagreeing about a row is the usual way this goes wrong, but here both
+ * agreed and the *store* could not hold the answer; the index is what makes a second
+ * insert a no-op rather than a second row.
+ *
+ * A verse is `(surah, ayah)` and not the ayah alone, for the same reason `QuranRef`
+ * carries a page: page 604 holds three ayah-1s.
+ */
+@Entity(
+    tableName = "bookmarks",
+    indices = [Index(value = ["surahNumber", "ayahNumber"], unique = true)]
+)
 data class BookmarkEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
@@ -47,16 +65,3 @@ data class BookmarkEntity(
     val timestamp: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "cached_locations")
-data class CachedLocationEntity(
-    @PrimaryKey
-    val id: Int = 1,
-    val name: String,
-    val country: String,
-    val latitude: Double,
-    val longitude: Double,
-    val altitudeMeters: Double = 0.0,
-    val accuracyMeters: Float = 0f,
-    val isGps: Boolean = true,
-    val timestamp: Long = System.currentTimeMillis()
-)

@@ -136,7 +136,27 @@ android {
     compose = true
     buildConfig = true
   }
-  testOptions { unitTests { isIncludeAndroidResources = true } }
+  testOptions {
+    unitTests {
+      isIncludeAndroidResources = true
+      all { test ->
+        // Bounded on purpose, and this is a 4 GB host.
+        //
+        // The suite renders 30 full-screen images with Robolectric's *native* graphics,
+        // and a Pixel8 bitmap is ~10 MB of pixel buffer alone. Left unbounded the test
+        // worker sizes its heap from physical RAM - on this machine, on top of a 1280m
+        // Gradle daemon running the Kotlin compiler in-process - and the native runtime
+        // intermittently fails to load, which surfaces as "Unable to load Robolectric
+        // native runtime library" in whichever test class happened to start first. A
+        // named ceiling is a little larger than the suite needs and a lot smaller than
+        // "whatever the machine has", which is what makes it stop and stay stopped.
+        test.maxHeapSize = "1g"
+        // One fork, so a leaked native bitmap in one class cannot be inherited by the
+        // next, and so the peak is one class's images rather than the suite's.
+        test.maxParallelForks = 1
+      }
+    }
+  }
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true

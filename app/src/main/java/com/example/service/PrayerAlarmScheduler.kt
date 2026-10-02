@@ -5,7 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import com.example.data.local.SalahDatabase
+import com.example.data.location.LocationStore
 import com.example.data.model.CalculationMethod
 import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
@@ -58,30 +58,17 @@ object PrayerAlarmScheduler {
                     java.util.Locale.ROOT
                 )
 
-                // Resolve location (cached Room DB or SharedPrefs fallback)
-                val db = SalahDatabase.getDatabase(appContext)
-                val cachedLoc = db.salahDao().getCachedLocationOnce()
-                val location = if (cachedLoc != null) {
-                    UserLocation(
-                        name = cachedLoc.name,
-                        country = cachedLoc.country,
-                        latitude = cachedLoc.latitude,
-                        longitude = cachedLoc.longitude,
-                        isGps = cachedLoc.isGps
-                    )
-                } else {
-                    val lat = (if (prefs.contains("loc_lat")) prefs.getFloat("loc_lat", UserLocation.DEFAULT.latitude.toFloat())
-                               else prefs.getFloat("pref_loc_lat", UserLocation.DEFAULT.latitude.toFloat())).toDouble()
-                    val lon = (if (prefs.contains("loc_lng")) prefs.getFloat("loc_lng", UserLocation.DEFAULT.longitude.toFloat())
-                               else prefs.getFloat("pref_loc_lon", UserLocation.DEFAULT.longitude.toFloat())).toDouble()
-                    val name = if (prefs.contains("loc_name")) prefs.getString("loc_name", UserLocation.DEFAULT.name) ?: UserLocation.DEFAULT.name
-                               else prefs.getString("pref_loc_name", UserLocation.DEFAULT.name) ?: UserLocation.DEFAULT.name
-                    val country = if (prefs.contains("loc_country")) prefs.getString("loc_country", UserLocation.DEFAULT.country) ?: UserLocation.DEFAULT.country
-                                  else prefs.getString("pref_loc_country", UserLocation.DEFAULT.country) ?: UserLocation.DEFAULT.country
-                    UserLocation(name, country, lat, lon)
-                }
+                // The location, read the way the rest of the app reads it.
+                //
+                // This used to read a Room row *first* and fall back to the
+                // preferences, while the repository read only the preferences - so the
+                // adhan could fire for one place while the screen showed another. It
+                // also dropped `isGps` when rebuilding the value, and carried a third
+                // spelling of every key (`pref_loc_*`) for an older build.
+                val location = LocationStore.read(appContext)
 
-                // Repository writes keys without the "pref_" prefix; accept both for reliability.
+                // The repository writes keys without the "pref_" prefix; an older build
+                // used it. Read both, once, in one place.
                 fun prefOr(key: String, legacy: String, def: String): String =
                     if (prefs.contains(key)) prefs.getString(key, def) ?: def
                     else prefs.getString(legacy, def) ?: def

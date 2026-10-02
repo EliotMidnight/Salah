@@ -14,6 +14,7 @@ import com.example.ui.SalahUiState
 import com.example.ui.localization.ProvideAppLanguage
 import com.example.ui.theme.SalahTheme
 import org.junit.Assert.assertEquals
+import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -52,7 +53,7 @@ import org.robolectric.annotation.Config
  * So the assertion is behavioural: navigate, then check the page on screen changed.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], qualifiers = "w411dp-h891dp-normal-long-notround-any-420dpi-keyshidden-nonav")
+@Config(qualifiers = RobolectricDeviceQualifiers.Pixel8, sdk = [36])
 class QuranNavigationTest {
 
     @get:Rule

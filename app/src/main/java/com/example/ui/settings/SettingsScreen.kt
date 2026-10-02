@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
+import com.example.data.model.AdhanSound
 import com.example.data.model.CalculationMethod
 import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
@@ -91,13 +92,15 @@ private val ALERT_MODES = listOf("Full Adhan", "Takbeer Only", "Gentle Chime", "
  */
 private val SUNRISE_ALERT_MODES = listOf("Silent Reminder", "Vibrate Only", "Silent")
 private val AUTO_SILENCE_OPTIONS = listOf(15, 20, 30, 45)
-private val ADHAN_SOUNDS = listOf(
-    "Makkah Al-Mukarramah",
-    "Madinah An-Nabawi",
-    "Al-Aqsa",
-    "Moroccan",
-    "Gentle Bell Chime"
-)
+/**
+ * The adhan sounds the picker offers.
+ *
+ * [AdhanSound.offered] rather than a hand-written list, because the list was one of
+ * the four vocabularies and it was the one that *offered* five names while the code
+ * that played them matched three. A sound added to the enum is now offered
+ * automatically, and there is nothing left to keep in step.
+ */
+private val ADHAN_SOUNDS: List<AdhanSound> = AdhanSound.offered
 private val RECITERS = listOf(
     "Mishary Rashid Alafasy",
     "Abdul Basit Abdus Samad",
@@ -204,7 +207,7 @@ fun SettingsScreen(
     onThemeSelect: (String) -> Unit = {},
     onQuranScriptSelect: (String) -> Unit = {},
     onTimeFormatToggle: (Boolean) -> Unit,
-    onAdhanSoundSelect: (String) -> Unit = {},
+    onAdhanSoundSelect: (AdhanSound) -> Unit = {},
     onHijriAdjustmentChange: (Int) -> Unit = {},
     onReciterSelect: (String) -> Unit = {},
     onPrePrayerOffsetChange: (Int) -> Unit = {},
@@ -353,7 +356,7 @@ fun SettingsScreen(
                 RowDivider()
                 ActionRow(
                     title = strings.adhanSoundLabel,
-                    value = state.adhanSound,
+                    value = state.adhanSound.label,
                     onClick = { sheet = Sheet.ADHAN_SOUND }
                 )
                 RowDivider()
@@ -901,18 +904,25 @@ fun SettingsScreen(
             title = strings.more.chooseAdhanSound,
             onDismiss = { sheet = null; onStopAudioPreview() }
         ) {
+            // The row shows the label; the callbacks take the sound, so the preview
+            // and the choice are the same fact rather than a label matched back into
+            // an enum. `audioPreviewPlaying` is the *label* because that is what the
+            // chip in the title row compares against - one representation, one place.
             ADHAN_SOUNDS.forEach { sound ->
                 OptionRow(
-                    title = sound,
+                    title = sound.label,
                     selected = sound == state.adhanSound,
                     onClick = { onAdhanSoundSelect(sound) },
                     trailing = {
                         PlayPreviewButton(
-                            label = "${strings.more.testSound}: $sound",
-                            isPlaying = state.audioPreviewPlaying == sound,
+                            label = "${strings.more.testSound}: ${sound.label}",
+                            isPlaying = state.audioPreviewPlaying == sound.label,
                             onToggle = {
-                                if (state.audioPreviewPlaying == sound) onStopAudioPreview()
-                                else onPlayAudioPreview(sound)
+                                if (state.audioPreviewPlaying == sound.label) {
+                                    onStopAudioPreview()
+                                } else {
+                                    onPlayAudioPreview(sound.label)
+                                }
                             }
                         )
                     }
@@ -982,14 +992,14 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(space.md))
             ChipRow(
-                labels = ADHAN_SOUNDS,
+                labels = ADHAN_SOUNDS.map { it.label },
                 selectedIndex = ADHAN_SOUNDS.indexOf(state.adhanSound).coerceAtLeast(0),
                 onSelect = { onAdhanSoundSelect(ADHAN_SOUNDS[it]) }
             )
             Spacer(Modifier.height(space.md))
             Row(horizontalArrangement = Arrangement.spacedBy(space.sm)) {
                 OutlinedButton(
-                    onClick = { onPlayAudioPreview(state.adhanSound) },
+                    onClick = { onPlayAudioPreview(state.adhanSound.label) },
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)

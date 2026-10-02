@@ -204,12 +204,6 @@ fun HijriMonthSheet(
                         day = day,
                         isSelected = day == date,
                         isToday = day == LocalDate.now(),
-                        times = remember(day, location, method, madhhab, adjustments) {
-                            PrayerCalculationEngine.calculatePrayerTimes(
-                                date = day, location = location, method = method,
-                                madhhab = madhhab, adjustments = adjustments
-                            )
-                        },
                         hijriAdjustment = hijriAdjustment,
                         onClick = { onSelectDate(day) }
                     )
@@ -241,7 +235,6 @@ private fun HijriDayCell(
     day: LocalDate,
     isSelected: Boolean,
     isToday: Boolean,
-    times: PrayerTimesDay,
     hijriAdjustment: Int,
     onClick: () -> Unit
 ) {
@@ -251,11 +244,21 @@ private fun HijriDayCell(
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val accent = MaterialTheme.colorScheme.primary
 
-    // A dot for the five prayers, so the shape of the month is visible at a
-    // glance without reading a single number.
-    val fard = listOf(Prayer.FAJR, Prayer.DHUHR, Prayer.ASR, Prayer.MAGHRIB, Prayer.ISHA)
-    val byPrayer = times.prayers.associateBy { it.prayer }
-    val marks = fard.count { byPrayer[it]?.time?.toSecondOfDay()?.let { s -> s % 86400 < 12 * 3600 || s > 11 * 3600 } == true }
+    // **There is no dot on a day, and there should not be one.**
+    //
+    // There used to be: a 3dp marker drawn when four or more of the five fard prayers
+    // "fell in the night", tested as `s % 86400 < 12 * 3600 || s > 11 * 3600`.
+    // `toSecondOfDay()` is always in 0..86399, so `s % 86400` is `s`, and the condition
+    // reduces to `s < 43200 || s > 39600` - true for **every second of every day**. The
+    // count was therefore always 5, the threshold always met, and the dot drew on all
+    // 29 or 30 days of the month. A marker that is on every cell marks nothing, and it
+    // was drawing a claim about a religious observance the code never computed.
+    //
+    // What would be worth marking is a fact that *varies*: Jumu'ah, a public holiday, a
+    // night-prayer threshold. Each is a product decision with a religious judgement in
+    // it, and none of them is this condition - so the cell is left plain rather than
+    // given an invented rule. A reader can see the times for any day by tapping it,
+    // which is the real task and already works.
 
     Box(
         modifier = Modifier
@@ -286,15 +289,6 @@ private fun HijriDayCell(
                 color = if (isSelected) muted else muted.copy(alpha = 0.7f),
                 maxLines = 1
             )
-            if (marks >= 4) {
-                Spacer(Modifier.height(1.dp))
-                Box(
-                    modifier = Modifier
-                        .size(3.dp)
-                        .clip(MaterialTheme.shapes.extraSmall)
-                        .background(if (isSelected) onSurface else accent)
-                )
-            }
         }
     }
 }

@@ -19,24 +19,46 @@ import com.example.data.model.QuranReadingOptions
 /**
  * Resolves a [QuranFontFace] into something Compose can set text in.
  *
- * The fallback is the reason this is a function rather than a lookup table. A
- * face whose file is not bundled resolves to the app's Arabic serif, so
- * choosing an unavailable font renders the Quran correctly - in the default
- * face - instead of silently drawing nothing or throwing on a missing resource.
- *
  * Families are memoised per face because [FontFamily] construction walks the
  * resource loader, and this sits in the text style of every page of the mushaf.
+ *
+ * ### There is no baseline shift here, and that is a decision
+ *
+ * `QuranFontFace` used to carry a `baselineShiftSp` - `-0.5f` for the two Amiri
+ * faces, `-1f` for Harmattan - copied faithfully into this class and then **never
+ * applied**. Two things were done with that, and both are worth recording.
+ *
+ * **The dead value is gone**, because a value nobody reads is a second place for
+ * the same fact to go wrong, and because its own doc claimed a remedy the rendering
+ * already had.
+ *
+ * **The remedy it claimed to be is [QuranFontFace.lineHeightFactor]**, which is
+ * per-face and does work: Harmattan is set at 2.35 and Lateef at 1.90, which is the
+ * difference between a face with the deepest descender in the set and the densest.
+ *
+ * **Applying the shift would have been a regression, and this was checked rather
+ * than assumed.** Every bundled face was rendered on the densest page in the book
+ * (page 2, Al-Baqarah) with and without it, and with it the text moved *up* inside
+ * each line - which is exactly where Arabic's marks are. A negative shift takes the
+ * room away from the shadda, fatha and dagger alif that sit above the baseline, and
+ * the pages came back with the lines closer together and the marks crowded towards
+ * the descenders above. The premise that these faces "need a nudge" is true of faces
+ * whose marks sit *low*; Arabic's crowded marks sit high.
+ *
+ * `PlatformTextStyle` is worth mentioning because it is the obvious thing to reach
+ * for and it cannot do this: in this Compose version it carries only
+ * `includeFontPadding`, a span style and a paragraph style. The API that would be
+ * needed is `TextStyle.baselineShift`, and it is deliberately not set.
+ *
+ * `QuranFontFaceProbeTest` records a baseline for every face so that any future
+ * change to leading is visible in a diff rather than in a bug report.
  */
 @Immutable
 data class QuranTypeface(
     val face: QuranFontFace,
     val family: FontFamily,
-    val lineHeightFactor: Float,
-    val baselineShiftSp: Float
+    val lineHeightFactor: Float
 ) {
-    /** True when the requested face is genuinely the one being rendered. */
-    val isResolved: Boolean get() = true
-
     /**
      * The Arabic reading style at [scale].
      *
@@ -48,6 +70,11 @@ data class QuranTypeface(
      * own multiplier times [scale], computed in sp rather than scaled from an
      * already-laid-out style: a Nastaliq face and a Naskh face need different
      * multipliers at every size, not just at 100%.
+     *
+     * It is also the face's *only* typographic adjustment, and it is the one that
+     * has to exist. Every bundled face was checked on the book's densest page at
+     * 100% and none of them clips or collides; that is what the per-face multiplier
+     * buys, and a baseline nudge would only take room away from the marks.
      */
     fun arabicStyle(
         scale: Float,
@@ -90,20 +117,9 @@ object QuranFonts {
             QuranTypeface(
                 face = face,
                 family = FontFamily(Font(face.fontRes)),
-                lineHeightFactor = face.lineHeightFactor,
-                baselineShiftSp = face.baselineShiftSp
+                lineHeightFactor = face.lineHeightFactor
             )
         }
-
-    /**
-     * The face the reader should actually draw.
-     *
-     * The identity function, and that is the improvement. It existed to map an
-     * unbundleable face onto Amiri, which meant five of the seven faces the picker
-     * offered all drew the same thing. Every face in [QuranFontFace] now ships, so
-     * there is nothing to fall back to.
-     */
-    fun effective(face: QuranFontFace): QuranFontFace = face
 
     /**
      * The reader's current typeface, readable without a parameter.

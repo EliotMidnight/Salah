@@ -19,6 +19,7 @@ import com.example.data.local.PrayerLogEntity
 import com.example.data.local.SalahDatabase
 import com.example.data.location.LocationFetchResult
 import com.example.data.model.Ayah
+import com.example.data.model.AdhanSound
 import com.example.data.model.CalculationMethod
 import com.example.data.model.defaultAlertModes
 import com.example.data.model.HijriDate
@@ -142,7 +143,7 @@ data class SalahUiState(
     val appTheme: String = "System Default",
     val quranScript: String = "Uthmani (Madani)",
     val timeFormat24h: Boolean = true,
-    val adhanSound: String = "Makkah Al-Mukarramah",
+    val adhanSound: AdhanSound = AdhanSound.MAKKAH,
     val reciter: String = "Mishary Rashid Alafasy",
     val prePrayerOffsetMinutes: Int = 10,
     val adhanVolume: Float = 0.85f,
@@ -911,7 +912,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         repository.setTimeFormat24h(is24h)
     }
 
-    fun setAdhanSound(sound: String) {
+    fun setAdhanSound(sound: AdhanSound) {
         repository.setAdhanSound(sound)
     }
 
@@ -1002,16 +1003,23 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         }
         _uiState.value = _uiState.value.copy(audioPreviewPlaying = title)
 
-        val isAdhanSound = title.contains("Makkah") || title.contains("Madinah") ||
-                title.contains("Al-Aqsa") || title.contains("Cairo") || title.contains("Moroccan")
-        val isAlertMode = title == "Full Adhan" || title == "Takbeer Only" || title == "Gentle Chime"
+        // Which of the three things the reader might have pressed: an adhan sound, an
+        // alert *mode*, or a reciter.
+        //
+        // This used to answer it by substring-matching the title against two hard-coded
+        // word lists, one of which omitted "Gentle Bell Chime" - the only option in the
+        // picker that is not an adhan. So previewing it fell through to the reciter
+        // branch and played a **chime**, while the alarm for the same setting played a
+        // **full adhan**, because the synthesizer's own matcher did not skip it either.
+        // One setting, two sounds, and the one a reader could hear by pressing the
+        // button was not the one they would get.
+        val sound = AdhanSound.entries.firstOrNull { it.label == title }
+        val mode = ALERT_MODES.firstOrNull { it == title }
 
-        if (isAdhanSound || isAlertMode) {
-            val mode = if (isAlertMode) title else "Full Adhan"
-            val sound = if (isAdhanSound) title else _uiState.value.adhanSound
+        if (sound != null || mode != null) {
             AdhanAudioSynthesizer.playAlert(
-                alertMode = mode,
-                soundStyle = sound,
+                alertMode = mode ?: "Full Adhan",
+                sound = sound ?: _uiState.value.adhanSound,
                 volume = _uiState.value.adhanVolume
             ) {
                 _uiState.value = _uiState.value.copy(audioPreviewPlaying = null)
@@ -1099,7 +1107,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         repository.setGlobalSilentMode(false)
         setAutoSilentDuringPrayerTo(false)
         setAutoSilentDuration(20)
-        setAdhanSound("Makkah Al-Mukarramah")
+        setAdhanSound(AdhanSound.MAKKAH)
 
         // Display and interface.
         setTimeFormat24h(true)
@@ -1485,3 +1493,11 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
  * to face the Kaaba, which is the only posture this matters in.
  */
 internal const val DEVICE_LEVEL_TOLERANCE_DEGREES = 18f
+
+/**
+ * The alert *modes* the Settings screen offers to preview.
+ *
+ * Named here rather than spelled out at the call site, because the call site used to
+ * spell them out and then had to notice that its own list of *sounds* was missing one.
+ */
+private val ALERT_MODES = listOf("Full Adhan", "Takbeer Only", "Gentle Chime")

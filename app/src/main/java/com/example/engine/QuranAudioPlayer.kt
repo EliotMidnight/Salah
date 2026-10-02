@@ -22,10 +22,6 @@ data class AudioPlaybackState(
     val isPlaying: Boolean = false,
     val surahNumber: Int = 1,
     val ayahNumber: Int = 1,
-    val currentPositionMs: Int = 0,
-    val durationMs: Int = 1,
-    val reciterName: String = "Mishary Rashid Alafasy",
-    val isOfflineMode: Boolean = true
 )
 
 class QuranAudioPlayer(private val context: Context) {
@@ -35,7 +31,6 @@ class QuranAudioPlayer(private val context: Context) {
 
     private var mediaPlayer: MediaPlayer? = null
     private var synthJob: Job? = null
-    private var progressJob: Job? = null
     private var prepareTimeoutJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Main)
     private val appContext: Context get() = context.applicationContext
@@ -47,8 +42,6 @@ class QuranAudioPlayer(private val context: Context) {
             isPlaying = true,
             surahNumber = surahNumber,
             ayahNumber = ayahNumber,
-            currentPositionMs = 0,
-            durationMs = 8000
         )
 
         // Try online audio stream (EveryAyah public domain audio)
@@ -79,14 +72,11 @@ class QuranAudioPlayer(private val context: Context) {
                     mp.start()
                     _playbackState.value = _playbackState.value.copy(
                         isPlaying = true,
-                        durationMs = mp.duration.coerceAtLeast(1000),
-                        isOfflineMode = false
                     )
-                    startProgressTracker()
                 }
                 setOnCompletionListener {
                     prepareTimeoutJob?.cancel()
-                    _playbackState.value = _playbackState.value.copy(isPlaying = false, currentPositionMs = 0)
+                    _playbackState.value = _playbackState.value.copy(isPlaying = false)
                     onAyahCompleted?.invoke()
                 }
                 setOnErrorListener { _, _, _ ->
@@ -123,8 +113,6 @@ class QuranAudioPlayer(private val context: Context) {
     private fun playOfflineChime(surahNumber: Int, ayahNumber: Int, onAyahCompleted: (() -> Unit)?) {
         _playbackState.value = _playbackState.value.copy(
             isPlaying = true,
-            isOfflineMode = true,
-            durationMs = 4000
         )
 
         synthJob = scope.launch(Dispatchers.Default) {
@@ -170,7 +158,6 @@ class QuranAudioPlayer(private val context: Context) {
                 val startTime = System.currentTimeMillis()
                 while (isActive && System.currentTimeMillis() - startTime < 3500) {
                     val elapsed = (System.currentTimeMillis() - startTime).toInt()
-                    _playbackState.value = _playbackState.value.copy(currentPositionMs = elapsed)
                     delay(100)
                 }
 
@@ -180,38 +167,22 @@ class QuranAudioPlayer(private val context: Context) {
             }
 
             scope.launch(Dispatchers.Main) {
-                _playbackState.value = _playbackState.value.copy(isPlaying = false, currentPositionMs = 0)
+                _playbackState.value = _playbackState.value.copy(isPlaying = false)
                 onAyahCompleted?.invoke()
             }
         }
     }
 
-    private fun startProgressTracker() {
-        progressJob?.cancel()
-        progressJob = scope.launch {
-            while (isActive && mediaPlayer?.isPlaying == true) {
-                val current = mediaPlayer?.currentPosition ?: 0
-                val total = mediaPlayer?.duration ?: 1
-                _playbackState.value = _playbackState.value.copy(
-                    currentPositionMs = current,
-                    durationMs = total.coerceAtLeast(1)
-                )
-                delay(300)
-            }
-        }
-    }
 
     fun pause() {
         mediaPlayer?.pause()
         synthJob?.cancel()
-        progressJob?.cancel()
         _playbackState.value = _playbackState.value.copy(isPlaying = false)
     }
 
     fun resume() {
         if (mediaPlayer != null) {
             mediaPlayer?.start()
-            startProgressTracker()
             _playbackState.value = _playbackState.value.copy(isPlaying = true)
         }
     }
@@ -220,9 +191,6 @@ class QuranAudioPlayer(private val context: Context) {
         stop()
         _playbackState.value = _playbackState.value.copy(
             isPlaying = true,
-            reciterName = name,
-            durationMs = 3000,
-            isOfflineMode = true
         )
         synthJob = scope.launch(Dispatchers.Default) {
             try {
@@ -230,15 +198,24 @@ class QuranAudioPlayer(private val context: Context) {
                 val durationSec = 3.0
                 val numSamples = (sampleRate * durationSec).toInt()
                 val samples = ShortArray(numSamples)
+                // **Reciters, not adhan sounds.**
+                //
+                // This list began with Makkah, Madinah, Al-Aqsa and Moroccan - the
+                // *adhan* vocabulary, copied from the synthesizer - and then carried
+                // three reciter names after them. None of the first four can appear
+                // here: the four callers of this function pass a reciter, a sound, an
+                // alert mode, or a sound label, and a reciter is not a place. So four
+                // of the seven branches could never fire, and the two vocabularies sat
+                // in one function where either looked plausible.
+                //
+                // A reciter's preview is a placeholder tone, and its own registry is
+                // [com.example.data.model.Reciter]; the mapping is keyed on the
+                // reciter's key so a rename cannot silently fall through.
                 val baseFreq = when {
-                    name.contains("Makkah") -> 329.63 // E4
-                    name.contains("Madinah") -> 293.66 // D4
-                    name.contains("Al-Aqsa") -> 261.63 // C4
-                    name.contains("Moroccan") -> 392.00 // G4
                     name.contains("Basit") -> 220.00 // A3
                     name.contains("Husary") -> 246.94 // B3
                     name.contains("Ghamdi") -> 349.23 // F4
-                    else -> 293.66
+                    else -> 293.66 // D4
                 }
                 for (i in 0 until numSamples) {
                     val t = i.toDouble() / sampleRate
@@ -287,7 +264,6 @@ class QuranAudioPlayer(private val context: Context) {
     }
 
     fun stop() {
-        progressJob?.cancel()
         synthJob?.cancel()
         prepareTimeoutJob?.cancel()
         try {
@@ -295,6 +271,6 @@ class QuranAudioPlayer(private val context: Context) {
             mediaPlayer?.release()
         } catch (_: Exception) {}
         mediaPlayer = null
-        _playbackState.value = _playbackState.value.copy(isPlaying = false, currentPositionMs = 0)
+        _playbackState.value = _playbackState.value.copy(isPlaying = false)
     }
 }

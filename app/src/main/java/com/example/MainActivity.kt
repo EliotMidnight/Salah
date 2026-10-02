@@ -218,7 +218,7 @@ private fun SalahApp(viewModel: SalahViewModel) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_ASKED_NOTIFICATIONS, true)
-            .putBoolean(KEY_NOTIFICATIONS_GRANTED, granted)
+
             .apply()
     }
 
@@ -388,7 +388,6 @@ private fun SalahApp(viewModel: SalahViewModel) {
 
 private const val PREFS = "salah_permission_state"
 private const val KEY_ASKED_NOTIFICATIONS = "asked_post_notifications"
-private const val KEY_NOTIFICATIONS_GRANTED = "post_notifications_granted"
 
 /**
  * Explains why notifications are wanted before the system prompt appears.

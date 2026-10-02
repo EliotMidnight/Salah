@@ -297,12 +297,13 @@ class QuranReadingOptionsTest {
         // draw it are the same fact. If a future face needs a licence check, the
         // honest answer is to leave it out of the enum rather than to ship a control
         // that lies.
+        //
+        // The check is that every face has a real font resource. There used to be a
+        // `QuranFontFace.isBundled` property - always `true`, by construction - which
+        // this test asserted; that assertion could not fail, and the property existed
+        // only to be asserted. The resource id is the part that can actually be zero.
         assertTrue(QuranFontFace.entries.isNotEmpty())
         QuranFontFace.entries.forEach { face ->
-            assertTrue(
-                "${face.key} is offered but cannot be drawn",
-                face.isBundled
-            )
             assertTrue(
                 "${face.key} has no font resource",
                 face.fontRes != 0

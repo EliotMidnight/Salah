@@ -134,20 +134,25 @@ enum class QuranPaperTone(val key: String) {
  * the entry at it - and needs nothing else. Each face's licence is in
  * `app/src/main/assets/quran_fonts_OFL.txt`.
  *
- * ### [lineHeightFactor] is per face, and not a style constant
+ * ### [lineHeightFactor] is the face's only typographic adjustment, and not a style constant
  *
  * Nastaliq descenders alone can eat a third of the line box, and a Naskh face set
  * with a Nastaliq leading looks like a mistake. Each face carries its own multiplier
  * and the reader never shares one value across all of them. Harmattan is the extreme
  * case here: it is a Naskh with a famously deep descender, and it needs more room
  * than any other face in the set - which is the reason for the whole mechanism.
+ *
+ * This enum used to also carry a `baselineShiftSp` (-0.5f for the two Amiri faces,
+ * -1f for Harmattan) "for faces whose marks sit low". It was never applied, and
+ * applying it was tried and measured: it raises the text inside each line, which is
+ * where Arabic's shadda, fatha and dagger alif are, so every face came back with its
+ * marks crowded towards the descenders above. There is no baseline shift on any face
+ * and there never should be; see `QuranTypeface` for the render evidence.
  */
 enum class QuranFontFace(
     val key: String,
     val fontRes: Int,
-    val lineHeightFactor: Float,
-    /** Baseline nudge, in sp at 100% size, for faces whose marks sit low. */
-    val baselineShiftSp: Float = 0f
+    val lineHeightFactor: Float
 ) {
     /**
      * Amiri - a Naskh revival by Khaled Hosny, and the app's default.
@@ -155,7 +160,7 @@ enum class QuranFontFace(
      * The most traditional of the set and the most widely used for digital mushaf
      * work, which is why it is the default rather than the prettiest.
      */
-    AMIRI("amiri", com.example.R.font.quran_amiri, 2.00f, baselineShiftSp = -0.5f),
+    AMIRI("amiri", com.example.R.font.quran_amiri, 2.00f),
 
     /**
      * Amiri Quran - the same revival cut specifically for Quranic text.
@@ -167,8 +172,7 @@ enum class QuranFontFace(
     AMIRI_QURAN(
         "amiri_quran",
         com.example.R.font.quran_amiri_quran,
-        1.90f,
-        baselineShiftSp = -0.5f
+        1.90f
     ),
 
     /**
@@ -198,17 +202,7 @@ enum class QuranFontFace(
      * for Amiri puts neighbouring lines on top of them. It is the reason
      * [lineHeightFactor] is per face at all.
      */
-    HARMATTAN("harmattan", com.example.R.font.quran_harmattan, 2.35f, baselineShiftSp = -1f);
-
-    /**
-     * Always true, and that is the point: every face offered is one that can
-     * actually be drawn.
-     *
-     * Kept as a property rather than deleted because a caller asking "can this be
-     * rendered" is asking a real question, and the answer being constant is a change
-     * worth having.
-     */
-    val isBundled: Boolean get() = true
+    HARMATTAN("harmattan", com.example.R.font.quran_harmattan, 2.35f);
 
     companion object {
         fun fromKey(key: String?): QuranFontFace =
@@ -260,8 +254,6 @@ data class QuranReadingOptions(
         /** Base size of the Arabic, before [arabicScale]. */
         const val ARABIC_BASE_SP = 24f
 
-        /** Base size of the translation, before [translationScale]. */
-        const val TRANSLATION_BASE_SP = 16f
 
         /** The scale a pinch on the *view* is allowed to reach. */
         val ViewScaleRange = 1.0f..2.2f

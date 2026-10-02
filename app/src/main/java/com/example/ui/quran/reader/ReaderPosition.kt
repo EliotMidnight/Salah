@@ -294,8 +294,6 @@ fun rememberReaderPosition(
     return position
 }
 
-/** The position a first run starts at: Al-Fatihah, page 1. */
-internal fun initialPosition(): QuranRef = QuranRef.Start
 
 /**
  * The scale above which the view counts as magnified.

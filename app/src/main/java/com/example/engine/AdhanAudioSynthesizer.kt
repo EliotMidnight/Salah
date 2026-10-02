@@ -3,6 +3,7 @@ package com.example.engine
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import com.example.data.model.AdhanSound
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,7 +32,18 @@ object AdhanAudioSynthesizer {
      */
     fun playAlert(
         alertMode: String,
-        soundStyle: String = "Makkah Al-Mukarramah",
+        /**
+         * Which adhan to play, as a resolved [AdhanSound] and not a string.
+         *
+         * A string, and the caller guessing at it, was how four places came to hold
+         * four different vocabularies: one offered five sounds and matched three of
+         * them, one matched four and offered two the picker never showed, one matched
+         * reciter *names* because it was written for the Quran player and copied, and
+         * one asked whether the sound "was an adhan" by listing Cairo. The result a
+         * reader could hear: previewing "Gentle Bell Chime" played a chime, and the
+         * alarm for the same setting played a full adhan.
+         */
+        sound: AdhanSound = AdhanSound.MAKKAH,
         volume: Float = 0.85f,
         onCompletion: (() -> Unit)? = null
     ) {
@@ -48,15 +60,16 @@ object AdhanAudioSynthesizer {
             try {
                 when {
                     alertMode.equals("Takbeer Only", ignoreCase = true) -> {
-                        playTakbeerAcoustic(soundStyle, volume)
+                        playTakbeerAcoustic(sound, volume)
                     }
                     alertMode.equals("Gentle Chime", ignoreCase = true) -> {
                         playGentleChimeAcoustic(volume)
                     }
-                    else -> {
-                        // Full Adhan
-                        playFullAdhanAcoustic(soundStyle, volume)
-                    }
+                    // The reader chose a sound that is not an adhan, so a chime is
+                    // what they get. It used to fall through to the full adhan here,
+                    // because the sound's *name* matched no branch.
+                    !sound.isAdhan -> playGentleChimeAcoustic(volume)
+                    else -> playFullAdhanAcoustic(sound, volume)
                 }
             } catch (_: Exception) {
             } finally {
@@ -74,16 +87,13 @@ object AdhanAudioSynthesizer {
      * - Hayya 'ala as-Salah
      * - Closing Takbeer & Tahlil
      */
-    private suspend fun playFullAdhanAcoustic(soundStyle: String, volume: Float) {
+    private suspend fun playFullAdhanAcoustic(sound: AdhanSound, volume: Float) {
         val sampleRate = 44100
-        val baseFreq = when {
-            soundStyle.contains("Makkah", ignoreCase = true) -> 330.0 // E4
-            soundStyle.contains("Madinah", ignoreCase = true) -> 294.0 // D4
-            soundStyle.contains("Al-Aqsa", ignoreCase = true) -> 262.0 // C4
-            soundStyle.contains("Moroccan", ignoreCase = true) -> 392.0 // G4 (Maghrebi tone)
-            soundStyle.contains("Cairo", ignoreCase = true) || soundStyle.contains("Egypt", ignoreCase = true) -> 311.0 // Eb4 (Maqam Rast)
-            else -> 300.0
-        }
+        // One line, because the pitch belongs to the sound and not to this function.
+        // It was a five-way `contains` match here and a two-way one in
+        // [playTakbeerAcoustic], so Makkah's adhan began on E and its takbeer on
+        // something else, and only Moroccan ever agreed with itself.
+        val baseFreq = sound.baseFrequency()
 
         // Adhan Melodic Notes (Frequency multipliers from base root)
         // Authentic Maqam Bayati/Rast scale progression
@@ -112,9 +122,9 @@ object AdhanAudioSynthesizer {
     /**
      * Resonant Takbeer: "Allahu Akbar, Allahu Akbar"
      */
-    private suspend fun playTakbeerAcoustic(soundStyle: String, volume: Float) {
+    private suspend fun playTakbeerAcoustic(sound: AdhanSound, volume: Float) {
         val sampleRate = 44100
-        val baseFreq = if (soundStyle.contains("Moroccan", ignoreCase = true)) 392.0 else 320.0
+        val baseFreq = sound.takbeerFrequency()
 
         val notes = listOf(
             1.0 to 0.8,

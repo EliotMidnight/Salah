@@ -239,9 +239,4 @@ class ReaderPositionTest {
         }
     }
 
-    @Test
-    fun `the first run starts at Al-Fatihah on page 1`() {
-        val start = initialPosition()
-        assertEquals(QuranRef(1, 1, 1), start)
-    }
 }

@@ -145,16 +145,6 @@ object QuranBrowse {
         )
     }
 
-    fun placeAtSurah(surah: Int): QuranPlace {
-        val s = surah.coerceIn(1, TOTAL_SURAHS)
-        val first = QuranCorpus.ayahsInSurah(s).first()
-        return QuranPlace(
-            kind = QuranPlace.Kind.SURAH,
-            number = s,
-            verse = ref(first.surahNumber, first.ayahNumber) ?: QuranRef.Start
-        )
-    }
-
     /** The surah a page opens in, for the running head. */
     fun surahOfPage(page: Int): Surah? =
         QuranCorpus.ayahsOnPage(page).firstOrNull()?.let { surah(it.surahNumber) }

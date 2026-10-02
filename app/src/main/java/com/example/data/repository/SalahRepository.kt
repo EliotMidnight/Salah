@@ -7,12 +7,13 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import com.example.data.local.BookmarkEntity
-import com.example.data.local.CachedLocationEntity
 import com.example.data.local.ContinueReadingEntity
 import com.example.data.local.PrayerLogEntity
 import com.example.data.local.SalahDao
 import com.example.data.location.AppLocationService
+import com.example.data.location.LocationStore
 import com.example.data.location.LocationFetchResult
+import com.example.data.model.AdhanSound
 import com.example.data.model.CalculationMethod
 import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
@@ -50,8 +51,6 @@ class SalahRepository(
     private val _isOnlineFlow = MutableStateFlow(checkIsOnline())
     val isOnlineFlow: StateFlow<Boolean> = _isOnlineFlow.asStateFlow()
 
-    private val _isSyncingFlow = MutableStateFlow(false)
-    val isSyncingFlow: StateFlow<Boolean> = _isSyncingFlow.asStateFlow()
 
     private val _locationFlow = MutableStateFlow(loadLocation())
     val locationFlow: StateFlow<UserLocation> = _locationFlow.asStateFlow()
@@ -104,8 +103,18 @@ class SalahRepository(
     private val _timeFormat24hFlow = MutableStateFlow(prefs.getBoolean("pref_time_format_24h", true))
     val timeFormat24hFlow: StateFlow<Boolean> = _timeFormat24hFlow.asStateFlow()
 
-    private val _adhanSoundFlow = MutableStateFlow(prefs.getString("pref_adhan_sound", "Makkah Al-Mukarramah") ?: "Makkah Al-Mukarramah")
-    val adhanSoundFlow: StateFlow<String> = _adhanSoundFlow.asStateFlow()
+    /**
+     * The chosen adhan, as an [AdhanSound] and not a label.
+     *
+     * A label was the stored value, which made "which sound is this" a string-matching
+     * question in four places - see [AdhanSound] for how they disagreed. The stored
+     * key is read through [AdhanSound.fromStored], so a preference written by a build
+     * that saved the label still resolves.
+     */
+    private val _adhanSoundFlow = MutableStateFlow(
+        AdhanSound.fromStored(prefs.getString("pref_adhan_sound", ""))
+    )
+    val adhanSoundFlow: StateFlow<AdhanSound> = _adhanSoundFlow.asStateFlow()
 
     private val _hijriAdjustmentFlow = MutableStateFlow(prefs.getInt("pref_hijri_adj", 0))
     val hijriAdjustmentFlow: StateFlow<Int> = _hijriAdjustmentFlow.asStateFlow()
@@ -140,59 +149,29 @@ class SalahRepository(
         }
 
     val locationService = AppLocationService(context)
-    val cachedLocationDbFlow: Flow<CachedLocationEntity?> = dao.getCachedLocation()
 
-    private fun loadLocation(): UserLocation {
-        val name = prefs.getString("loc_name", UserLocation.DEFAULT.name) ?: UserLocation.DEFAULT.name
-        val country = prefs.getString("loc_country", UserLocation.DEFAULT.country) ?: UserLocation.DEFAULT.country
-        val lat = prefs.getFloat("loc_lat", UserLocation.DEFAULT.latitude.toFloat()).toDouble()
-        val lng = prefs.getFloat("loc_lng", UserLocation.DEFAULT.longitude.toFloat()).toDouble()
-        val isGps = prefs.getBoolean("loc_is_gps", false)
-        return UserLocation(name, country, lat, lng, isGps)
-    }
+    /**
+     * The stored location, read through [LocationStore].
+     *
+     * One reader for the whole app: the repository, and `PrayerAlarmScheduler` through
+     * the same object. They used to disagree - this read the preferences, that read a
+     * Room row first - so the screen could show one place while the adhan fired for
+     * another.
+     */
+    private fun loadLocation(): UserLocation = LocationStore.read(context)
 
     fun saveLocation(location: UserLocation) {
-        prefs.edit()
-            .putString("loc_name", location.name)
-            .putString("loc_country", location.country)
-            .putFloat("loc_lat", location.latitude.toFloat())
-            .putFloat("loc_lng", location.longitude.toFloat())
-            .putBoolean("loc_is_gps", location.isGps)
-            .apply()
+        LocationStore.write(context, location).apply()
         _locationFlow.value = location
         PrayerAlarmScheduler.scheduleAllPrayers(context)
-
-        // Persist to Room for robust offline caching
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                dao.insertCachedLocation(
-                    CachedLocationEntity(
-                        id = 1,
-                        name = location.name,
-                        country = location.country,
-                        latitude = location.latitude,
-                        longitude = location.longitude,
-                        isGps = location.isGps,
-                        timestamp = System.currentTimeMillis()
-                    )
-                )
-            } catch (e: Exception) {
-                // Ignore DB error
-            }
-        }
     }
 
     suspend fun fetchAndCacheLocation(): LocationFetchResult {
-        _isSyncingFlow.value = true
-        return try {
-            val result = locationService.fetchCurrentCoordinates(fallbackLocation = _locationFlow.value)
-            if (result is LocationFetchResult.Success) {
-                saveLocation(result.location)
-            }
-            result
-        } finally {
-            _isSyncingFlow.value = false
+        val result = locationService.fetchCurrentCoordinates(fallbackLocation = _locationFlow.value)
+        if (result is LocationFetchResult.Success) {
+            saveLocation(result.location)
         }
+        return result
     }
 
     private fun loadMethod(): CalculationMethod {
@@ -403,8 +382,14 @@ class SalahRepository(
         _timeFormat24hFlow.value = is24h
     }
 
-    fun setAdhanSound(sound: String) {
-        prefs.edit().putString("pref_adhan_sound", sound).apply()
+    /**
+     * Stores the sound's **key**, never its label.
+     *
+     * A label in storage is a translated string in a file the app does not own, which
+     * is why [AdhanSound.fromStored] has to accept one. Nothing new writes one.
+     */
+    fun setAdhanSound(sound: AdhanSound) {
+        prefs.edit().putString("pref_adhan_sound", sound.key).apply()
         _adhanSoundFlow.value = sound
     }
 
@@ -439,11 +424,28 @@ class SalahRepository(
         return dao.getAllBookmarks()
     }
 
-    suspend fun toggleBookmark(surahNumber: Int, ayahNumber: Int, surahName: String, snippet: String): Boolean {
-        val count = dao.isBookmarked(surahNumber, ayahNumber)
-        return if (count > 0) {
+    /**
+     * Saves a verse, or removes it if it is already saved.
+     *
+     * Returns nothing. It used to return a `Boolean` saying which happened, which no
+     * caller read - and which looked like the caller *should* use, since a UI that
+     * shows a filled or an empty bookmark would want it. It does not: the Saved list and
+     * the bookmark button both observe the table, so the state arrives on its own and a
+     * returned flag would be a second answer that could disagree with it.
+     *
+     * The insert is safe to repeat, because `bookmarks` has a unique index on
+     * `(surahNumber, ayahNumber)` - see [BookmarkEntity]. It did not, so two taps landing
+     * close together both read "not saved" and both inserted, and the verse appeared
+     * twice in Saved.
+     */
+    suspend fun toggleBookmark(
+        surahNumber: Int,
+        ayahNumber: Int,
+        surahName: String,
+        snippet: String
+    ) {
+        if (dao.isBookmarked(surahNumber, ayahNumber) > 0) {
             dao.deleteBookmark(surahNumber, ayahNumber)
-            false
         } else {
             dao.insertBookmark(
                 BookmarkEntity(
@@ -453,7 +455,6 @@ class SalahRepository(
                     ayahSnippet = snippet
                 )
             )
-            true
         }
     }
 

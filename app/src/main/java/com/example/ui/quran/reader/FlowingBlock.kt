@@ -27,8 +27,10 @@ import com.example.data.model.Ayah
 import com.example.data.model.QuranReadingOptions
 import com.example.data.model.QuranRef
 import com.example.ui.localization.LocalStrings
+import com.example.ui.localization.ReaderStrings
 import com.example.ui.theme.QuranFonts
 import com.example.ui.theme.Space
+import java.util.Locale
 
 /**
  * A run of verses as one block of flowing text.
@@ -155,7 +157,7 @@ internal fun FlowingBlock(
                     }
                 }
                 .semantics {
-                    contentDescription = describeBlock(ayahs)
+                    contentDescription = describeBlock(ayahs, strings.more.reader)
                     stateDescription = ayahs.firstOrNull()?.let { first ->
                         strings.more.pageWord + " " + first.pageNumber
                     }.orEmpty()
@@ -180,10 +182,25 @@ internal fun FlowingBlock(
     }
 }
 
-/** What a screen reader announces for a block of flowing text. */
-private fun describeBlock(ayahs: List<Ayah>): String {
+/**
+ * What a screen reader announces for a block of flowing text.
+ *
+ * The extent and the page, because "12 verses" alone says nothing about *where* -
+ * and a continuous block is not a page, so without the page number a reader
+ * navigating by ear has nothing to check their place against.
+ *
+ * Built from [ReaderStrings] for the same reason the mushaf page's is: this was
+ * another English sentence assembled in a file with no access to the strings, next
+ * to a `stateDescription` that was already localized. The two halves of one node
+ * speaking two languages is worse than either alone.
+ */
+private fun describeBlock(ayahs: List<Ayah>, reader: ReaderStrings): String {
     val first = ayahs.firstOrNull() ?: return ""
     val last = ayahs.last()
-    return "${first.surahNumber}:${first.ayahNumber} to ${last.surahNumber}:${last.ayahNumber}, " +
-        "${ayahs.size} verses, page ${first.pageNumber}"
+    return reader.blockAnnouncement.format(
+        reader.reference(first.surahNumber, first.ayahNumber),
+        reader.reference(last.surahNumber, last.ayahNumber),
+        reader.verseCount(ayahs.size),
+        first.pageNumber
+    )
 }

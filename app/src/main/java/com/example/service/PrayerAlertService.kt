@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import com.example.data.model.AdhanSound
 import com.example.data.model.Prayer
 import com.example.engine.AdhanAudioSynthesizer
 import com.example.engine.PrayerNotificationManager
@@ -123,7 +124,10 @@ class PrayerAlertService : Service() {
         val isVibrateOnly = prefs.getBoolean("pref_vibrate_only", false)
         val adhanEnabled = prefs.getBoolean("pref_adhan_notif", true)
         val prePrayerEnabled = prefs.getBoolean("pref_pre_prayer", true)
-        val adhanSound = prefs.getString("pref_adhan_sound", "Makkah Al-Mukarramah") ?: "Makkah Al-Mukarramah"
+        // Resolved here, once, so the service and the preview agree on which sound a
+        // stored preference means. `fromStored` also accepts the old label, because
+        // that is what every installed build has on disk.
+        val adhanSound = AdhanSound.fromStored(prefs.getString("pref_adhan_sound", ""))
         val adhanVolume = prefs.getFloat("pref_adhan_volume", 0.85f)
         // [Prayer.defaultAlertMode], not a literal. This used to say "Full Adhan" for
         // every prayer while the Settings screen said Sunrise gets a silent reminder -
@@ -184,7 +188,7 @@ class PrayerAlertService : Service() {
         if (shouldPlaySound) {
             AdhanAudioSynthesizer.playAlert(
                 alertMode = alertMode,
-                soundStyle = adhanSound,
+                sound = adhanSound,
                 volume = adhanVolume,
                 onCompletion = {
                     releaseWakeLock()

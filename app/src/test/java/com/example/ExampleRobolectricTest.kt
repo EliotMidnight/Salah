@@ -16,12 +16,31 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
 import org.robolectric.annotation.Config
 import java.time.LocalDate
 import java.time.LocalTime
 
+/**
+ * The end-to-end smoke test.
+ *
+ * Named for what it is rather than for the template it came from. The
+ * `ExampleRobolectricTest` name and the `test ...` method names were Android
+ * Studio's; they are kept here only where the test is worth keeping.
+ *
+ * **The Qibla bearing assertion is the only end-to-end check of the great-circle
+ * calculation from a real city** - `QiblaEngineTest` covers the relative angle and
+ * the magnetic field but never calls `calculateQiblaBearing` at all, so deleting this
+ * as "scaffolding" would have removed the only thing asserting that Rabat's bearing
+ * points at Makkah. It is loose (a 25-degree window) where a real fixture would be
+ * tight, and tightening it is the obvious next improvement.
+ *
+ * It needs no `@GraphicsMode`, because it captures no image - which is the point: on
+ * a memory-constrained host, every class that does not render should not be loading
+ * Robolectric's native graphics runtime at all.
+ */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
+@Config(qualifiers = RobolectricDeviceQualifiers.Pixel8, sdk = [36])
 class ExampleRobolectricTest {
 
     @Test

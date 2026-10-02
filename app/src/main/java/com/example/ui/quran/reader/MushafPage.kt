@@ -37,10 +37,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import java.util.Locale
 import com.example.data.model.Ayah
 import com.example.data.model.QuranRef
 import com.example.data.quran.QuranBrowse
 import com.example.ui.localization.LocalStrings
+import com.example.ui.localization.ReaderStrings
 import com.example.ui.theme.QuranFonts
 import com.example.ui.theme.Space
 
@@ -318,7 +320,7 @@ internal fun MushafPage(
                             }
                         }
                         .semantics {
-                            contentDescription = describePage(pageNumber, ayahs)
+                            contentDescription = describePage(pageNumber, ayahs, strings.more.reader)
                             stateDescription = strings.more.pageWord + " " + pageNumber
                             customActions = buildList {
                                 // Page turns.
@@ -407,24 +409,42 @@ private fun measureHeight(
 /**
  * What a screen reader announces for a whole page.
  *
- * The reference and the extent, because "page 42" alone tells a screen-reader
- * user nothing about the text. The surah *range* rather than one name, since a
- * page can cross a boundary and naming only the surah it opens in would be a lie
- * on the 40-odd pages that do.
+ * The reference and the extent, because "page 42" alone tells a screen-reader user
+ * nothing about the text. The surah *range* rather than one name, since a page can
+ * cross a boundary and naming only the surah it opens in would be a lie on the
+ * 50-odd pages that do.
+ *
+ * **Built from [ReaderStrings], not written here.** This used to be an English
+ * sentence assembled in this file, which had no access to the strings - so the page
+ * was announced in English while the page number in the pill beside it was announced
+ * in the reader's own language, on the same screen, about the same thing. Ten
+ * languages ship; all ten have this sentence.
+ *
+ * `Locale.ROOT`, so a reference reads `2:255` in the same digits as the pill's page
+ * number and the ayah markers. Two conventions for one fact is the thing this whole
+ * rebuild has been about.
  */
-private fun describePage(pageNumber: Int, ayahs: List<Ayah>): String {
+private fun describePage(
+    pageNumber: Int,
+    ayahs: List<Ayah>,
+    reader: ReaderStrings
+): String {
     val first = ayahs.first()
     val last = ayahs.last()
     val surahs = ayahs.map { it.surahNumber }.distinct()
-    val where = if (surahs.size == 1) {
-        first.surahNumber.toString()
-    } else {
-        "${first.surahNumber} to ${last.surahNumber}"
-    }
-    return "Page $pageNumber, juz' ${first.juzNumber}, surah $where, " +
-        "${ayahs.size} verses, from ${first.surahNumber}:${first.ayahNumber} " +
-        "to ${last.surahNumber}:${last.ayahNumber}"
+    // One number when the page is inside one surah, and the language's own range mark
+    // when it is not - 51 of the 604 pages are not.
+    val where = reader.range(first.surahNumber, last.surahNumber)
+    return reader.pageAnnouncement.format(
+        pageNumber,
+        first.juzNumber,
+        where,
+        reader.verseCount(ayahs.size),
+        reader.reference(first.surahNumber, first.ayahNumber),
+        reader.reference(last.surahNumber, last.ayahNumber)
+    )
 }
+
 
 /**
  * The measurer, and the cache size it is given.

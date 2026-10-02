@@ -294,12 +294,86 @@ data class ReaderStrings(
     val emptySavedTitle: String = "Nothing saved yet",
     val emptySavedMessage: String =
         "Save a verse while reading and it will be waiting here.",
+    // --- Spoken descriptions ------------------------------------------------
+    //
+    // The mushaf page and the continuous block used to be announced as pre-rendered
+    // English - "Page 42, juz' 21, surah 2 to 2, 15 verses, from 2:255 to 2:255" -
+    // while the *page number* in the pill beside them was already localized, on the
+    // same screen and about the same thing. A screen-reader user with the interface
+    // in Arabic heard an English sentence and then an Arabic word, from one node.
+    //
+    // Format templates rather than finished sentences, for two reasons. A template
+    // can carry each language's own word order, which a shared one cannot - Turkish
+    // and Urdu do not put the number where English does. And the point is that the
+    // *words* are translated, so the words have to live here rather than in a
+    // `private fun` in the reader that cannot reach any of this.
+
+    /**
+     * A whole mushaf page, announced: page, juz', surah range, verse count, extent.
+     */
+    val pageAnnouncement: String =
+        "Page %1\$d, juz' %2\$d, surah %3\$s, %4\$s, from %5\$s to %6\$s",
+
+    /** A block of continuous text, announced: extent, verse count, page. */
+    val blockAnnouncement: String = "%1\$s to %2\$s, %3\$s, page %4\$d",
+
+    /** The counted form for a single verse, e.g. "1 verse". */
+    val verseCountOne: String = "%d verse",
+
+    /** The counted form for more than one, e.g. "15 verses". */
+    val verseCountMany: String = "%d verses",
+
+    /**
+     * The word joining a range's two ends, e.g. "2 to 3".
+     *
+     * A whole string for one preposition, which looks like over-engineering until
+     * the day one language needs "bis", another needs "à", and a third writes the
+     * range as an en-dash and wants an empty string.
+     */
+    val rangeTo: String = " to ",
+
     // --- The Qibla dial readouts --------------------------------------------
     val headingLabel: String = "Heading",
     val mushaf: String = "Mushaf",
     /** Shown under the Settings summary row for a setting the reader owns. */
     val changeInReader: String = "Change this in the reader\u2019s Reading options."
-)
+) {
+    /**
+     * "1 verse" or "15 verses", in this language.
+     *
+     * A member rather than a helper beside one call site, because two call sites
+     * need it - the mushaf page and the continuous block - and the two must not be
+     * able to disagree about what "1" reads as.
+     *
+     * **Two forms, not a plural rule, and that is a real limitation.** Arabic
+     * distinguishes one / two / a few / many and Russian has three forms, so "3
+     * verses" reads as `3 آية` where `3 آيات` is correct, and a Russian "2" gets the
+     * many-form. Both are the common case and both stay comprehensible; the
+     * alternative is a per-language plural-rule table for one number in one
+     * sentence, which is a lot of machinery to get wrong in ten languages.
+     *
+     * `Locale.ROOT`, so a count reads in the same digits as the reference beside it
+     * and the page number in the reader's pill. One convention for one fact.
+     */
+    fun verseCount(count: Int): String = if (count == 1) {
+        String.format(java.util.Locale.ROOT, verseCountOne, count)
+    } else {
+        String.format(java.util.Locale.ROOT, verseCountMany, count)
+    }
+
+    /**
+     * A range of surah numbers as this language writes one, e.g. "2 to 3".
+     *
+     * A single number when the two ends are the same, because "surah 2 to 2" is a
+     * range nobody meant to write - and a page that does not cross a boundary is 51
+     * fewer pages where the question arises.
+     */
+    fun range(from: Int, to: Int): String =
+        if (from == to) from.toString() else "$from$rangeTo$to"
+
+    /** A verse as `surah:ayah` for an announcement. Never locale-formatted. */
+    fun reference(surah: Int, ayah: Int): String = "$surah:$ayah"
+}
 
 data class DateNavStrings(
     val nextPrayerPrefix: String = "Next",
@@ -830,6 +904,11 @@ reader = ReaderStrings(
         headingLabel = "العنوان",
         mushaf = "المصحف",  // verify
         changeInReader = "غيّر هذا من خيارات القراءة في المصحف.",
+        pageAnnouncement = "صفحة %1\$d، جزء %2\$d، سورة %3\$s، %4\$s، من %5\$s إلى %6\$s",
+        blockAnnouncement = "%1\$s إلى %2\$s، %3\$s، صفحة %4\$d",
+        verseCountOne = "آية واحدة",
+        verseCountMany = "%d آية",
+        rangeTo = "إلى ",
     ),
         actionSave = "حفظ",
         actionCancel = "إلغاء",
@@ -1211,6 +1290,11 @@ reader = ReaderStrings(
         headingLabel = "Titre",
         mushaf = "Mushaf",  // verify
         changeInReader = "À modifier dans les options de lecture du Coran.",
+        pageAnnouncement = "Page %1\$d, juz' %2\$d, sourate %3\$s, %4\$s, de %5\$s à %6\$s",
+        blockAnnouncement = "%1\$s à %2\$s, %3\$s, page %4\$d",
+        verseCountOne = "%d verset",
+        verseCountMany = "%d versets",
+        rangeTo = " à ",
     ),
         actionSave = "Enregistrer",
         actionCancel = "Annuler",
@@ -1592,6 +1676,11 @@ reader = ReaderStrings(
         headingLabel = "Judul",
         mushaf = "Mushaf",  // verify
         changeInReader = "Ubah ini di Opsi Bacaan Al-Qur’an.",
+        pageAnnouncement = "Halaman %1\$d, juz' %2\$d, surah %3\$s, %4\$s, dari %5\$s ke %6\$s",
+        blockAnnouncement = "%1\$s hingga %2\$s, %3\$s, halaman %4\$d",
+        verseCountOne = "%d ayat",
+        verseCountMany = "%d ayat",
+        rangeTo = " sampai ",
     ),
         actionSave = "Simpan",
         actionCancel = "Batal",
@@ -1973,6 +2062,11 @@ reader = ReaderStrings(
         headingLabel = "Başlık",
         mushaf = "Mushaf",  // verify
         changeInReader = "Bunu Mushaf okuma seçeneklerinden değiştirebilirsin.",
+        pageAnnouncement = "Sayfa %1\$d, cüz %2\$d, sure %3\$s, %4\$s, %5\$s'ten %6\$s'ya",
+        blockAnnouncement = "%1\$s ile %2\$s arası, %3\$s, sayfa %4\$d",
+        verseCountOne = "%d ayet",
+        verseCountMany = "%d ayet",
+        rangeTo = " - ",
     ),
         actionSave = "Kaydet",
         actionCancel = "İptal",
@@ -2354,6 +2448,11 @@ reader = ReaderStrings(
         headingLabel = "عنوان",
         mushaf = "مصحف",  // verify
         changeInReader = "یہ قرآن کی تلاوت کے اختیارات میں تبدیل کریں۔",
+        pageAnnouncement = "صفحہ %1\$d، پارہ %2\$d، سورہ %3\$s، %4\$s، %5\$s سے %6\$s تک",
+        blockAnnouncement = "%1\$s سے %2\$s تک، %3\$s، صفحہ %4\$d",
+        verseCountOne = "ایک آیت",
+        verseCountMany = "%d آیت",
+        rangeTo = " سے ",
     ),
         actionSave = "محفوظ کریں",
         actionCancel = "منسوخ کریں",
@@ -2735,6 +2834,11 @@ reader = ReaderStrings(
         headingLabel = "Tajuk",
         mushaf = "Mushaf",  // verify
         changeInReader = "Ubah ini dalam pilihan bacaan Al-Quran.",
+        pageAnnouncement = "Halaman %1\$d, juz' %2\$d, surah %3\$s, %4\$s, daripada %5\$s hingga %6\$s",
+        blockAnnouncement = "%1\$s hingga %2\$s, %3\$s, halaman %4\$d",
+        verseCountOne = "%d ayat",
+        verseCountMany = "%d ayat",
+        rangeTo = " sampai ",
     ),
         actionSave = "Simpan",
         actionCancel = "Batal",
@@ -3116,6 +3220,11 @@ reader = ReaderStrings(
         headingLabel = "শিরোনাম",
         mushaf = "মুশফ",  // verify
         changeInReader = "এটি মুশফ পাঠের বিকল্পগুলোতে বদলান।",
+        pageAnnouncement = "পৃষ্ঠা %1\$d, জুজ %2\$d, সূরা %3\$s, %4\$s, %5\$s থেকে %6\$s পর্যন্ত",
+        blockAnnouncement = "%1\$s থেকে %2\$s পর্যন্ত, %3\$s, পৃষ্ঠা %4\$d",
+        verseCountOne = "%d আয়াত",
+        verseCountMany = "%d আয়াত",
+        rangeTo = " থেকে ",
     ),
         actionSave = "সংরক্ষণ",
         actionCancel = "বাতিল",
@@ -3497,6 +3606,11 @@ reader = ReaderStrings(
         headingLabel = "Заголовок",
         mushaf = "Мусхаф",  // verify
         changeInReader = "Измените это в параметрах чтения Корана.",
+        pageAnnouncement = "Страница %1\$d, джуз' %2\$d, сура %3\$s, %4\$s, с %5\$s по %6\$s",
+        blockAnnouncement = "с %1\$s по %2\$s, %3\$s, страница %4\$d",
+        verseCountOne = "%d аят",
+        verseCountMany = "%d аятов",
+        rangeTo = " - ",
     ),
         actionSave = "Сохранить",
         actionCancel = "Отмена",
@@ -3878,6 +3992,11 @@ reader = ReaderStrings(
         headingLabel = "Überschrift",
         mushaf = "Mushaf",  // verify
         changeInReader = "Ändere das in den Lesoptionen des Mushaf.",
+        pageAnnouncement = "Seite %1\$d, Dschuz %2\$d, Sure %3\$s, %4\$s, von %5\$s bis %6\$s",
+        blockAnnouncement = "%1\$s bis %2\$s, %3\$s, Seite %4\$d",
+        verseCountOne = "%d Vers",
+        verseCountMany = "%d Verse",
+        rangeTo = " bis ",
     ),
         actionSave = "Speichern",
         actionCancel = "Abbrechen",
@@ -4259,6 +4378,11 @@ reader = ReaderStrings(
         headingLabel = "Título",
         mushaf = "Mushaf",  // verify
         changeInReader = "Cámbialo en las opciones de lectura del Mushaf.",
+        pageAnnouncement = "Página %1\$d, juz' %2\$d, sura %3\$s, %4\$s, de %5\$s a %6\$s",
+        blockAnnouncement = "%1\$s a %2\$s, %3\$s, página %4\$d",
+        verseCountOne = "%d versículo",
+        verseCountMany = "%d versículos",
+        rangeTo = " a ",
     ),
         actionSave = "Guardar",
         actionCancel = "Cancelar",

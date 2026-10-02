@@ -153,40 +153,6 @@ object QuranDataSource {
     // and the index sheet are on the new surfaces.
     // -----------------------------------------------------------------------
 
-    @Deprecated("QuranBrowse.ayahsOnPage", ReplaceWith("QuranBrowse.ayahsOnPage(pageNumber)"))
-    fun getAyahsForPage(pageNumber: Int) = QuranBrowse.ayahsOnPage(pageNumber)
-
-    @Deprecated("QuranBrowse.ayahsInSurah", ReplaceWith("QuranBrowse.ayahsInSurah(surahNumber)"))
-    fun getAyahsForSurah(surahNumber: Int) = QuranBrowse.ayahsInSurah(surahNumber)
-
-    @Deprecated("QuranBrowse.ayah", ReplaceWith("QuranBrowse.ayah(surahNumber, ayahNumber)"))
-    fun resolveAyah(surahNumber: Int, ayahNumber: Int) =
-        QuranBrowse.ayah(surahNumber, ayahNumber)
-
-    @Deprecated("QuranBrowse.placeAtPage", ReplaceWith("QuranBrowse.placeAtPage(page)"))
-    fun firstAyahOnPage(pageNumber: Int) = QuranBrowse.ayahsOnPage(pageNumber).firstOrNull()
-
-    @Deprecated("QuranBrowse.surahOfPage", ReplaceWith("QuranBrowse.surahOfPage(pageNumber)"))
-    fun surahForPage(pageNumber: Int) = QuranBrowse.surahOfPage(pageNumber)
-
-    @Deprecated("QuranBrowse.ayahsInJuz", ReplaceWith("QuranBrowse.ayahsInJuz(juzNumber)"))
-    fun getAyahsForJuz(juzNumber: Int) = QuranBrowse.ayahsInJuz(juzNumber)
-
-    @Deprecated("QuranBrowse.ayahsInHizb", ReplaceWith("QuranBrowse.ayahsInHizb(hizbNumber)"))
-    fun getAyahsForHizb(hizbNumber: Int) = QuranBrowse.ayahsInHizb(hizbNumber)
-
-    @Deprecated("QuranBrowse.placeAtJuz", ReplaceWith("QuranBrowse.placeAtJuz(juzNumber)"))
-    fun firstAyahForJuz(juzNumber: Int) = QuranBrowse.placeAtJuz(juzNumber).verse
-
-    @Deprecated("QuranBrowse.placeAtHizb", ReplaceWith("QuranBrowse.placeAtHizb(hizbNumber)"))
-    fun firstAyahForHizb(hizbNumber: Int) = QuranBrowse.placeAtHizb(hizbNumber).verse
-
-    @Deprecated("QuranBrowse.placeAtPage", ReplaceWith("QuranBrowse.placeAtPage(page)"))
-    fun resolvePage(pageNumber: Int): Pair<Surah, Int>? =
-        QuranBrowse.placeAtPage(pageNumber).verse.let { ref ->
-            getSurahByNumber(ref.surah)?.let { it to ref.ayah }
-        }
-
     @Deprecated("QuranText.normalise", ReplaceWith("QuranText.normalise(text)"))
     fun normalizeArabic(text: String) = QuranText.normalise(text)
 

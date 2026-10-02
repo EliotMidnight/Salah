@@ -10,9 +10,9 @@ data class Surah(
     val startPage: Int
 )
 
-enum class RevelationType(val labelEn: String, val labelAr: String) {
-    MECCAN("Meccan", "مكية"),
-    MEDINAN("Medinan", "مدنية")
+enum class RevelationType {
+    MECCAN,
+    MEDINAN
 }
 
 data class Ayah(
@@ -41,22 +41,3 @@ data class Ayah(
      */
     val ref: QuranRef get() = QuranRef(surah = surahNumber, ayah = ayahNumber, page = pageNumber)
 }
-
-data class Bookmark(
-    val id: Long = 0,
-    val surahNumber: Int,
-    val ayahNumber: Int,
-    val surahName: String,
-    val ayahSnippet: String,
-    val timestamp: Long = System.currentTimeMillis()
-)
-
-data class ContinueReading(
-    val surahNumber: Int = 1,
-    val ayahNumber: Int = 1,
-    val surahName: String = "Al-Fatihah",
-    val surahNameAr: String = "الفاتحة",
-    val pageNumber: Int = 1,
-    val snippetAr: String = "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
-    val lastReadTimestamp: Long = System.currentTimeMillis()
-)
