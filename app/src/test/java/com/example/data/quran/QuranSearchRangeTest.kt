@@ -230,7 +230,7 @@ class QuranSearchRangeTest {
         )
         var hits = 0
         for (term in terms) {
-            for (hit in QuranSearch.searchVerses(term)) {
+            for (hit in QuranSearch.searchVerses(term).hits) {
                 if (hit.matchedIn != QuranSearchHit.Field.ARABIC) continue
                 hits++
                 val range = hit.range
@@ -263,7 +263,7 @@ class QuranSearchRangeTest {
     fun `every English search hit carries a range that covers a real term`() {
         var hits = 0
         for (term in englishTerms) {
-            for (hit in QuranSearch.searchVerses(term)) {
+            for (hit in QuranSearch.searchVerses(term).hits) {
                 if (hit.matchedIn != QuranSearchHit.Field.ENGLISH) continue
                 hits++
                 val range = hit.range
@@ -293,7 +293,7 @@ class QuranSearchRangeTest {
         // emphasises. A range from one script applied to the other would either run off
         // the end of the string or highlight the wrong words.
         var checked = 0
-        for (hit in QuranSearch.searchVerses("mercy")) {
+        for (hit in QuranSearch.searchVerses("mercy").hits) {
             val range = hit.range ?: continue
             val field = hit.matchedIn
             val text = when (field) {
@@ -317,7 +317,7 @@ class QuranSearchRangeTest {
         // same string the range was computed against. This is the invariant the row
         // depends on and nothing enforced before.
         for (term in listOf("mercy", "light", "الرحمن")) {
-            for (hit in QuranSearch.searchVerses(term)) {
+            for (hit in QuranSearch.searchVerses(term).hits) {
                 val range = hit.range ?: continue
                 val subject = hit.subject
                 assertTrue(

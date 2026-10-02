@@ -208,7 +208,7 @@ class QuranTextTest {
     @Test
     fun `a search for a vocalised phrase finds it when typed bare`() {
         // The end-to-end property the folding exists for, against real text.
-        val hits = QuranSearch.searchVerses("ٱلرحمن")
+        val hits = QuranSearch.searchVerses("ٱلرحمن").hits
         assertTrue("expected matches", hits.isNotEmpty())
         assertTrue("expected 1:1 among them", hits.any { it.ayah.surahNumber == 1 && it.ayah.ayahNumber == 1 })
     }

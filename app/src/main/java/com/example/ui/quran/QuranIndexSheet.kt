@@ -51,6 +51,8 @@ import com.example.data.model.Surah
 import com.example.data.quran.QuranBrowse
 import com.example.data.quran.QuranSearch
 import com.example.data.quran.QuranSearchHit
+import com.example.data.quran.VerseResults
+import com.example.data.quran.SurahResults
 import com.example.ui.components.EmptyState
 import com.example.ui.components.OptionListSheet
 import com.example.ui.components.SearchInput
@@ -127,10 +129,10 @@ fun QuranIndexSheet(
     // Verse search scans all 6,236 verses, so it is debounced rather than run on
     // every keystroke. The hits carry their own reference and their own highlight
     // range, which is why this is a list of hits and not a list of verses.
-    var results by remember { mutableStateOf<List<QuranSearchHit>>(emptyList()) }
+    var results by remember { mutableStateOf(VerseResults(emptyList(), 0)) }
     LaunchedEffect(query, referenceKind) {
         if (query.isBlank() || referenceKind != null) {
-            results = emptyList()
+            results = VerseResults(emptyList(), 0)
             return@LaunchedEffect
         }
         delay(SEARCH_DEBOUNCE_MILLIS)
@@ -156,6 +158,7 @@ fun QuranIndexSheet(
         verseReference = strings.more.verseReference,
         juzOf = strings.more.juzOf,
         surahsFound = strings.more.surahsFound,
+        searchShowingFirst = strings.more.searchShowingFirst,
         versesFound = strings.more.versesFound,
         selected = strings.more.selected,
         notSelected = strings.more.notSelected,
@@ -177,7 +180,8 @@ fun QuranIndexSheet(
         browseNumbers(referenceKind, query)
     }
     val surahHits = remember(query, referenceKind) {
-        if (referenceKind != null) emptyList() else QuranSearch.searchSurahs(query)
+        if (referenceKind != null) SurahResults(emptyList(), 0)
+        else QuranSearch.searchSurahs(query)
     }
 
     OptionListSheet(
@@ -528,9 +532,9 @@ private fun LazyListScope.searchIndex(
     onQueryChange: (String) -> Unit,
     referenceKind: ReferenceKind?,
     onKindChange: (ReferenceKind?) -> Unit,
-    results: List<QuranSearchHit>,
+    results: VerseResults,
     referenceNumbers: List<Int>,
-    surahHits: List<Surah>,
+    surahHits: SurahResults,
     currentSurah: Int,
     onSelectSurah: (Int) -> Unit,
     onSelectAyah: (QuranSearchHit) -> Unit,
@@ -607,7 +611,7 @@ private fun LazyListScope.searchIndex(
     // verses - none of which contain the word - under a heading that said "97 verses
     // found". A name match is a different thing from a text match and is reported
     // as one.
-    if (surahHits.isEmpty() && results.isEmpty()) {
+    if (surahHits.hits.isEmpty() && results.hits.isEmpty()) {
         item(key = "search_none") {
             EmptyState(
                 title = labels.noSearchResults,
@@ -618,10 +622,15 @@ private fun LazyListScope.searchIndex(
         return
     }
 
-    if (surahHits.isNotEmpty()) {
+    if (surahHits.hits.isNotEmpty()) {
         item(key = "surah_hits_header") {
             Text(
-                text = labels.surahsFound.format(surahHits.size),
+                text = labels.surahsFound.format(surahHits.total) +
+                    if (surahHits.isTruncated) {
+                        " \u00b7 " + labels.searchShowingFirst.format(surahHits.hits.size)
+                    } else {
+                        ""
+                    },
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(
@@ -630,7 +639,7 @@ private fun LazyListScope.searchIndex(
                 )
             )
         }
-        items(surahHits, key = { "hit_surah_${it.number}" }) { surah ->
+        items(surahHits.hits, key = { "hit_surah_${it.number}" }) { surah ->
             SurahIndexRow(
                 surah = surah,
                 selected = currentSurah == surah.number,
@@ -640,10 +649,15 @@ private fun LazyListScope.searchIndex(
         }
     }
 
-    if (results.isNotEmpty()) {
+    if (results.hits.isNotEmpty()) {
         item(key = "verse_hits_header") {
             Text(
-                text = labels.versesFound.format(results.size),
+                text = labels.versesFound.format(results.total) +
+                    if (results.isTruncated) {
+                        " \u00b7 " + labels.searchShowingFirst.format(results.hits.size)
+                    } else {
+                        ""
+                    },
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(
@@ -652,7 +666,7 @@ private fun LazyListScope.searchIndex(
                 )
             )
         }
-        itemsIndexed(results, key = { _, hit -> "hit_${hit.ref.surah}_${hit.ref.ayah}" }) { _, hit ->
+        itemsIndexed(results.hits, key = { _, hit -> "hit_${hit.ref.surah}_${hit.ref.ayah}" }) { _, hit ->
             VerseResultRow(hit = hit, onClick = { onSelectAyah(hit) })
         }
     }
@@ -862,6 +876,7 @@ internal data class IndexLabels(
     val verseReference: String,
     val juzOf: String,
     val surahsFound: String,
+    val searchShowingFirst: String,
     val versesFound: String,
     val selected: String,
     val notSelected: String,

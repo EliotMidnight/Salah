@@ -52,9 +52,9 @@ class QuranCorpusTest {
 
     @Test
     fun searchFindsArabicAndEnglish() {
-        assertTrue(QuranSearch.searchVerses("الرحمن").isNotEmpty())
-        assertTrue(QuranSearch.searchVerses("Merciful").isNotEmpty())
-        assertTrue(QuranSearch.searchSurahs("Al-Fatihah").isNotEmpty())
+        assertTrue(QuranSearch.searchVerses("الرحمن").hits.isNotEmpty())
+        assertTrue(QuranSearch.searchVerses("Merciful").hits.isNotEmpty())
+        assertTrue(QuranSearch.searchSurahs("Al-Fatihah").hits.isNotEmpty())
     }
 
     @Test

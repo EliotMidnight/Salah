@@ -128,7 +128,7 @@ desktop session, a parallel Compose build gets OOM-killed, so it runs without
 parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
 JDK and memory for it.
 
-398 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
+404 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
 maths, search, prayer maths, Qibla bearing and guidance, localisation coverage,
 sky-text contrast) run on any host, including ARM64 Linux/Termux.
 
@@ -388,6 +388,31 @@ half a range test cannot see — that anything *uses* it — by reading the styl
 out of the semantics tree, so "the emphasis covers exactly the matched term, in the field
 that matched, and changes nothing but colour" is an equality rather than a look at a
 picture. **The highlight was removed and it was watched fail too.**
+
+### The count on the results header was a false statement
+
+`searchVerses` takes the best fifty matches and the sheet counted that page with `size`
+and printed it. A search for "mercy" — **143** verses — was reported as **"50 verses"**.
+
+That is worse than showing too few results. Fifty rows with no admission reads as *all* of
+them, and nothing on screen contradicts the reader, so the number was not a truncation but
+a false claim about the book: someone looking for every verse containing "mercy" had been
+told they had seen them. The surah-name heading had the same bug.
+
+`QuranSearch`'s KDoc claimed it was already fixed — "It took the first 50 and said
+nothing. Results are now paged honestly" — which is the second half of the problem: the
+documentation described the fix while the code kept the bug.
+
+Both searches now return the page *and* the true total (`VerseResults`, `SurahResults`),
+and the header reads **"143 verses · showing the first 50"**. The total comes from the same
+scan that fills the page, so saying it costs nothing — a separate counting pass would
+double the work over 6,236 verses on every debounced keystroke to reach the same number.
+There is deliberately **no `size`** on either type: an ambiguity that caused this cannot
+be reintroduced as a convenience.
+
+`QuranSearchCountTest` (6) pins it, including a count taken **straight off the bundled
+translation** so the search cannot agree with itself. **The old behaviour was planted and
+the test watched fail**: `expected:<143> but was:<50>`.
 
 The emphasis is colour and nothing else, deliberately: a result row is scanned, so the
 match must be findable at a glance, but changing weight or size would reflow the row on

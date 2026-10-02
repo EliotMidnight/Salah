@@ -120,7 +120,7 @@ class SearchHighlightRenderTest {
     @Test
     fun `an English search result emphasises the word that matched`() {
         val query = "mercy"
-        val hit = QuranSearch.searchVerses(query)
+        val hit = QuranSearch.searchVerses(query).hits
             .first { it.matchedIn == QuranSearchHit.Field.ENGLISH }
 
         search(query)
@@ -145,7 +145,7 @@ class SearchHighlightRenderTest {
     @Test
     fun `an Arabic search result emphasises the word that matched`() {
         val query = "الرحمن"
-        val hit = QuranSearch.searchVerses(query)
+        val hit = QuranSearch.searchVerses(query).hits
             .first { it.matchedIn == QuranSearchHit.Field.ARABIC }
 
         search(query)
@@ -171,7 +171,7 @@ class SearchHighlightRenderTest {
         // the hit's range, the emphasis could disagree with the range the ordering was
         // decided by — and for a repeated word it would emphasise the wrong occurrence.
         val query = "mercy"
-        val hit = QuranSearch.searchVerses(query)
+        val hit = QuranSearch.searchVerses(query).hits
             .first { it.matchedIn == QuranSearchHit.Field.ENGLISH }
         val range = hit.range
         assertNotNull("the hit carries no range at all", range)
@@ -194,7 +194,7 @@ class SearchHighlightRenderTest {
         // re-rank, and in a Quranic face a synthetic bold is either absent or a
         // different typeface. Colour moves nothing.
         val query = "mercy"
-        val hit = QuranSearch.searchVerses(query)
+        val hit = QuranSearch.searchVerses(query).hits
             .first { it.matchedIn == QuranSearchHit.Field.ENGLISH }
 
         search(query)
@@ -230,7 +230,7 @@ class SearchHighlightRenderTest {
         // two claims about one hit, and the English span would be positioned by an Arabic
         // offset.
         val query = "الرحمن"
-        val hit = QuranSearch.searchVerses(query)
+        val hit = QuranSearch.searchVerses(query).hits
             .first { it.matchedIn == QuranSearchHit.Field.ARABIC }
 
         search(query)

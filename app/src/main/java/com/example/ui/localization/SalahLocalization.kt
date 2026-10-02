@@ -536,7 +536,18 @@ data class UiStringsMore(
     val noSearchResults: String = "No matches",
     val searchSurahsAndVerses: String = "Search surahs and verses",
     val versesFound: String = "%d verses",
-    val surahsFound: String = "%d surahs",
+
+    /**
+     * The note that says the list is a page and not everything.
+     *
+     * Appended to the count, which is the **total**: "143 verses - showing the first 50".
+     *
+     * It exists because the count used to be the page size, so a search for a common
+     * word reported "50 verses" when 143 verses contain it. Fifty results with no
+     * admission reads as *all* of them, and nothing on the screen contradicts that, so
+     * the number was a lie rather than a truncation.
+     */
+    val searchShowingFirst: String = "showing the first %d",    val surahsFound: String = "%d surahs",
     val verseCount: String = "%d verses",
     val verseReference: String = "%d:%d",
     val selectSurah: String = "Select surah",
@@ -1032,6 +1043,7 @@ reader = ReaderStrings(
         verseCount = "%d آية", // verify
         verseReference = "%d:%d", // verify
         versesFound = "%d آية", // verify
+        searchShowingFirst = "عرض أول %d",
         versesLabel = "آيات", // verify
         vibrateOnlyLabel = "اهتزاز فقط", // verify
         waxing = "متزايد", // verify
@@ -1326,6 +1338,7 @@ reader = ReaderStrings(
         verseCount = "%d versets", // verify
         verseReference = "%d:%d", // verify
         versesFound = "%d versets", // verify
+        searchShowingFirst = "affichage des %d premiers",
         versesLabel = "Versets", // verify
         vibrateOnlyLabel = "Vibreur uniquement", // verify
         waxing = "Croissant", // verify
@@ -1620,6 +1633,7 @@ reader = ReaderStrings(
         verseCount = "%d ayat", // verify
         verseReference = "%d:%d", // verify
         versesFound = "%d ayat", // verify
+        searchShowingFirst = "menampilkan %d pertama",
         versesLabel = "Ayat", // verify
         vibrateOnlyLabel = "Hanya getar", // verify
         waxing = "Bertambah", // verify
@@ -1914,6 +1928,7 @@ reader = ReaderStrings(
         verseCount = "%d ayet", // verify
         verseReference = "%d:%d", // verify
         versesFound = "%d ayet", // verify
+        searchShowingFirst = "ilk %d gösteriliyor",
         versesLabel = "Ayetler", // verify
         vibrateOnlyLabel = "Yalnızca titreşim", // verify
         waxing = "Büyüyen", // verify
@@ -2208,6 +2223,7 @@ reader = ReaderStrings(
         verseCount = "%d آیات", // verify
         verseReference = "%d:%d", // verify
         versesFound = "%d آیات", // verify
+        searchShowingFirst = "پہلے %d دکھایا جا رہا ہے",
         versesLabel = "آیات", // verify
         vibrateOnlyLabel = "صرف ہلاؤ", // verify
         waxing = "بڑھتا ہوا", // verify
@@ -2502,6 +2518,7 @@ reader = ReaderStrings(
         verseCount = "%d ayat", // verify
         verseReference = "%d:%d", // verify
         versesFound = "%d ayat", // verify
+        searchShowingFirst = "memaparkan %d yang pertama",
         versesLabel = "Ayat", // verify
         vibrateOnlyLabel = "Getaran sahaja", // verify
         waxing = "Bertambah", // verify
@@ -2796,6 +2813,7 @@ reader = ReaderStrings(
         verseCount = "%d আয়াত", // verify
         verseReference = "%d:%d", // verify
         versesFound = "%d আয়াত", // verify
+        searchShowingFirst = "প্রথম %d দেখানো হচ্ছে",
         versesLabel = "আয়াত", // verify
         vibrateOnlyLabel = "শুধু কম্পন", // verify
         waxing = "বর্ধমান", // verify
@@ -3090,6 +3108,7 @@ reader = ReaderStrings(
         verseCount = "%d аятов", // verify
         verseReference = "%d:%d", // verify
         versesFound = "%d аятов", // verify
+        searchShowingFirst = "показаны первые %d",
         versesLabel = "Аяты", // verify
         vibrateOnlyLabel = "Только вибрация", // verify
         waxing = "Растущая", // verify
@@ -3384,6 +3403,7 @@ reader = ReaderStrings(
         verseCount = "%d Verse", // verify
         verseReference = "%d:%d", // verify
         versesFound = "%d Verse", // verify
+        searchShowingFirst = "die ersten %d werden angezeigt",
         versesLabel = "Verse", // verify
         vibrateOnlyLabel = "Nur vibrieren", // verify
         waxing = "Zunehmend", // verify
@@ -3678,6 +3698,7 @@ reader = ReaderStrings(
         verseCount = "%d versículos", // verify
         verseReference = "%d:%d", // verify
         versesFound = "%d versículos", // verify
+        searchShowingFirst = "se muestran los primeros %d",
         versesLabel = "Versículos", // verify
         vibrateOnlyLabel = "Solo vibrar", // verify
         waxing = "Creciente", // verify

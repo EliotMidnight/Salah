@@ -62,7 +62,14 @@ data class QuranSearchHit(
  *    of an unrelated search. Surah names are now their own result tier, above
  *    the verses, which is also where every serious reader puts them.
  * 3. **It took the first 50 and said nothing.** Fifty results with no "and 400
- *    more" reads as *all* of them. Results are now paged honestly.
+ *    more" reads as *all* of them — and it said "50 verses" when 143 verses
+ *    contain the word, so the number on screen was not merely incomplete, it was
+ *    **false**. Results are now paged, and both searches return the true total
+ *    alongside the page: [VerseResults] and [SurahResults].
+ *
+ *    The total comes from the same scan that fills the page, so saying it costs
+ *    nothing. A separate counting pass would double the work over 6,236 verses on
+ *    every debounced keystroke to arrive at the same number.
  *
  * ### Ranking
  *
@@ -96,20 +103,20 @@ object QuranSearch {
      * surah number, because "how do I find it" is answered differently depending
      * on which of those the reader knows.
      */
-    fun searchSurahs(query: String, limit: Int = PAGE_SIZE): List<Surah> {
+    fun searchSurahs(query: String, limit: Int = PAGE_SIZE): SurahResults {
         val trimmed = query.trim()
-        if (trimmed.isEmpty()) return emptyList()
+        if (trimmed.isEmpty()) return SurahResults(emptyList(), 0)
         val folded = QuranText.normaliseQuery(trimmed)
         val asNumber = trimmed.toIntOrNull()
 
-        return QuranDataSource.SURAHS
+        val scored = QuranDataSource.SURAHS
             .mapNotNull { surah ->
                 val score = surahNameScore(surah, trimmed, folded, asNumber)
                 if (score == Int.MAX_VALUE) null else surah to score
             }
             .sortedWith(compareBy({ it.second }, { it.first.number }))
-            .take(limit)
-            .map { it.first }
+
+        return SurahResults(scored.take(limit).map { it.first }, scored.size)
     }
 
     private fun surahNameScore(
@@ -143,9 +150,9 @@ object QuranSearch {
      * Returns at most [limit] results and nothing more. The caller is expected
      * to say so when it hits the cap; see the note on [PAGE_SIZE].
      */
-    fun searchVerses(query: String, limit: Int = PAGE_SIZE): List<QuranSearchHit> {
+    fun searchVerses(query: String, limit: Int = PAGE_SIZE): VerseResults {
         val terms = QuranText.terms(query)
-        if (terms.isEmpty()) return emptyList()
+        if (terms.isEmpty()) return VerseResults(emptyList(), 0)
 
         val arabic = QuranText.normalised
         val english = QuranText.lowerEnglish
@@ -181,7 +188,10 @@ object QuranSearch {
             )
         }
 
-        return results
+        // The total is the *count before the page is taken*, so a caller can say how
+        // many there are rather than how many it was given. See [VerseResults].
+        val total = results.size
+        val page = results
             .sortedWith(
                 compareBy(
                     { hitRank(it, terms) },
@@ -190,6 +200,7 @@ object QuranSearch {
                 )
             )
             .take(limit)
+        return VerseResults(page, total)
     }
 
     private fun hitRank(hit: QuranSearchHit, terms: List<String>): Int {
@@ -262,4 +273,43 @@ object QuranSearch {
         for (term in terms) if (!haystack.contains(term)) return false
         return true
     }
+}
+
+/**
+ * One page of search results, and how many there really are.
+ *
+ * ### Why a pair and not a list
+ *
+ * Because the two numbers are answers to different questions and only one of them is a
+ * list. The page is what the sheet draws; the total is what it *says*. Returning a bare
+ * `List` invites the caller to use `size` for both, which is exactly what happened: the
+ * sheet read "50 verses" off a page of fifty when **143** verses contain the word.
+ *
+ * That is a worse bug than showing too few results. A reader who searches "mercy" and is
+ * told there are fifty is entitled to believe they have seen all of them, and they have
+ * not — and nothing on the screen contradicts them. The cap is invisible, which makes the
+ * number a lie rather than a truncation.
+ *
+ * [total] is the count **before** the page was taken, so `total >= hits.size` always, and
+ * equality is what tells a caller there is nothing more to show.
+ */
+data class VerseResults(
+    /** The best [VerseResults.total] matches, capped at the requested limit. */
+    val hits: List<QuranSearchHit>,
+    /** How many verses match at all. */
+    val total: Int
+) {
+    /** True when [hits] is a strict subset — the case a caller must not describe as "all". */
+    val isTruncated: Boolean get() = total > hits.size
+}
+
+/** One page of surah-name matches, and how many there really are. See [VerseResults]. */
+data class SurahResults(
+    /** The best [SurahResults.total] matches, capped at the requested limit. */
+    val hits: List<Surah>,
+    /** How many surahs' names match at all. */
+    val total: Int
+) {
+    /** True when [hits] is a strict subset. See [VerseResults.isTruncated]. */
+    val isTruncated: Boolean get() = total > hits.size
 }
