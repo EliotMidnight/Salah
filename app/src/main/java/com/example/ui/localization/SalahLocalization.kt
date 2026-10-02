@@ -280,6 +280,41 @@ data class ReaderStrings(
     val scrollHorizontal: String = "Horizontal",
     val backgroundColour: String = "Background",
     val backgroundDefault: String = "App default",
+
+    // --- Paper names --------------------------------------------------------
+    //
+    // These seven are ordinary words and are translated in all ten languages.
+    // They used to be an English `when` in `ReadingOptionsSheet.paperLabel` - "Rose",
+    // "Apricot", "Sand", "Sage", "Mist", "Indigo", "Lilac" - which made the sheet's
+    // one visible label and each swatch's *contentDescription* English in every
+    // language. Same defect as the reader's announcement, reached from the other end:
+    // a screen-reader user choosing a background heard "Apricot".
+    //
+    // A **typeface** name is deliberately not here. Amiri, Lateef and Harmattan are
+    // names of the designs, not words, and translating them would make a face
+    // unrecognisable to anyone who has seen it - which is why `faceLabel` stays
+    // English and says why.
+
+    /** The rose paper. */
+    val paperRose: String = "Rose",
+
+    /** The apricot paper. */
+    val paperApricot: String = "Apricot",
+
+    /** The sand paper. */
+    val paperSand: String = "Sand",
+
+    /** The sage paper. */
+    val paperSage: String = "Sage",
+
+    /** The mist paper. */
+    val paperMist: String = "Mist",
+
+    /** The indigo paper. */
+    val paperIndigo: String = "Indigo",
+
+    /** The lilac paper. */
+    val paperLilac: String = "Lilac",
     val pinchBehaviour: String = "Pinch does",
     val pinchZoomView: String = "Zoom the view",
     val pinchTextSize: String = "Change text size",
@@ -335,6 +370,31 @@ data class ReaderStrings(
     // --- The Qibla dial readouts --------------------------------------------
     val headingLabel: String = "Heading",
     val mushaf: String = "Mushaf",
+
+    // --- Compass directions ------------------------------------------------
+    //
+    // These were a private `when` in `QiblaDirectionFinder` returning the English
+    // abbreviations "N", "NE", "E" ... and they were *visible*: the caption under the
+    // heading readout, and the text beside the azimuth. So a reader in Arabic saw
+    // "NE" under a numeral that meant something else to them, in an app that
+    // translates everything else it says about the compass.
+    //
+    // German also disagrees: it writes *NO* for north-east where English writes *NE*,
+    // because *Nordost* abbreviates to NO and not NE. So this is not a case of
+    // borrowing, and a shared abbreviation would have been wrong in a language with a
+    // Latin script.
+    //
+    // On [cardinal]: a member, not eight fields read at two call sites, because the
+    // eight *boundaries* are the part that must not be duplicated - the old pair of
+    // call sites each held their own idea of where north-east starts.
+    val cardinalNorth: String = "N",
+    val cardinalNorthEast: String = "NE",
+    val cardinalEast: String = "E",
+    val cardinalSouthEast: String = "SE",
+    val cardinalSouth: String = "S",
+    val cardinalSouthWest: String = "SW",
+    val cardinalWest: String = "W",
+    val cardinalNorthWest: String = "NW",
     /** Shown under the Settings summary row for a setting the reader owns. */
     val changeInReader: String = "Change this in the reader\u2019s Reading options."
 ) {
@@ -373,6 +433,34 @@ data class ReaderStrings(
 
     /** A verse as `surah:ayah` for an announcement. Never locale-formatted. */
     fun reference(surah: Int, ayah: Int): String = "$surah:$ayah"
+
+    /**
+     * The compass direction [azimuthDegrees] points towards, in this language.
+     *
+     * Eight half-open sectors of 45 degrees each, starting at north. **Half-open, and
+     * that is the point**: the previous `when` used closed ranges (`22.5f..67.5f` and
+     * `67.5f..112.5f`), so every boundary belonged to two sectors and the answer
+     * depended on which arm of the `when` was tested first. It happened to come out
+     * right and it happened to be untested. With `..<` each boundary has exactly one
+     * answer, and `QiblaDirectionTest` checks all eight of them.
+     *
+     * North wraps, so 337.5 through 360 and 0 through 22.5 are one sector rather than
+     * two - the naive version of this returned "N" for the first and had to special-case
+     * nothing only because its final `else` happened to be north.
+     */
+    fun cardinal(azimuthDegrees: Float): String {
+        val norm = ((azimuthDegrees % 360f) + 360f) % 360f
+        return when {
+            norm < 22.5f || norm >= 337.5f -> cardinalNorth
+            norm < 67.5f -> cardinalNorthEast
+            norm < 112.5f -> cardinalEast
+            norm < 157.5f -> cardinalSouthEast
+            norm < 202.5f -> cardinalSouth
+            norm < 247.5f -> cardinalSouthWest
+            norm < 292.5f -> cardinalWest
+            else -> cardinalNorthWest
+        }
+    }
 }
 
 data class DateNavStrings(
@@ -551,6 +639,26 @@ data class UiStringsMore(
     val alignedWithQibla: String = "Aligned with the Qibla",
     val locateMe: String = "Locate",
     val gpsCached: String = "GPS cached",
+
+    // --- The location result -----------------------------------------------
+    //
+    // These three sentences used to be assembled in `SalahViewModel.fetchCurrentLocation`
+    // - "Acquiring GPS coordinates...", "GPS Location: Rabat, Morocco", "Cached
+    // Offline: Rabat, Morocco" - and carried in state as `locationStatusMessage: String`,
+    // which is a sentence in one language sitting in a field the UI cannot translate.
+    // The state now carries the *facts* and the banner composes these.
+    //
+    // The failure reasons moved the same way: `AppLocationService` returned a
+    // `reason: String` that was one of three fixed English sentences, so a service layer
+    // owned English and nothing the UI could do would have reached it.
+    val locationAcquiring: String = "Finding your location\u2026",
+    val locationResolved: String = "GPS location: %1\$s, %2\$s",
+    val locationResolvedCached: String = "Last known location: %1\$s, %2\$s",
+    val locationErrorNoPermission: String = "Location permission is not granted.",
+    val locationErrorServicesOff:
+        String = "Location services are switched off on this device.",
+    val locationErrorNoSignal:
+        String = "Could not get a GPS signal. Your saved location is still in use.",
     val selectedCity: String = "Selected city",
     val coordinatesCachedOffline: String =
         "Coordinates cached offline. Calculations run entirely on this device.",
@@ -909,6 +1017,21 @@ reader = ReaderStrings(
         verseCountOne = "آية واحدة",
         verseCountMany = "%d آية",
         rangeTo = "إلى ",
+        paperRose = "وردي",
+        paperApricot = "برتقال",
+        paperSand = "رملي",
+        paperSage = "أخضر زمردي",
+        paperMist = "ضبابي",
+        paperIndigo = "نيلي",
+        paperLilac = "أرجواني",
+        cardinalNorth = "ش",
+        cardinalNorthEast = "ش ق",
+        cardinalEast = "ق",
+        cardinalSouthEast = "ج ق",
+        cardinalSouth = "ج",
+        cardinalSouthWest = "ج غ",
+        cardinalWest = "غ",
+        cardinalNorthWest = "ش غ",
     ),
         actionSave = "حفظ",
         actionCancel = "إلغاء",
@@ -1136,6 +1259,12 @@ reader = ReaderStrings(
         vibrateOnlyLabel = "اهتزاز فقط", // verify
         waning = "متناقص", // verify
         waxing = "متزايد", // verify
+        locationAcquiring = "جارٍ تحديد موقعك…",
+        locationResolved = "موقع GPS: %1\$s، %2\$s",
+        locationResolvedCached = "آخر موقع معروف: %1\$s، %2\$s",
+        locationErrorNoPermission = "لم يُمنح إذن الوصول إلى الموقع.",
+        locationErrorServicesOff = "خدمات الموقع معطّلة على هذا الجهاز.",
+        locationErrorNoSignal = "تعذّر الحصول على إشارة GPS. لا يزال موقعك المحفوظ قيد الاستخدام.",
     ),
 )
 
@@ -1295,6 +1424,21 @@ reader = ReaderStrings(
         verseCountOne = "%d verset",
         verseCountMany = "%d versets",
         rangeTo = " à ",
+        paperRose = "Rose",
+        paperApricot = "Abricot",
+        paperSand = "Sable",
+        paperSage = "Olive",
+        paperMist = "Brume",
+        paperIndigo = "Indigo",
+        paperLilac = "Lila",
+        cardinalNorth = "N",
+        cardinalNorthEast = "NE",
+        cardinalEast = "E",
+        cardinalSouthEast = "SE",
+        cardinalSouth = "S",
+        cardinalSouthWest = "SO",
+        cardinalWest = "O",
+        cardinalNorthWest = "NO",
     ),
         actionSave = "Enregistrer",
         actionCancel = "Annuler",
@@ -1522,6 +1666,12 @@ reader = ReaderStrings(
         vibrateOnlyLabel = "Vibreur uniquement", // verify
         waning = "Décroissant", // verify
         waxing = "Croissant", // verify
+        locationAcquiring = "Localisation en cours…",
+        locationResolved = "Position GPS : %1\$s, %2\$s",
+        locationResolvedCached = "Dernière position connue : %1\$s, %2\$s",
+        locationErrorNoPermission = "L’autorisation de localisation n’est pas accordée.",
+        locationErrorServicesOff = "Les services de localisation sont désactivés sur cet appareil.",
+        locationErrorNoSignal = "Impossible d’obtenir un signal GPS. Votre position enregistrée reste utilisée.",
     ),
 )
 
@@ -1681,6 +1831,21 @@ reader = ReaderStrings(
         verseCountOne = "%d ayat",
         verseCountMany = "%d ayat",
         rangeTo = " sampai ",
+        paperRose = "Mawar",
+        paperApricot = "Aprikot",
+        paperSand = "Pasir",
+        paperSage = "Lumut",
+        paperMist = "Kabut",
+        paperIndigo = "Indigo",
+        paperLilac = "Lila",
+        cardinalNorth = "U",
+        cardinalNorthEast = "TL",
+        cardinalEast = "T",
+        cardinalSouthEast = "TG",
+        cardinalSouth = "S",
+        cardinalSouthWest = "BD",
+        cardinalWest = "B",
+        cardinalNorthWest = "BL",
     ),
         actionSave = "Simpan",
         actionCancel = "Batal",
@@ -1908,6 +2073,12 @@ reader = ReaderStrings(
         vibrateOnlyLabel = "Hanya getar", // verify
         waning = "Berkurang", // verify
         waxing = "Bertambah", // verify
+        locationAcquiring = "Mencari lokasi Anda…",
+        locationResolved = "Lokasi GPS: %1\$s, %2\$s",
+        locationResolvedCached = "Lokasi terakhir diketahui: %1\$s, %2\$s",
+        locationErrorNoPermission = "Izin lokasi belum diberikan.",
+        locationErrorServicesOff = "Layanan lokasi dimatikan di perangkat ini.",
+        locationErrorNoSignal = "Sinyal GPS tidak diperoleh. Lokasi tersimpan Anda tetap digunakan.",
     ),
 )
 
@@ -2067,6 +2238,21 @@ reader = ReaderStrings(
         verseCountOne = "%d ayet",
         verseCountMany = "%d ayet",
         rangeTo = " - ",
+        paperRose = "Gül",
+        paperApricot = "Kayısı",
+        paperSand = "Kum",
+        paperSage = "Adaçayı",
+        paperMist = "Sis",
+        paperIndigo = "Çivit",
+        paperLilac = "Leylak",
+        cardinalNorth = "K",
+        cardinalNorthEast = "KD",
+        cardinalEast = "D",
+        cardinalSouthEast = "GD",
+        cardinalSouth = "G",
+        cardinalSouthWest = "GB",
+        cardinalWest = "B",
+        cardinalNorthWest = "KB",
     ),
         actionSave = "Kaydet",
         actionCancel = "İptal",
@@ -2294,6 +2480,12 @@ reader = ReaderStrings(
         vibrateOnlyLabel = "Yalnızca titreşim", // verify
         waning = "Küçülen", // verify
         waxing = "Büyüyen", // verify
+        locationAcquiring = "Konumunuz bulunuyor…",
+        locationResolved = "GPS konumu: %1\$s, %2\$s",
+        locationResolvedCached = "Bilinen son konum: %1\$s, %2\$s",
+        locationErrorNoPermission = "Konum izni verilmemiş.",
+        locationErrorServicesOff = "Bu cihazda konum servisleri kapalı.",
+        locationErrorNoSignal = "GPS sinyali alınamadı. Kayıtlı konumunuz kullanılmaya devam ediyor.",
     ),
 )
 
@@ -2453,6 +2645,21 @@ reader = ReaderStrings(
         verseCountOne = "ایک آیت",
         verseCountMany = "%d آیت",
         rangeTo = " سے ",
+        paperRose = "گلابی",
+        paperApricot = "نارنگی",
+        paperSand = "سنترہ",
+        paperSage = "ہرا",
+        paperMist = "دھند",
+        paperIndigo = "نیل",
+        paperLilac = "بنفشی",
+        cardinalNorth = "ش",
+        cardinalNorthEast = "ش ق",
+        cardinalEast = "ق",
+        cardinalSouthEast = "ج ق",
+        cardinalSouth = "ج",
+        cardinalSouthWest = "ج غ",
+        cardinalWest = "غ",
+        cardinalNorthWest = "ش غ",
     ),
         actionSave = "محفوظ کریں",
         actionCancel = "منسوخ کریں",
@@ -2680,6 +2887,12 @@ reader = ReaderStrings(
         vibrateOnlyLabel = "صرف ہلاؤ", // verify
         waning = "گھٹتا ہوا", // verify
         waxing = "بڑھتا ہوا", // verify
+        locationAcquiring = "مقام جا رہا ہے…",
+        locationResolved = "GPS مقام: %1\$s، %2\$s",
+        locationResolvedCached = "آخری معلوم مقام: %1\$s، %2\$s",
+        locationErrorNoPermission = "مقام کی اجازت نہیں دی گئی۔",
+        locationErrorServicesOff = "اس آلے پر مقام کی سہولتیں بند ہیں۔",
+        locationErrorNoSignal = "GPS سگنل نہیں مل سکا۔ آپ کا محفوظ مقام اب بھی استعمال ہو رہا ہے۔",
     ),
 )
 
@@ -2839,6 +3052,21 @@ reader = ReaderStrings(
         verseCountOne = "%d ayat",
         verseCountMany = "%d ayat",
         rangeTo = " sampai ",
+        paperRose = "Merah",
+        paperApricot = "Apricot",
+        paperSand = "Pasir",
+        paperSage = "Hijau",
+        paperMist = "Kabus",
+        paperIndigo = "Indigo",
+        paperLilac = "Lila",
+        cardinalNorth = "U",
+        cardinalNorthEast = "TL",
+        cardinalEast = "T",
+        cardinalSouthEast = "TG",
+        cardinalSouth = "S",
+        cardinalSouthWest = "BD",
+        cardinalWest = "B",
+        cardinalNorthWest = "BL",
     ),
         actionSave = "Simpan",
         actionCancel = "Batal",
@@ -3066,6 +3294,12 @@ reader = ReaderStrings(
         vibrateOnlyLabel = "Getaran sahaja", // verify
         waning = "Berkurangan", // verify
         waxing = "Bertambah", // verify
+        locationAcquiring = "Mencari lokasi anda…",
+        locationResolved = "Lokasi GPS: %1\$s, %2\$s",
+        locationResolvedCached = "Lokasi terakhir yang diketahui: %1\$s, %2\$s",
+        locationErrorNoPermission = "Kebenaran lokasi tidak diberikan.",
+        locationErrorServicesOff = "Perkhidmatan lokasi dimatikan pada peranti ini.",
+        locationErrorNoSignal = "Isyarat GPS tidak diperoleh. Lokasi tersimpan anda masih digunakan.",
     ),
 )
 
@@ -3225,6 +3459,21 @@ reader = ReaderStrings(
         verseCountOne = "%d আয়াত",
         verseCountMany = "%d আয়াত",
         rangeTo = " থেকে ",
+        paperRose = "গোলাপি",
+        paperApricot = "কমলা",
+        paperSand = "বেলে",
+        paperSage = "জলওয়ালা",
+        paperMist = "কুয়াশা",
+        paperIndigo = "নীল",
+        paperLilac = "বেগুনি",
+        cardinalNorth = "উ",
+        cardinalNorthEast = "উপূর্বে",
+        cardinalEast = "পূর্বে",
+        cardinalSouthEast = "দক্ষিণে",
+        cardinalSouth = "দক্ষিণ",
+        cardinalSouthWest = "দক্ষিণ-পশ্চিমে",
+        cardinalWest = "পশ্চিমে",
+        cardinalNorthWest = "উত্তর-পশ্চিমে",
     ),
         actionSave = "সংরক্ষণ",
         actionCancel = "বাতিল",
@@ -3452,6 +3701,12 @@ reader = ReaderStrings(
         vibrateOnlyLabel = "শুধু কম্পন", // verify
         waning = "ক্ষীণমান", // verify
         waxing = "বর্ধমান", // verify
+        locationAcquiring = "আপনার অবস্থান খোঁজা হচ্ছে…",
+        locationResolved = "GPS অবস্থান: %1\$s, %2\$s",
+        locationResolvedCached = "সর্বশেষ জানা অবস্থান: %1\$s, %2\$s",
+        locationErrorNoPermission = "অবস্থানের অনুমতি দেওয়া হয়নি।",
+        locationErrorServicesOff = "এই ডিভাইসে অবস্থান পরিষেবা বন্ধ আছে।",
+        locationErrorNoSignal = "GPS সংকেত পাওয়া যায়নি। আপনার সংরক্ষিত অবস্থান ব্যবহৃত হচ্ছে।",
     ),
 )
 
@@ -3611,6 +3866,21 @@ reader = ReaderStrings(
         verseCountOne = "%d аят",
         verseCountMany = "%d аятов",
         rangeTo = " - ",
+        paperRose = "Розовый",
+        paperApricot = "Абрикосовый",
+        paperSand = "Песочный",
+        paperSage = "Шалфейный",
+        paperMist = "Голубой",
+        paperIndigo = "Индиго",
+        paperLilac = "Сиреневый",
+        cardinalNorth = "С",
+        cardinalNorthEast = "СВ",
+        cardinalEast = "В",
+        cardinalSouthEast = "ЮВ",
+        cardinalSouth = "Ю",
+        cardinalSouthWest = "ЮЗ",
+        cardinalWest = "З",
+        cardinalNorthWest = "СЗ",
     ),
         actionSave = "Сохранить",
         actionCancel = "Отмена",
@@ -3838,6 +4108,12 @@ reader = ReaderStrings(
         vibrateOnlyLabel = "Только вибрация", // verify
         waning = "Убывающая", // verify
         waxing = "Растущая", // verify
+        locationAcquiring = "Определение местоположения…",
+        locationResolved = "Местоположение по GPS: %1\$s, %2\$s",
+        locationResolvedCached = "Последнее известное местоположение: %1\$s, %2\$s",
+        locationErrorNoPermission = "Доступ к местоположению не предоставлен.",
+        locationErrorServicesOff = "Службы определения местоположения отключены на этом устройстве.",
+        locationErrorNoSignal = "Не удалось получить сигнал GPS. Сохранённое местоположение по-прежнему используется.",
     ),
 )
 
@@ -3997,6 +4273,21 @@ reader = ReaderStrings(
         verseCountOne = "%d Vers",
         verseCountMany = "%d Verse",
         rangeTo = " bis ",
+        paperRose = "Rose",
+        paperApricot = "Aprikose",
+        paperSand = "Sand",
+        paperSage = "Salbei",
+        paperMist = "Dunst",
+        paperIndigo = "Indigo",
+        paperLilac = "Flieder",
+        cardinalNorth = "N",
+        cardinalNorthEast = "NO",
+        cardinalEast = "O",
+        cardinalSouthEast = "SO",
+        cardinalSouth = "S",
+        cardinalSouthWest = "SW",
+        cardinalWest = "W",
+        cardinalNorthWest = "NW",
     ),
         actionSave = "Speichern",
         actionCancel = "Abbrechen",
@@ -4224,6 +4515,12 @@ reader = ReaderStrings(
         vibrateOnlyLabel = "Nur vibrieren", // verify
         waning = "Abnehmend", // verify
         waxing = "Zunehmend", // verify
+        locationAcquiring = "Standort wird ermittelt…",
+        locationResolved = "GPS-Standort: %1\$s, %2\$s",
+        locationResolvedCached = "Zuletzt bekannter Standort: %1\$s, %2\$s",
+        locationErrorNoPermission = "Die Standortberechtigung wurde nicht erteilt.",
+        locationErrorServicesOff = "Die Standortdienste sind auf diesem Gerät ausgeschaltet.",
+        locationErrorNoSignal = "Kein GPS-Signal erhalten. Dein gespeicherter Standort wird weiterhin verwendet.",
     ),
 )
 
@@ -4383,6 +4680,21 @@ reader = ReaderStrings(
         verseCountOne = "%d versículo",
         verseCountMany = "%d versículos",
         rangeTo = " a ",
+        paperRose = "Rosa",
+        paperApricot = "Albaricoque",
+        paperSand = "Arena",
+        paperSage = "Salvia",
+        paperMist = "Niebla",
+        paperIndigo = "Índigo",
+        paperLilac = "Lila",
+        cardinalNorth = "N",
+        cardinalNorthEast = "NE",
+        cardinalEast = "E",
+        cardinalSouthEast = "SE",
+        cardinalSouth = "S",
+        cardinalSouthWest = "SO",
+        cardinalWest = "O",
+        cardinalNorthWest = "NO",
     ),
         actionSave = "Guardar",
         actionCancel = "Cancelar",
@@ -4610,6 +4922,12 @@ reader = ReaderStrings(
         vibrateOnlyLabel = "Solo vibrar", // verify
         waning = "Menguante", // verify
         waxing = "Creciente", // verify
+        locationAcquiring = "Buscando tu ubicación…",
+        locationResolved = "Ubicación por GPS: %1\$s, %2\$s",
+        locationResolvedCached = "Última ubicación conocida: %1\$s, %2\$s",
+        locationErrorNoPermission = "No se ha concedido el permiso de ubicación.",
+        locationErrorServicesOff = "Los servicios de ubicación están desactivados en este dispositivo.",
+        locationErrorNoSignal = "No se ha podido obtener la señal GPS. Tu ubicación guardada sigue en uso.",
     ),
 )
 

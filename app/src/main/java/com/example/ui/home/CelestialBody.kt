@@ -23,8 +23,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.luminance
 import com.example.engine.AstronomicalSky
+import com.example.ui.components.isDarkSurface
 import com.example.ui.theme.Motion
 import com.example.ui.theme.mix
 import kotlin.math.PI
@@ -90,7 +90,7 @@ fun CelestialBody(
 ) {
     val showSun = sunAltitude > SUN_HORIZON_DEGREES
     val moonPhase = remember(hijriDay) { AstronomicalSky.getMoonPhaseInfo(hijriDay) }
-    val isDarkPage = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val isDarkPage = MaterialTheme.colorScheme.background.isDarkSurface()
 
     val palette = remember(sunAltitude, isSetting) {
         AstronomicalSky.calculateContinuousSkyColors(sunAltitude, isSetting)

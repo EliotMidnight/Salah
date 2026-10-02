@@ -865,3 +865,19 @@ fun PillTabRow(
         }
     }
 }
+
+/**
+ * Whether this colour is dark enough to need light ink on it.
+ *
+ * One function, because this question was being answered three times: a hand-rolled
+ * `0.299r + 0.587g + 0.114b` in the reader, and `Color.luminance() < 0.5f` on the Today
+ * page. Those are not the same number - Compose's `luminance()` is a different
+ * weighting - so two screens could disagree about whether the background is dark, and
+ * the ink chosen for one would be wrong on the other. The first is the ITU-R BT.601
+ * luma and the second is not; the BT.601 one is the correct answer and is the one
+ * kept.
+ *
+ * The threshold is 0.5, which is not neutral: it is a decision about which of the app's
+ * light and dark paper tones get dark ink, and the app's tones sit well away from it.
+ */
+fun Color.isDarkSurface(): Boolean = (0.299f * red + 0.587f * green + 0.114f * blue) < 0.5f

@@ -23,9 +23,15 @@ object AdhanAudioSynthesizer {
     private var activeTrack: AudioTrack? = null
     private val scope = CoroutineScope(Dispatchers.Default)
 
+    /**
+     * Whether a phrase is sounding, for this class's own loops.
+     *
+     * Private now. It was public and nothing outside read it - a state a reader of the
+     * class could have consulted and been told the wrong thing by, since it is only
+     * about synthesis and says nothing about whether a *stream* is playing.
+     */
     @Volatile
-    var isPlaying: Boolean = false
-        private set
+    private var isPlaying: Boolean = false
 
     /**
      * Plays the specified prayer alert mode (Full Adhan, Takbeer Only, Gentle Chime).

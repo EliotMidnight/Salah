@@ -157,7 +157,7 @@ fun QiblaDirectionFinder(
         Spacer(modifier = Modifier.height(space.md))
 
         val headingText = "${state.compassAzimuth.toInt()}° " +
-            getCardinalDirection(state.compassAzimuth)
+            strings.more.reader.cardinal(state.compassAzimuth)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -512,7 +512,7 @@ private fun DialReadout(
             ReadoutFigure(
                 label = strings.more.reader.headingLabel,
                 value = "${heading.toInt()}°",
-                caption = getCardinalDirection(heading),
+                caption = strings.more.reader.cardinal(heading),
                 captionColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 valueColor = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f)
@@ -651,16 +651,16 @@ private fun QiblaGuidanceBanner(
     }
 }
 
-private fun getCardinalDirection(azimuth: Float): String {
-    val norm = ((azimuth % 360f) + 360f) % 360f
-    return when {
-        norm in 22.5f..67.5f -> "NE"
-        norm in 67.5f..112.5f -> "E"
-        norm in 112.5f..157.5f -> "SE"
-        norm in 157.5f..202.5f -> "S"
-        norm in 202.5f..247.5f -> "SW"
-        norm in 247.5f..292.5f -> "W"
-        norm in 292.5f..337.5f -> "NW"
-        else -> "N"
-    }
-}
+/**
+ * The old English `getCardinalDirection`, gone.
+ *
+ * It returned "N", "NE", "E", "SE", "S", "SW", "W", "NW" and was used in two visible
+ * places: the caption under the heading readout, and the text beside the azimuth. So
+ * a reader in Arabic saw an English abbreviation in an app that translates everything
+ * else it says about the compass - and German, which abbreviates *Nordost* to "NO"
+ * rather than "NE", would have been given the wrong abbreviation even in English script.
+ *
+ * The sectors now live in [ReaderStrings.cardinal] with the words beside them, so a
+ * sector boundary cannot differ between the caption and the azimuth text, and
+ * `QiblaDirectionTest` can check all eight boundaries.
+ */

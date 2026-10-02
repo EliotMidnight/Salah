@@ -52,8 +52,10 @@ import androidx.compose.ui.unit.dp
 import com.example.data.model.Ayah
 import com.example.data.model.QuranReadingLayout
 import com.example.data.model.QuranReadingOptions
+import com.example.data.model.QuranRef
 import com.example.data.quran.QuranBrowse
 import com.example.ui.components.SafeArea
+import com.example.ui.components.isDarkSurface
 import com.example.ui.SalahUiState
 import com.example.ui.components.EmptyState
 import com.example.ui.components.StatusBanner
@@ -118,7 +120,7 @@ fun QuranReader(
 ) {
     val space = Space.current
     val strings = LocalStrings.current
-    val isDark = MaterialTheme.colorScheme.background.luminanceIsDark()
+    val isDark = MaterialTheme.colorScheme.background.isDarkSurface()
 
     // The paper. Everything else on this surface is read against it.
     val paper = QuranPaper.wash(options.paper, isDark)
@@ -315,9 +317,7 @@ fun QuranReader(
                     // navigated elsewhere while it plays - in which case the surah
                     // the text is in and the surah being recited are two different
                     // answers and the strip must be reporting the audio's.
-                    surahName = QuranBrowse.surah(state.currentAudioRef.surah)
-                        ?.englishName.orEmpty(),
-                    ayahNumber = state.currentAudioRef.ayah,
+                    ref = state.currentAudioRef,
                     reciter = state.reciter,
                     onStop = onStopAudio,
                     modifier = Modifier
@@ -576,8 +576,17 @@ private fun CircleControl(
  */
 @Composable
 private fun AudioStrip(
-    surahName: String,
-    ayahNumber: Int,
+    /**
+     * The verse being recited, as a whole reference.
+     *
+     * Rendered, which it was not: the strip said only "Reciting Al-Kahf - Mishary
+     * Rashid Alafasy", so a reader who started playback, scrolled to another page and
+     * wanted to know where the recitation had reached had no way to find out - the
+     * playing mark only appears on the page holding the verse. Now the banner carries
+     * `surah:ayah`, which is also the only place the reader sees that the
+     * recitation's *surah* is the one playing rather than the one they are reading.
+     */
+    ref: QuranRef,
     reciter: String,
     onStop: () -> Unit,
     modifier: Modifier = Modifier
@@ -586,7 +595,15 @@ private fun AudioStrip(
     val space = Space.current
 
     StatusBanner(
-        message = "${strings.more.recitingLabel} $surahName · $reciter",
+        message = buildString {
+            append(strings.more.recitingLabel)
+            append(' ')
+            append(QuranBrowse.surah(ref.surah)?.englishName.orEmpty())
+            append(' ')
+            append(ref)
+            append(" · ")
+            append(reciter)
+        },
         icon = Icons.AutoMirrored.Filled.MenuBook,
         action = {
             Surface(
@@ -611,10 +628,6 @@ private fun AudioStrip(
         modifier = modifier
     )
 }
-
-/** True when this colour is dark enough to need light ink on it. */
-private fun Color.luminanceIsDark(): Boolean =
-    (0.299f * red + 0.587f * green + 0.114f * blue) < 0.5f
 
 /** Is this verse in the reader's bookmark list? */
 private fun SalahUiState.isBookmarked(ayah: Ayah): Boolean =

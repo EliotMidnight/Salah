@@ -22,7 +22,10 @@ import kotlin.coroutines.resume
 
 sealed class LocationFetchResult {
     data class Success(val location: UserLocation, val isFresh: Boolean) : LocationFetchResult()
-    data class Failure(val reason: String, val cachedFallback: UserLocation?) : LocationFetchResult()
+    data class Failure(
+        val reason: LocationFailure,
+        val cachedFallback: UserLocation?
+    ) : LocationFetchResult()
 }
 
 class AppLocationService(private val context: Context) {
@@ -69,7 +72,7 @@ class AppLocationService(private val context: Context) {
     ): LocationFetchResult = withContext(Dispatchers.IO) {
         if (!hasLocationPermission()) {
             return@withContext LocationFetchResult.Failure(
-                reason = "Location permission not granted",
+                reason = LocationFailure.PERMISSION_NOT_GRANTED,
                 cachedFallback = fallbackLocation
             )
         }
@@ -82,7 +85,7 @@ class AppLocationService(private val context: Context) {
                 return@withContext LocationFetchResult.Success(resolved, isFresh = false)
             }
             return@withContext LocationFetchResult.Failure(
-                reason = "Location services disabled on device",
+                reason = LocationFailure.SERVICES_DISABLED,
                 cachedFallback = fallbackLocation
             )
         }
@@ -105,7 +108,7 @@ class AppLocationService(private val context: Context) {
                 LocationFetchResult.Success(fallbackLocation, isFresh = false)
             } else {
                 LocationFetchResult.Failure(
-                    reason = "Unable to acquire GPS signal. Using cached location.",
+                    reason = LocationFailure.NO_SIGNAL,
                     cachedFallback = fallbackLocation
                 )
             }
@@ -256,4 +259,38 @@ class AppLocationService(private val context: Context) {
                 isGps = true
             )
         }
+}
+
+/**
+ * Why a location could not be determined.
+ *
+ * ### An enum, not a sentence
+ *
+ * This was `reason: String` on [LocationFetchResult.Failure], and there were exactly
+ * three possible values, each a fixed English sentence written in the service layer:
+ * "Location permission not granted", "Location services disabled on device", "Unable
+ * to acquire GPS signal. Using cached location." They were handed to the UI as a
+ * `StatusBanner(message = ...)`, so a reader in any of the ten shipped languages saw
+ * English, and there was nowhere in the UI that could have changed it.
+ *
+ * An enum says *which* of three things happened. The sentence is a presentation
+ * concern and now lives in the strings, which is also the only place it can be
+ * translated - see `UiStringsMore.locationError*`.
+ *
+ * The names are about the *cause*, not the remedy, because the remedy differs by
+ * device and is the reader's to choose: `PERMISSION_NOT_GRANTED` may be answered by
+ * granting the permission or by picking a city, and the app does not presume which.
+ */
+enum class LocationFailure {
+    /** The location permission was not granted, so nothing was asked for. */
+    PERMISSION_NOT_GRANTED,
+
+    /** Location services are switched off, and there was no last known fix either. */
+    SERVICES_DISABLED,
+
+    /**
+     * Services are on and a fix was asked for, and none arrived before the timeout,
+     * and there was nothing cached to fall back to.
+     */
+    NO_SIGNAL
 }

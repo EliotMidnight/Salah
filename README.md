@@ -7,11 +7,11 @@ Built with Kotlin and Jetpack Compose (Material 3). No account, no tracking, wor
 
 - **Today dashboard** — next prayer countdown, live astronomical sky indicator, Hijri date, prayer checklist, continue-reading shortcut.
 - **Prayer times** — 8 calculation methods (Morocco Ministry/Habous default, MWL, ISNA, Egypt, Umm Al-Qura, Karachi, Dubai, France 12°), Standard/Hanafi Asr jurisprudence, per-prayer minute adjustments, monthly calendar, Imsak / Islamic midnight / last-third-of-night vigils.
-- **Quran reader** — opens straight into the text at your last position (Al-Fatihah on a first run). Two layouts — the canonical 604-page mushaf, or continuous per-surah flow with optional per-verse blocks — each on either axis. Seven washed-out papers with light/dark treatment, independent Arabic and translation sizing, five bundled Quran faces, pinch as zoom or as text size, and immersive mode that clears the status bar and the dock. All 114 surahs with verified Uthmani Arabic and full Saheeh International English, bundled offline (6,236 verses). Verse-level search in Arabic or English with page/juz'/hizb quick filters, bookmarks, copy/share, per-verse audio recitation (Mishary Alafasy via everyayah.com, streamed). Page turns work by drag *and* by accessibility action, so a page is reachable without a finger.
+- **Quran reader** — opens straight into the text at your last position (Al-Fatihah on a first run). Two layouts — the canonical 604-page mushaf, or continuous per-surah flow with optional per-verse blocks — each on either axis. Seven washed-out papers with light/dark treatment, independent Arabic and translation sizing, five bundled Quran faces, pinch as zoom or as text size, and immersive mode that clears the status bar and the dock. All 114 surahs with verified Uthmani Arabic and Saheeh International English, bundled offline (6,236 verses). Verse-level search in Arabic or English with page/juz'/hizb quick filters, bookmarks, copy/share, per-verse audio recitation (Mishary Alafasy via everyayah.com, streamed), whose banner names the verse being recited so a reader who has scrolled elsewhere can still find it. Page turns work by drag *and* by accessibility action, so a page is reachable without a finger; every page announces itself — reference, extent, surah range and page — in the reader's own language, and the text is kept out of a display cutout in landscape, where the outer column of a page is where a page *begins*.
 - **Qibla compass** — sensor-fused bearing with true/magnetic north, distance to the Kaaba, magnetic-interference diagnostics, device-level indicator, vibration on alignment. Graduated dial: tick every 2°, numerals every 30°, heading and Qibla bearing side by side, and a banner that names the turn — "turn right 12°" — rather than only reporting that you are not there yet.
-- **Adhan & alerts** — full Adhan, Takbeer-only, chime, vibration or silent per prayer; pre-prayer reminders; global silent and auto masjid-silence mode during prayer windows.
+- **Adhan & alerts** — full Adhan, Takbeer-only, chime, vibration or silent per prayer; pre-prayer reminders; global silent and auto masjid-silence mode during prayer windows. Five adhan timbres, one decoder, and the Settings preview plays the sound the alarm will play. Prayer times are computed on this device and are never described as having been verified against anything.
 - **Localization** — full UI in 11 languages (English, Arabic, French, Indonesian, Turkish, Urdu, Malay, Bengali, Russian, German, Spanish) with RTL support.
-- **Offline-first & private** — prayer math runs on-device; location stays on the device; the only network use is verse audio streaming.
+- **Offline-first & private** — prayer math runs on-device; location stays on the device in one store; the only network use is verse audio streaming. The app ships no HTTP client at all.
 
 ## Requirements
 
@@ -109,7 +109,7 @@ desktop session, a parallel Compose build gets OOM-killed, so it runs without
 parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
 JDK and memory for it.
 
-279 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
+369 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
 maths, search, prayer maths, Qibla bearing and guidance, localisation coverage,
 sky-text contrast) run on any host, including ARM64 Linux/Termux.
 
@@ -119,12 +119,37 @@ detects the host and skips exactly the classes that use `RobolectricTestRunner` 
 ARM64 with a loud log line, so the suite stays green for the right reason instead
 of failing for a platform one.
 
-Screenshot baselines live in `app/src/test/screenshots/`. They are only meaningful
-if a recording is reproducible, so every screen they cover is fed state rather
-than reading the wall clock: the Today page reads its countdown and its current
-prayer from the state the one-second ticker maintains, which is what a page should
-have been doing anyway. Two consecutive `record` runs produce byte-identical
-baselines.
+Localisation is guarded rather than trusted. `StringCoverageTest` sweeps **every**
+`String` field of both `ReaderStrings` and `UiStringsMore` by reflection — about 2,000
+strings across nine languages — and fails on one left in English, on one shipped blank,
+and on one language inheriting the whole class's defaults. It used to sweep only
+`ReaderStrings`, which is the smallest of the classes and the one a Quran rebuild is
+most likely to be working in; every localisation defect found in this rebuild was in
+the classes it was not covering. `BorrowedWords` is the one list of words a language
+may keep as English — French *page* and *Silence*, German *Sand* and *NO* for
+north-east, the translator's name in a credit line — and both tests read it, because
+two allowlists for one fact is the defect this whole rebuild has been about.
+
+Screenshot baselines live in `app/src/test/screenshots/` — 32 of them, including one
+per bundled Quran face. They are only meaningful if a recording is reproducible, so
+every screen they cover is fed state rather than reading the wall clock: the Today
+page reads its countdown and its current prayer from the state the one-second ticker
+maintains, which is what a page should have been doing anyway. Two consecutive
+`record` runs produce byte-identical baselines.
+
+### The third thing about this machine
+
+`check` runs its compile and its test phase as **two invocations with the Gradle
+daemon stopped in between**, and points `java.io.tmpdir` at `/home`. Both are the same
+bug wearing two hats. `/tmp` here is a 1.9 GB tmpfs, and Robolectric extracts a
+~205 MB native runtime into it on every run and never cleans up; three runs later the
+extraction started failing, which surfaced as `Unable to load Robolectric native
+runtime library` in whichever test class happened to start first — on an otherwise
+identical tree, moving between runs. Stopping the daemon is the same fix from the
+other side: `assembleDebug` drives the Compose compiler inside the daemon and keeps
+its 1280m, and the test phase then cannot get a worker large enough for the
+screenshots' native bitmaps. A disk-space and a heap failure, presenting as a
+missing shared library.
 
 ## Configuration & environment
 
@@ -144,9 +169,19 @@ credentials, which are standard for debug builds and never used for release.
 
 - No account, no analytics, no tracking, no ads.
 - Prayer math, Hijri calendar, Qibla bearing, and the full Quran corpus run on-device.
-- Location is used only to compute prayer times/Qibla and stays on the device
-  (SharedPreferences + local Room cache). It is included in the standard OS app
-  backup (`res/xml/data_extraction_rules.xml`); uninstall wipes it.
+- Location is used only to compute prayer times/Qibla and stays on the device, in
+  `SharedPreferences` and nowhere else. Finding it reports one of four states —
+  acquiring, resolved fresh, resolved from the OS's last known fix, or one of three
+  named failures — as *facts*; the sentence is composed from the strings at the point
+  of display. It was a finished English sentence in state, produced by a service
+  layer, which meant a reader in any other language saw English and no change to the
+  UI could have reached it. The banner deliberately does not call a last-known fix a
+  "GPS location": it may be hours old. It used to be written to a Room table as
+  well, and the two consumers read *different* stores — the UI read the preferences
+  and the alarm scheduler read the Room row first — so the screen could show one
+  place while the adhan fired for another. `LocationStore` is now the only reader and
+  the only writer. It is included in the standard OS app backup
+  (`res/xml/data_extraction_rules.xml`); uninstall wipes it.
 - The only network use is streaming verse audio from `https://everyayah.com`
   (Mishary Alafasy, 128 kbps) on demand. If the stream fails or times out
   (12 s watchdog), the app falls back to a gentle offline tone and stays usable.
@@ -268,7 +303,28 @@ bookmark that stored only `ayah = 1` could not say which one.
 
 Every layout resolves that same reference into its own coordinates, so switching
 layout keeps your place instead of throwing you to the top of the surah, and there
-is no second "where am I" cursor anywhere. Per-page mode follows the canonical
+is no second "where am I" cursor anywhere.
+
+**The Quran destination owns the position, not the reader.** `ReaderPosition` used to
+be created inside `QuranReader`, with the ViewModel holding a copy of the same fact
+as `selectedSurah`. Navigation arrived through the ViewModel and the reader never
+asked — so **the index could not move the reader at all**: picking a surah changed
+the name in the pill and left the page where it was, and "Continue reading" on the
+Today page did the same. `ReaderPosition.goTo` was documented as "the one entry
+point; everything that navigates calls this" and had **zero callers**. The
+destination now creates the position, the index and the ViewModel both navigate
+through `goTo`, and what the ViewModel holds is a *request* — `pendingOpen: QuranRef?`
+— with one writer, honoured once. `selectedSurah`, `currentSurahAyahs` and
+`readingAyahHint` are gone, and a page's verses are derived from `position.surah`.
+
+A verse is also assembled into a reference in exactly one place. A mushaf page is not
+inside one surah — 51 of the 604 hold more than one, and 523 verses sit after a
+boundary — so a page that handed its caller an ayah number and let the caller fill in
+the surah from the page's *first* verse selected the wrong verse in the wrong surah
+on every one of those pages: no highlight, the action bar showing a different verse's
+translation, and a bookmark of the wrong reference. `Ayah.ref` is the one conversion
+and `MushafPageText`, the only thing that knows which span a tap fell in, assembles
+the reference. Per-page mode follows the canonical
 604-page partition from the bundled corpus, so a page boundary is where the
 printed page actually breaks and a page can begin in one surah and end in the next.
 
@@ -363,8 +419,21 @@ cost a settings screen to discover.
 Each face was checked for **U+06DD**, the ayah-end ornament, before being added.
 That codepoint is a standalone ornament rather than a numeric placeholder, and a
 mushaf whose ayah markers are tofu boxes is not a mushaf; Reem Kufi was rejected on
-exactly that. `fontRes` is a non-null `Int` and `isBundled` is a constant, so a
-face without a file cannot be added by accident.
+exactly that. `fontRes` is a non-null `Int`, so a face without a file cannot be added
+by accident.
+
+There is no `isBundled` flag, and there is not meant to be. It was `get() = true` and
+its only reader was a test asserting it was true — an assertion that could not fail,
+for a property that existed only to be asserted. What actually can be zero is
+`fontRes`, and that is what the test checks now.
+
+**Typeface names are not translated; paper names are.** The picker shows "Amiri" and
+"Lateef" in every language, because those are the names of the designs and translating
+them would make a face unrecognisable to anyone who has seen it. The seven paper
+names — Rose, Apricot, Sand, Sage, Mist, Indigo, Lilac — are ordinary words, and they
+used to be an English `when` in `ReadingOptionsSheet`, so a reader in any of the ten
+languages saw "Apricot" under the row and a screen-reader user heard it in each
+swatch's `contentDescription`. They are strings now, in all ten.
 
 Each face carries its own line-height multiplier rather than sharing one, because
 Nastaliq descenders need materially more room than a Naskh face and a Nastaliq
@@ -372,6 +441,18 @@ set with Naskh leading looks like a mistake. Harmattan is the extreme case here 
 a deep descender that needs more room than any other face in the set. The picker
 previews each face with real Quranic text, so the choice is made by looking rather
 than by reading a name. Licences are in `app/src/main/assets/quran_fonts_OFL.txt`.
+
+**There is no baseline shift on any face, and there was never meant to be.** Each face
+carried a `baselineShiftSp` (-0.5sp on the two Amiri faces, -1sp on Harmattan) that
+was copied faithfully into the typeface registry and then never applied. Applying it
+was tried and measured: every one of the five faces was rendered on page 2, the
+densest page in the book, with and without it — and it made **all five worse**, because
+a negative shift raises the text inside its line and that is exactly where Arabic's
+shadda, fatha and dagger alif are. The field was deleted rather than wired up.
+
+`QuranFontFaceProbeTest` records a baseline for every face on that dense page, so a
+future change to leading shows up in a diff instead of in a bug report, and a face
+added to the picker without one is a visible omission.
 
 ## Notes on the port
 
@@ -408,6 +489,21 @@ Only the design and the interaction were ported. The maths was not: this app's
 declination for true north, reports the distance to the Kaaba and diagnoses
 interference, none of which the reference has. Porting the reference's version
 would have been a downgrade wearing a port's clothes.
+
+A third defect was this app's own. The dial named its directions with a private
+`getCardinalDirection` returning `"N"`, `"NE"`, `"E"`, `"SE"`, `"S"`, `"SW"`, `"W"`,
+`"NW"` — in two visible places, the caption under the heading readout and the text
+beside the azimuth. Every one of those is an *English* abbreviation, so a reader in
+any of the ten shipped languages saw one. And it was not only untranslated: German
+abbreviates *Nordost* to "NO" and *Südost* to "SO", so a shared abbreviation would
+have been wrong for a German reader who reads English. The sectors now live in
+`ReaderStrings.cardinal` with the words beside them, in all ten languages.
+
+That move also fixed a bug the old code hid. The sectors were closed ranges —
+`22.5f..67.5f` and `67.5f..112.5f` both contain 67.5 — so every boundary belonged to
+two sectors and the answer depended on which arm of the `when` ran first. It came
+out right, by luck, and nothing tested it. They are half-open now, and
+`QiblaDirectionTest` checks all eight boundaries from either side.
 
 Two defects in the reference were **not** carried across:
 

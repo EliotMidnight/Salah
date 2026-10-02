@@ -5,6 +5,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import com.example.data.model.QuranFontFace
+import com.example.data.model.QuranPaperTone
 import com.example.data.model.QuranRef
 import com.example.data.quran.QuranBrowse
 import com.example.ui.localization.ArabicStrings
@@ -21,6 +22,7 @@ import com.example.ui.localization.TurkishStrings
 import com.example.ui.localization.UiStrings
 import com.example.ui.localization.UrduStrings
 import com.example.ui.quran.reader.ReaderPosition
+import com.example.ui.BorrowedWords
 import com.example.ui.theme.SalahTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -142,17 +144,18 @@ class ReaderAnnouncementTest {
     }
 
     /**
-     * Words an announcement is allowed to share with English, by language.
+     * Words an *announcement* is allowed to share with English.
      *
-     * "Differs from English" is not the same as "translated". French writes *page*,
-     * *sourate* and *verset*; the last contains "verse" as a substring; German and
-     * Spanish keep a couple of cognates. A test that demands a difference would push a
-     * translator to invent a wrong word, so the exceptions are named here - per
-     * language, because a word may be borrowed in one language and translated in
-     * another.
+     * **Separate from [BorrowedWords], and not by accident.** That table answers "is this
+     * a reader field allowed to equal the English field?", which `StringCoverageTest`
+     * asks. This one answers "does this formatted sentence contain an English word?" -
+     * a different question, because the announcement is compared as *output*. The
+     * template's English value is `"Page %1$d, juz' %2$d, ..."`, which no translation
+     * will ever equal, so the coverage sweep passes these fields on their own and only
+     * this test looks inside them.
      *
-     * This is the same reasoning, and the same allowlist shape, as
-     * `StringCoverageTest`'s `identicalByDesign`.
+     * The paper names are deliberately **not** repeated here: those are plain field
+     * values, they are in [BorrowedWords], and both tests read them from there.
      */
     private val borrowedWords: Map<String, Set<String>> = mapOf(
         "Page" to setOf("French", "German", "Spanish", "Indonesian", "Malay"),
@@ -313,5 +316,69 @@ class ReaderAnnouncementTest {
             "2",
             english.range(2, 2)
         )
+    }
+
+    @Test
+    fun `a paper is named in the reader's language`() {
+        // The visible label under the swatch row, and each swatch's
+        // `contentDescription`, both come from here. Both used to be an English
+        // `when` in `ReadingOptionsSheet`, so a reader in any of the ten languages saw
+        // "Apricot" and a screen-reader user heard it.
+        val englishNames = EnglishStrings.more.reader.let { r ->
+            QuranPaperTone.wheel.map { paperLabel(it, r) }.distinct()
+        }
+
+        for ((language, strings) in languages) {
+            if (language == "English") continue
+            for (tone in QuranPaperTone.wheel) {
+                val said = paperLabel(tone, strings.more.reader)
+                assertTrue(
+                    "the $language name for $tone is blank",
+                    said.isNotBlank()
+                )
+                for (name in englishNames) {
+                    if (borrowed(language, name) ||
+                        BorrowedWords.isBorrowed(name, language)
+                    ) {
+                        continue
+                    }
+                    assertFalse(
+                        "the $language name for $tone is still the English " +
+                            "\"$name\": \"$said\"",
+                        said.equals(name, ignoreCase = true)
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `the default paper is named as an absence, not a colour`() {
+        // "App default" is a different kind of answer from "Lilac", and giving it a
+        // colour would imply the app ships a paper of its own.
+        for ((language, strings) in languages) {
+            assertEquals(
+                "the $language default-paper label does not read as the absence of a " +
+                    "choice",
+                strings.more.reader.backgroundDefault,
+                paperLabel(QuranPaperTone.DEFAULT, strings.more.reader)
+            )
+        }
+    }
+
+    @Test
+    fun `every paper tone has a name in every language`() {
+        // Seven names and eight tones: DEFAULT plus the wheel. A tone added to the
+        // enum without strings would otherwise fail to compile at the `when`, which
+        // is a poor way to discover it.
+        for ((language, strings) in languages) {
+            val names = QuranPaperTone.entries.map { paperLabel(it, strings.more.reader) }
+            assertEquals(
+                "the $language paper names are not all distinct, so two swatches are " +
+                    "indistinguishable to a screen-reader user",
+                names.size,
+                names.distinct().size
+            )
+        }
     }
 }

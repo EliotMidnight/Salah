@@ -44,7 +44,9 @@ import com.example.ui.components.LabeledSlider
 import com.example.ui.components.OptionSheet
 import com.example.ui.components.SegmentedOptions
 import com.example.ui.components.ToggleRow
+import com.example.ui.components.isDarkSurface
 import com.example.ui.localization.LocalStrings
+import com.example.ui.localization.ReaderStrings
 import com.example.ui.theme.QuranFonts
 import com.example.ui.theme.QuranPaper
 import com.example.ui.theme.QuranShape
@@ -95,9 +97,11 @@ fun ReadingOptionsSheet(
 ) {
     val space = Space.current
     val strings = LocalStrings.current
-    val isDark = MaterialTheme.colorScheme.background.let {
-        0.299f * it.red + 0.587f * it.green + 0.114f * it.blue < 0.5f
-    }
+    // The shared answer, which is the third copy of this formula in the app. The other
+    // two had already moved to `Color.isDarkSurface`; leaving this one inline meant a
+    // future change to the threshold would fix two screens and not this one, which is
+    // exactly the drift the shared function exists to prevent.
+    val isDark = MaterialTheme.colorScheme.background.isDarkSurface()
 
     OptionSheet(
         title = strings.more.readingOptions,
@@ -414,7 +418,7 @@ private fun PaperSwatches(
                         .clip(QuranShape.tile)
                         .clickable(role = Role.RadioButton, onClick = { onSelect(tone) })
                         .semantics {
-                            contentDescription = paperLabel(tone, strings.more.reader.backgroundDefault)
+                            contentDescription = paperLabel(tone, strings.more.reader)
                             stateDescription = if (isSelected) {
                                 strings.more.selected
                             } else {
@@ -426,22 +430,34 @@ private fun PaperSwatches(
         }
         Spacer(Modifier.height(space.xs))
         Text(
-            text = paperLabel(selected, strings.more.reader.backgroundDefault),
+            text = paperLabel(selected, strings.more.reader),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
 
-internal fun paperLabel(tone: QuranPaperTone, defaultLabel: String): String = when (tone) {
-    QuranPaperTone.DEFAULT -> defaultLabel
-    QuranPaperTone.RED -> "Rose"
-    QuranPaperTone.ORANGE -> "Apricot"
-    QuranPaperTone.YELLOW -> "Sand"
-    QuranPaperTone.GREEN -> "Sage"
-    QuranPaperTone.BLUE -> "Mist"
-    QuranPaperTone.INDIGO -> "Indigo"
-    QuranPaperTone.VIOLET -> "Lilac"
+/**
+ * The name of one paper, in the reader's language.
+ *
+ * A `when` over the tone rather than a name on the enum, because a name on the enum
+ * would be English by construction and the tone enum knows nothing about the interface
+ * language. This used to be a `when` with English words in it, which put an English
+ * label under the row *and* English in each swatch's `contentDescription`.
+ *
+ * [QuranPaperTone.DEFAULT] is [ReaderStrings.backgroundDefault] rather than a colour,
+ * because "app default" is a different kind of answer: it is the absence of a choice,
+ * and calling it a colour would imply the app has a paper of its own.
+ */
+internal fun paperLabel(tone: QuranPaperTone, reader: ReaderStrings): String = when (tone) {
+    QuranPaperTone.DEFAULT -> reader.backgroundDefault
+    QuranPaperTone.RED -> reader.paperRose
+    QuranPaperTone.ORANGE -> reader.paperApricot
+    QuranPaperTone.YELLOW -> reader.paperSand
+    QuranPaperTone.GREEN -> reader.paperSage
+    QuranPaperTone.BLUE -> reader.paperMist
+    QuranPaperTone.INDIGO -> reader.paperIndigo
+    QuranPaperTone.VIOLET -> reader.paperLilac
 }
 
 /**

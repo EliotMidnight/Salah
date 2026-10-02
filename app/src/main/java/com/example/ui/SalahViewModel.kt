@@ -17,6 +17,7 @@ import com.example.data.local.BookmarkEntity
 import com.example.data.local.ContinueReadingEntity
 import com.example.data.local.PrayerLogEntity
 import com.example.data.local.SalahDatabase
+import com.example.data.location.LocationFailure
 import com.example.data.location.LocationFetchResult
 import com.example.data.model.Ayah
 import com.example.data.model.AdhanSound
@@ -64,6 +65,34 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import kotlin.math.abs
+
+/**
+ * How a location attempt ended.
+ *
+ * Facts, not a sentence - see [SalahUiState.locationStatus]. Kept beside the state that
+ * holds it rather than in the location package because this is a *presentation* state:
+ * the service reports [LocationFailure] and something between the two decides that a
+ * failed attempt is worth showing at all.
+ */
+sealed interface LocationStatus {
+    /** Started, not finished. */
+    data object Acquiring : LocationStatus
+
+    /**
+     * Finished, with a place.
+     *
+     * [isFresh] false means this is the OS's last known fix rather than a reading taken
+     * just now, and the banner says so rather than claiming a GPS fix it did not get.
+     */
+    data class Resolved(
+        val name: String,
+        val country: String,
+        val isFresh: Boolean
+    ) : LocationStatus
+
+    /** Finished, without a place. */
+    data class Failed(val reason: LocationFailure) : LocationStatus
+}
 
 data class SalahUiState(
     val location: UserLocation = UserLocation.DEFAULT,
@@ -189,7 +218,15 @@ data class SalahUiState(
     val distanceToKaabaKm: Int = 0,
     val isDeviceLevel: Boolean = true,
     val isLocating: Boolean = false,
-    val locationStatusMessage: String? = null,
+    /**
+     * How the location attempt is going, as facts.
+     *
+     * Was `locationStatusMessage: String?`, which held a finished English sentence
+     * ("GPS Location: Rabat, Morocco") in a field no UI could translate. The three
+     * states are now named, the place is carried as a place, and the banner composes
+     * the sentence from `UiStringsMore.location*`.
+     */
+    val locationStatus: LocationStatus? = null,
     // Quran reader state
     //
     // There is deliberately no `selectedSurah` and no `currentSurahAyahs` here.
@@ -753,34 +790,44 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         repository.saveLocation(location)
     }
 
-    fun fetchCurrentLocation(onComplete: (Boolean, String) -> Unit = { _, _ -> }) {
+    /**
+     * Find the reader's location and store it.
+     *
+     * The `onComplete` callback is gone. It was `(Boolean, String) -> Unit` with a
+     * no-op default, and both call sites - the permission launcher and the Settings
+     * button - called this with no argument at all, so the whole parameter was
+     * unreachable. It also returned the same English sentence it had just put in
+     * state, which is a second copy of a string the banner was already showing.
+     *
+     * `isFresh` is kept as a fact because it changes what the banner should say: a
+     * fresh fix and the OS's last known fix are genuinely different answers, and
+     * claiming "GPS location" for a fix that is minutes or hours old would be the same
+     * kind of false claim this rebuild has been removing.
+     */
+    fun fetchCurrentLocation() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isLocating = true,
-                locationStatusMessage = "Acquiring GPS coordinates..."
+                locationStatus = LocationStatus.Acquiring
             )
-            val result = repository.fetchAndCacheLocation()
-            when (result) {
+            when (val result = repository.fetchAndCacheLocation()) {
                 is LocationFetchResult.Success -> {
-                    val loc = result.location
-                    val msg = if (result.isFresh) {
-                        "GPS Location: ${loc.name}, ${loc.country}"
-                    } else {
-                        "Cached Offline: ${loc.name}, ${loc.country}"
-                    }
                     _uiState.value = _uiState.value.copy(
                         isLocating = false,
-                        locationStatusMessage = msg
+                        locationStatus = LocationStatus.Resolved(
+                            name = result.location.name,
+                            country = result.location.country,
+                            isFresh = result.isFresh
+                        )
                     )
                     recalculateAll()
-                    onComplete(true, msg)
                 }
+
                 is LocationFetchResult.Failure -> {
                     _uiState.value = _uiState.value.copy(
                         isLocating = false,
-                        locationStatusMessage = result.reason
+                        locationStatus = LocationStatus.Failed(result.reason)
                     )
-                    onComplete(false, result.reason)
                 }
             }
         }

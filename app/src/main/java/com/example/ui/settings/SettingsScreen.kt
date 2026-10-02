@@ -44,7 +44,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import com.example.data.model.AdhanSound
+import com.example.data.location.LocationFailure
 import com.example.data.model.CalculationMethod
+import com.example.ui.LocationStatus
 import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
 import com.example.data.model.UserLocation
@@ -288,8 +290,37 @@ fun SettingsScreen(
                         }
                     )
                 }
-                state.locationStatusMessage?.let { message ->
-                    StatusBanner(message = message)
+                state.locationStatus?.let { status ->
+                    // Composed here, from the state and the strings, rather than read
+                    // off a `String` the ViewModel had already finished. The state
+                    // carries *which* of four things happened; this carries how to say
+                    // it, which is the only layer that knows the language.
+                    StatusBanner(
+                        message = when (status) {
+                            is LocationStatus.Acquiring ->
+                                strings.more.locationAcquiring
+
+                            is LocationStatus.Resolved -> {
+                                val template = if (status.isFresh) {
+                                    strings.more.locationResolved
+                                } else {
+                                    // Not a GPS fix, so not called one. This is the OS's
+                                    // last known reading, which may be hours old.
+                                    strings.more.locationResolvedCached
+                                }
+                                template.format(status.name, status.country)
+                            }
+
+                            is LocationStatus.Failed -> when (status.reason) {
+                                LocationFailure.PERMISSION_NOT_GRANTED ->
+                                    strings.more.locationErrorNoPermission
+                                LocationFailure.SERVICES_DISABLED ->
+                                    strings.more.locationErrorServicesOff
+                                LocationFailure.NO_SIGNAL ->
+                                    strings.more.locationErrorNoSignal
+                            }
+                        }
+                    )
                 }
                 RowDivider()
                 ActionRow(
