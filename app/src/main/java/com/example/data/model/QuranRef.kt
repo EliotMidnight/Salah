@@ -33,8 +33,10 @@ data class QuranRef(
     /** The same verse, re-pointed at another page. Used when a page is turned. */
     fun onPage(page: Int): QuranRef = copy(page = page)
 
-    /** The same verse, moved to a different ayah in the same surah. */
-    fun atAyah(ayah: Int): QuranRef = copy(ayah = ayah)
+    // There was an `atAyah` here too, `copy(ayah = ...)`. It documented a distinction
+    // that turned out not to be one: every caller that moved within a surah was going
+    // through the reader, which owns the position, so nobody was calling it and nothing
+    // needed it.
 
     /** `2:255` - how a reference is written when there is no room for more. */
     override fun toString(): String = "$surah:$ayah"

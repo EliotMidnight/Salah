@@ -145,9 +145,11 @@ object QuranBrowse {
         )
     }
 
-    /** The surah a page opens in, for the running head. */
-    fun surahOfPage(page: Int): Surah? =
-        QuranCorpus.ayahsOnPage(page).firstOrNull()?.let { surah(it.surahNumber) }
+    // There was a `surahOfPage` here, documented as "the surah a page opens in, for the
+    // running head", and it answered "the surah a page opens in" — which is exactly the
+    // question [surahsOnPage] exists to refuse, on the 51 pages that cross a boundary.
+    // It was read by nothing, because there is no running head; the pill beside the page
+    // number names a *range* instead, which is the honest answer on all 604.
 
     /**
      * Every surah a page touches, in reading order.

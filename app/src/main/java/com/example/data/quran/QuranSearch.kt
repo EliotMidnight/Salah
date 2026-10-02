@@ -74,11 +74,20 @@ data class QuranSearchHit(
  */
 object QuranSearch {
 
-    /** Verses returned per page of results. */
+    /**
+     * How many verses one keystroke returns.
+     *
+     * One constant, because there were two. `SCAN_LIMIT` was documented as "how many
+     * verses one keystroke will scan before the caller should say so" and set to the
+     * same value, so the only difference between them was which sentence described it -
+     * and nothing read the one that implied a scan budget.
+     *
+     * The honest limit is not a scan budget at all: [searchVerses] reads every verse,
+     * because a match in the last surah is as real as one in the first and stopping
+     * early would make the answer depend on where in the book the reader happened to
+     * be looking. Fifty is a *result* limit, and the caller says so when it is reached.
+     */
     const val PAGE_SIZE = 50
-
-    /** How many verses one keystroke will scan before the caller should say so. */
-    const val SCAN_LIMIT = PAGE_SIZE
 
     /**
      * Surahs whose name matches, best first.

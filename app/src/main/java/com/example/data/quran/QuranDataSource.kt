@@ -141,26 +141,21 @@ object QuranDataSource {
         if (number in 1..SURAHS.size) SURAHS[number - 1] else null
 
     // -----------------------------------------------------------------------
-    // Temporary bridge, for the call sites the rebuild has not reached yet.
+    // The bridge that used to be here is gone.
     //
-    // Every function below is a *forwarding* call to [QuranBrowse] or
-    // [QuranSearch], so behaviour is already the rebuilt behaviour and only the
-    // call sites are old. The old implementations - the linear filters and the
-    // regex-in-a-loop search - are gone, not wrapped: a wrapper around the slow
-    // version would have been a way to keep shipping it.
+    // Three `@Deprecated` forwarders lived here — `normalizeArabic`,
+    // `toArabicDigits`, `searchAyahs` — and the block above them said they were
+    // "removed when the reader and the index sheet are on the new surfaces". Both
+    // surfaces are on them, and the last caller had gone, so they were kept by
+    // nobody.
     //
-    // @deprecated Call [QuranBrowse] or [QuranSearch]. Removed when the reader
-    // and the index sheet are on the new surfaces.
+    // Worth recording why they were there at all: each was a forwarding call to the
+    // rebuilt implementation, never to the old one. The linear filters and the
+    // regex-in-a-loop search they replaced are *gone*, not wrapped, because a wrapper
+    // around the slow version is a way of continuing to ship it. So while a shim
+    // exists, behaviour is the rebuilt behaviour and only the call sites are old —
+    // which is what made them safe to delete one at a time rather than all at once.
     // -----------------------------------------------------------------------
-
-    @Deprecated("QuranText.normalise", ReplaceWith("QuranText.normalise(text)"))
-    fun normalizeArabic(text: String) = QuranText.normalise(text)
-
-    @Deprecated("QuranText.toArabicDigits", ReplaceWith("ArabicDigits.of(number)"))
-    fun toArabicDigits(number: Int) = ArabicDigits.of(number)
-
-    @Deprecated("QuranSearch.searchVerses", ReplaceWith("QuranSearch.searchVerses(query)"))
-    fun searchAyahs(query: String) = QuranSearch.searchVerses(query, limit = 50).map { it.ayah }
 
     /**
      * The curated surah list, checked against the bundled metadata.
@@ -204,7 +199,7 @@ object QuranDataSource {
             // both ابراهيم and إبراهيم, and the app writes the latter while
             // Tanzil writes the former. That is not a disagreement about a fact,
             // so this check must not be one; a *different* name still is, because
-            // folding does not turn بقرة into الladder.
+            // folding does not turn بقرة into the ladder.
             require(
                 QuranText.normalise(surah.arabicName) ==
                     QuranText.normalise(QuranCorpus.surahArabicName(number))

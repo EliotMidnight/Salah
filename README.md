@@ -109,7 +109,7 @@ desktop session, a parallel Compose build gets OOM-killed, so it runs without
 parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
 JDK and memory for it.
 
-390 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
+391 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
 maths, search, prayer maths, Qibla bearing and guidance, localisation coverage,
 sky-text contrast) run on any host, including ARM64 Linux/Termux.
 
@@ -152,6 +152,41 @@ their own reason to exist: they are built in one place, shown in one place, and 
 someone looking at a notification. `ReaderStrings` is already a nested class for the same
 reason. **The remaining ~230 fields are still the next thing to do to that file** — they
 should split the same way, by surface: settings, the Hijri calendar, the sky, search.
+
+Localisation is guarded on the *translated* axis and on the *used* axis, which are
+different questions.
+
+### 133 strings nobody read
+
+`StringCoverageTest` asks whether a string is translated. It cannot ask whether a string
+is **used** — and a translated string nobody reads passes it perfectly, in all ten
+languages, on every build, forever. That is how **133 fields** accumulated:
+
+- **six** strings for two layout options. `layoutPerVerse` and `cardsLayout` both said
+  "Per verse"; `layoutContinuous`, `continuousModeLabel` and `continuousLayout` all said
+  "Continuous". Three spellings of one word, translated ten times over.
+- `previousSurahLabel` and `nextSurahLabel` were the accessibility labels of the 48dp tap
+  gutters this rebuild deliberately deleted. They survived because the strings file has no
+  idea a control was removed. (They were also *wrong* while they existed — the gutter
+  turned a **page**, so its label claimed "previous surah".)
+- `fontNotBundled` said "Not included yet" at a time when every face in the picker shipped
+  and `fontRes` was a non-null `Int`.
+- `surahsTab`, `pageTab`, `juzTab`, `hizbTab`, `bookmarksTab` — five tab names, beaten by
+  `ReaderStrings.indexSurahs` / `indexSaved` / `indexSearch`.
+
+`DeadStringTest` now fails when a field has no reader, so the hundred and thirty-three
+cannot come back — and they do try, because most of them were left behind deliberately by
+a control that was removed. `tools/prune_dead_strings.py` lists and removes them safely;
+it refuses to write unless every top-level declaration survives and every class body keeps
+all of its fields, because a two-line declaration that loses its value line produces a
+file that still *looks* plausible.
+
+A **duplicate-string** detector was written and removed. Matching on the English text
+finds real duplicates and also two fields that are correctly separate: `versesFound`
+("12 verses found", in search results) and `verseCount` ("Al-Kahf · 110 verses", on a
+surah) are one English phrase for two different facts, identical in all ten languages. An
+unsound detector gets an allowlist to make it pass, and an allowlisted detector checks
+nothing while still costing a build.
 
 Localisation is guarded rather than trusted. `StringCoverageTest` sweeps **every**
 `String` field of both `ReaderStrings` and `UiStringsMore` by reflection — about 2,000
