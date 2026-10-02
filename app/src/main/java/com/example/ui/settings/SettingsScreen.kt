@@ -1027,15 +1027,10 @@ fun SettingsScreen(
                     strings.more.methodology to state.method.title,
                     strings.more.madhhabLabelShort to state.madhhab.title,
                     strings.locationLabel to state.location.name,
-                    strings.more.appliedAdjustments to listOf(
-                        Prayer.FAJR to state.adjustments.fajr,
-                        Prayer.DHUHR to state.adjustments.dhuhr,
-                        Prayer.ASR to state.adjustments.asr,
-                        Prayer.MAGHRIB to state.adjustments.maghrib,
-                        Prayer.ISHA to state.adjustments.isha
-                    ).joinToString(", ") { (prayer, minutes) ->
-                        "${strings.prayerName(prayer)} ${signed(minutes)}"
-                    }
+                    strings.more.appliedAdjustments to appliedAdjustments(state.adjustments)
+                        .joinToString(", ") { (prayer, minutes) ->
+                            "${strings.prayerName(prayer)} ${signed(minutes)}"
+                        }
                 )
             )
             Spacer(Modifier.height(space.md))
@@ -1177,15 +1172,60 @@ private fun AdjustmentSliders(
     }
 }
 
-private fun adjustmentSummary(state: SalahUiState): String {
-    val parts = listOf(
-        "F" to state.adjustments.fajr,
-        "D" to state.adjustments.dhuhr,
-        "A" to state.adjustments.asr,
-        "M" to state.adjustments.maghrib,
-        "I" to state.adjustments.isha
+/**
+ * The six applied offsets, in reading order, with Sunrise among them.
+ *
+ * One list, because the same five-and-a-half facts were written out in **three**
+ * places - this summary, the Prayer screen's "Applied adjustments" and the Settings
+ * calculation sheet - and all three omitted Sunrise. So a reader who set a +3 minute
+ * sunrise offset saw an *empty* summary, two diagnostic sheets that never mentioned
+ * sunrise, and an engine that applied it. A summary that silently drops one of six
+ * settings is worse than no summary: it says "nothing adjusted" and means something
+ * else.
+ *
+ * Sunrise is here because the reader can set it. The `Prayer` enum carries it because
+ * the engine applies it, and an offset the reader can change and no screen will
+ * report has not really been exposed.
+ */
+internal fun appliedAdjustments(adjustments: PrayerAdjustments): List<Pair<Prayer, Int>> =
+    listOf(
+        Prayer.FAJR to adjustments.fajr,
+        Prayer.SUNRISE to adjustments.sunrise,
+        Prayer.DHUHR to adjustments.dhuhr,
+        Prayer.ASR to adjustments.asr,
+        Prayer.MAGHRIB to adjustments.maghrib,
+        Prayer.ISHA to adjustments.isha
     )
-    return if (parts.all { it.second == 0 }) "" else parts.joinToString(" ") { "${it.first}${it.second}" }
+
+/** The non-zero ones, in reading order. */
+internal fun adjustedPrayers(adjustments: PrayerAdjustments): List<Pair<Prayer, Int>> =
+    appliedAdjustments(adjustments).filter { it.second != 0 }
+
+/** The summary the Adjustments row shows: one letter per adjusted prayer, or nothing. */
+private fun adjustmentSummary(state: SalahUiState): String {
+    val parts = adjustedPrayers(state.adjustments)
+    return if (parts.isEmpty()) {
+        ""
+    } else {
+        parts.joinToString(" ") { (prayer, minutes) ->
+            "${prayer.ordinalLetter()}${minutes}"
+        }
+    }
+}
+
+/**
+ * The one or two letters a prayer is abbreviated to in the summary.
+ *
+ * Hand-written rather than derived, because "Fajr" and "Sunrise" both begin with F
+ * and a summary is only useful if the reader can tell them apart at a glance.
+ */
+private fun Prayer.ordinalLetter(): String = when (this) {
+    Prayer.FAJR -> "F"
+    Prayer.SUNRISE -> "S"
+    Prayer.DHUHR -> "D"
+    Prayer.ASR -> "A"
+    Prayer.MAGHRIB -> "M"
+    Prayer.ISHA -> "I"
 }
 
 private fun hijriSummary(offset: Int): String =

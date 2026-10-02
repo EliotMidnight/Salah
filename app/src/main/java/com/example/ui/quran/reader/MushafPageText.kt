@@ -35,13 +35,20 @@ class VerseSpan internal constructor(
     /** The verse and its ayah marker. */
     val full: IntRange
 ) {
-    /** The verse as a reference, for selection and copy. */
+    /**
+     * The verse as a reference, for selection and copy.
+     *
+     * Resolved through [Ayah.ref] rather than assembling the three numbers here, so
+     * that a span and the verse it was built from cannot name different pages - the
+     * fallback of `?: 1` below did exactly that whenever a reference was asked for
+     * a verse the corpus did not hold, quietly pointing the reader at page 1.
+     *
+     * A `MushafPageText` is always built from real verses, so this is a lookup and
+     * not a question.
+     */
     val ref: QuranRef
-        get() = QuranRef(
-            surah = surahNumber,
-            ayah = ayahNumber,
-            page = QuranBrowse.ayah(surahNumber, ayahNumber)?.pageNumber ?: 1
-        )
+        get() = QuranBrowse.ayah(surahNumber, ayahNumber)?.ref
+            ?: QuranRef(surah = surahNumber, ayah = ayahNumber, page = 0)
 }
 
 /**

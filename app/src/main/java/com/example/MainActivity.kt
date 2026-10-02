@@ -309,8 +309,7 @@ private fun SalahApp(viewModel: SalahViewModel) {
                 composable(SalahDestination.QURAN.route) {
                     QuranScreen(
                         state = uiState,
-                        onSurahSelected = viewModel::selectSurah,
-                        onSurahAyahSelected = viewModel::selectSurah,
+                        onOpen = viewModel::requestOpen,
                         onAyahViewed = viewModel::onAyahViewed,
                         onToggleBookmark = viewModel::toggleBookmark,
                         onTogglePlayAyah = viewModel::togglePlayAyah,

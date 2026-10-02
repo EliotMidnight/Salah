@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.engine.MagneticFieldStatus
 import com.example.engine.QiblaGuidance
+import com.example.engine.PrayerNotificationManager
 import com.example.ui.SalahUiState
 import com.example.ui.components.ActionRow
 import com.example.ui.components.DetailList
@@ -524,7 +525,7 @@ private fun DialReadout(
             )
             ReadoutFigure(
                 label = strings.more.qiblaBearing,
-                value = "${bearing.toInt()}°",
+                value = PrayerNotificationManager.formatBearing(bearing),
                 caption = strings.more.reader.mushaf,
                 captionColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 valueColor = if (isFacing) success else MaterialTheme.colorScheme.primary,

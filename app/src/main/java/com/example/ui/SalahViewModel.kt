@@ -20,6 +20,7 @@ import com.example.data.local.SalahDatabase
 import com.example.data.location.LocationFetchResult
 import com.example.data.model.Ayah
 import com.example.data.model.CalculationMethod
+import com.example.data.model.defaultAlertModes
 import com.example.data.model.HijriDate
 import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
@@ -189,20 +190,46 @@ data class SalahUiState(
     val isLocating: Boolean = false,
     val locationStatusMessage: String? = null,
     // Quran reader state
-    val selectedSurah: Surah = QuranBrowse.surahs.first(),
-    val currentSurahAyahs: List<Ayah> = emptyList(),
+    //
+    // There is deliberately no `selectedSurah` and no `currentSurahAyahs` here.
+    //
+    // The reader's place is `ReaderPosition.ref`, and it is the Quran destination
+    // that owns it - the same object the reading surfaces read, the index navigates
+    // and the chrome reports. A copy of it in this state had two writers and no way
+    // to reach the reader: `selectSurah` wrote it, and the reader never asked, so a
+    // surah chosen from the index changed the pill's name and left the page where
+    // it was. And the reader wrote it *back* through a 600ms debounce, so for half
+    // a second the pill paired the new page number with the old surah's name.
+    //
+    // What the ViewModel has instead is a **request**: something outside the reader
+    // - the index, a bookmark, a search hit, Continue Reading - asking to be put
+    // somewhere. One field, one writer, and it is consumed by the destination rather
+    // than mirrored.
+    //
+    // The reader's place in the book, once read, is not in this state at all.
 
     /**
-     * Where to *place* the reader when it next opens in this surah.
+     * A request to open the Quran at [QuranRef], or null.
      *
-     * A hint, and read once - it seeds `ReaderPosition` and is then the reader's to
-     * own. It is not the reader's position, which lives in `ReaderPosition` and is
-     * written back through the debounced `onPosition`; keeping a second, continuously
-     * updated anchor here is the shape of bug this rebuild exists to prevent.
+     * Set by [requestOpen] and read once by the Quran destination, which passes it
+     * to `ReaderPosition.goTo`. Null means "nothing has asked", which is the state a
+     * reader is in 99% of the time and the reason this is a *request* rather than a
+     * position.
      */
-    val readingAyahHint: Int = 1,
+    val pendingOpen: QuranRef? = null,
+
     val isAudioPlaying: Boolean = false,
-    val currentAudioAyah: Int = 1,
+
+    /**
+     * Which verse is playing, as a reference.
+     *
+     * A whole reference and not an ayah number, because an ayah number alone does
+     * not say which verse: page 604 holds three ayah-1s, and a pager composes its
+     * neighbours, so "ayah 5 is playing" was true of a verse on a page the reader
+     * could also be looking at. `QuranAudioPlayer` already knew the surah - it is
+     * the argument it was asked to play - and the field carrying it was never read.
+     */
+    val currentAudioRef: QuranRef = QuranRef.Start,
     /**
      * The reader's own preferences, as one value.
      *
@@ -461,9 +488,15 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
                     // back to the opening ayah the instant they moved. The flag
                     // means the stored position is applied once per launch and
                     // never again.
+                    //
+                    // It is a *request* now, like every other way into the book, and
+                    // the Quran destination resolves it to a reference from the
+                    // corpus rather than from the stored row - so a row written by a
+                    // build whose partition differed cannot seed the reader with a
+                    // page that no longer holds the verse.
                     if (!readingPositionRestored && cont.surahNumber > 0) {
                         readingPositionRestored = true
-                        selectSurah(cont.surahNumber, cont.ayahNumber)
+                        requestOpen(QuranBrowse.ref(cont.surahNumber, cont.ayahNumber) ?: return@collectLatest)
                     }
                 }
             }
@@ -482,23 +515,33 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         }
 
         // Audio state observer
+        //
+        // The playing verse arrives as a whole reference, so the "is this verse
+        // playing" test the surfaces run can be exact. The player already knew the
+        // surah - it was the argument it was handed - and the state used to keep only
+        // the ayah number, so the dot and the play/pause icon lit on ayah *N* of
+        // whatever surah happened to be composed nearby.
         viewModelScope.launch {
             audioPlayer.playbackState.collectLatest { ps ->
                 _uiState.value = _uiState.value.copy(
                     isAudioPlaying = ps.isPlaying,
-                    currentAudioAyah = ps.ayahNumber
+                    currentAudioRef = QuranRef(
+                        surah = ps.surahNumber,
+                        ayah = ps.ayahNumber,
+                        page = QuranBrowse.pageOf(ps.surahNumber, ps.ayahNumber)
+                    )
                 )
             }
         }
 
-        // Initialize Quran default Surah.
+        // Nothing to initialise for the Quran, and that is the point.
         //
-        // Al-Fatihah, and deliberately overwritten a moment later by the stored
-        // reading position when there is one. It has to be selected eagerly
-        // because `currentSurahAyahs` starts empty and the reader renders its
-        // loading state until a surah is chosen; starting on nothing is what
-        // made the first frame of the reader a blank page.
-        selectSurah(1, 1)
+        // This used to eagerly select Al-Fatihah, because `currentSurahAyahs` started
+        // empty and the reader rendered a loading state until a surah was chosen. Now
+        // the reader's place is `ReaderPosition`, which the destination seeds with
+        // `QuranRef.Start` - Al-Fatihah, page 1 - and the stored Continue Reading row
+        // replaces as soon as it arrives. So a first run opens Al-Fatihah because that
+        // is the start of the book, not because something had to be written down first.
         _uiState.value = _uiState.value.copy(isQuranImmersive = repository.quranImmersive)
 
         // Start 1-second live ticker
@@ -915,8 +958,19 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
     }
 
     fun toggleAutoSilentDuringPrayer() {
-        val newState = !_uiState.value.autoSilentDuringPrayer
-        repository.setAutoSilentDuringPrayer(newState)
+        setAutoSilentDuringPrayerTo(!_uiState.value.autoSilentDuringPrayer)
+    }
+
+    /**
+     * Auto-silence during prayer, as an explicit value.
+     *
+     * A setter as well as the toggle, so a reset can put it back without first reading
+     * the current value and negating it. That would be a second derivation of "the
+     * default", and it would restore the wrong thing if the toggle's own notion of the
+     * current value were ever wrong.
+     */
+    fun setAutoSilentDuringPrayerTo(enabled: Boolean) {
+        repository.setAutoSilentDuringPrayer(enabled)
     }
 
     fun setAutoSilentDuration(minutes: Int) {
@@ -1010,71 +1064,109 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         PrayerAlarmScheduler.scheduleAllPrayers(getApplication())
     }
 
+    /**
+     * Every preference this app has, back to its default.
+     *
+     * **Through the repository, one setting at a time.** The last three lines used to
+     * be a single `copy()` into the UI state, so the settings screen showed the
+     * defaults and the *storage* kept the old values - which is the shape of bug a
+     * reader cannot see coming and cannot undo: a reader who had silenced everything
+     * and pressed "Reset all settings" was told they were back to defaults, and heard
+     * a full adhan again on the next cold start.
+     *
+     * It is also the reason a "reset" is worth being complete about: a preference
+     * with no line here is one the button does not reset, silently. Each is spelled
+     * out rather than derived from a table, so adding a preference without a reset is
+     * a visible omission rather than an invisible one.
+     */
     fun resetAllSettings() {
+        // Prayer calculation.
         setCalculationMethod(CalculationMethod.MOROCCO_MINISTRY)
         setMadhhab(Madhhab.STANDARD)
         setAdjustments(PrayerAdjustments())
         setHijriAdjustment(0)
+
+        // Alerts. Each of these re-arms the alarms, so the order does not matter and
+        // the last one wins the arming.
         setAdhanNotification(true)
         setPrePrayerAlert(true)
+        setPrePrayerOffsetMinutes(10)
+        setAdhanVolume(0.85f)
         setVibrateOnly(false)
+        defaultAlertModes.forEach { (prayer, mode) ->
+            repository.setPrayerAlertMode(prayer, mode)
+        }
+        repository.setGlobalSilentMode(false)
+        setAutoSilentDuringPrayerTo(false)
+        setAutoSilentDuration(20)
+        setAdhanSound("Makkah Al-Mukarramah")
+
+        // Display and interface.
         setTimeFormat24h(true)
         setAppTheme("System Default")
-        _uiState.value = _uiState.value.copy(
-            prePrayerOffsetMinutes = 10,
-            adhanVolume = 0.85f,
-            prayerAlertModes = mapOf(
-                Prayer.FAJR to "Full Adhan",
-                Prayer.DHUHR to "Full Adhan",
-                Prayer.ASR to "Full Adhan",
-                Prayer.MAGHRIB to "Full Adhan",
-                Prayer.ISHA to "Full Adhan",
-                Prayer.SUNRISE to "Silent Reminder"
-            )
-        )
+        setLanguage("English")
+        setQuranScript("Uthmani (Madani)")
+
+        // The Quran reader's own preferences, so a reset really does hand back a
+        // reader that looks and behaves the way it did on first run.
+        setQuranReadingOptions(QuranReadingOptions())
+        setQuranImmersive(false)
+
+        // Reciter and riwayah name an audio stream and a reading tradition. There is
+        // one of each in this app - the player streams from everyayah.com and the
+        // corpus is one text - so they reset to what is actually offered rather than
+        // being left as labels for nothing.
+        setReciter("Mishary Rashid Alafasy")
+        setRiwayah("Hafs 'an 'Asim")
+
+        // Location and the reader's place are deliberately **not** reset.
+        //
+        // They are the reader's, not a preference: a reset that moved a reader to
+        // Mecca, or to page 1 of wherever they had been reading, would be a surprise
+        // with no undo. It is also why the confirmation names what is kept.
+
         recalculateAll()
     }
 
     // Quran actions
     //
-    // Every way of going somewhere in the Quran ends in [selectPlace], which takes
-    // the one reference type. The reader, the index sheet, Continue Reading and a
-    // restored session all arrive as a `(surah, ayah, page)` and are therefore
-    // incapable of disagreeing about where "here" is - which is the failure that
-    // produced a page indicator that did not match the page.
+    // Everything that wants the reader somewhere arrives as a [QuranRef] and becomes
+    // `pendingOpen`. The Quran destination consumes it by handing it to
+    // `ReaderPosition.goTo`, and the reader's place is then `ReaderPosition.ref` and
+    // nothing else.
 
     /**
-     * Opens a surah at a verse.
+     * Asks for the reader to be put at [ref].
      *
-     * The ayah number is read once, here, when the reader asks to be *placed*. It is
-     * not published as state, because the reader does not read it: `ReaderPosition`
-     * owns the reader's place and holds it through rotation, and this is what seeds it
-     * on open.
+     * The one entry point for navigation into the book, and the only writer of
+     * [pendingOpen].
      *
-     * It used to also write `activeReadingAyahNumber`, which was read back as the
-     * reader's *initial* position - a write that fed a value consumed once, at first
-     * composition. A second anchor for "where the reader is", in a rebuild whose whole
-     * subject is that there must be one. `onAyahViewed` wrote it too, on the same code
-     * path, so it had two writers and neither could affect anything.
+     * The reference is resolved against the corpus here, so a request that names a
+     * verse which does not exist is dropped rather than seeding the reader with a
+     * position that resolves to nothing - which is what a bare `(surah, ayah)` pair
+     * from a stored row could do.
+     *
+     * It used to *be* the reader's place: `selectSurah` wrote `selectedSurah`,
+     * `currentSurahAyahs` and a `readingAyahHint` that the reader read only at first
+     * composition, while the reader wrote the same three back through a debounce.
+     * Two writers, a copy of a value owned by `ReaderPosition`, and no path from a
+     * request to the reader at all - so a surah picked from the index moved the pill
+     * and nothing else.
      */
-    fun selectSurah(surahNumber: Int, ayahNumber: Int = 1) {
-        val surah = QuranBrowse.surah(surahNumber) ?: QuranBrowse.surahs.first()
-        val ayahs = QuranBrowse.ayahsInSurah(surahNumber)
-        _uiState.value = _uiState.value.copy(
-            selectedSurah = surah,
-            currentSurahAyahs = ayahs,
-            readingAyahHint = ayahNumber.coerceIn(1, ayahs.size.coerceAtLeast(1))
-        )
+    fun requestOpen(ref: QuranRef) {
+        val resolved = QuranBrowse.ref(ref.surah, ref.ayah) ?: return
+        _uiState.value = _uiState.value.copy(pendingOpen = resolved)
     }
 
-    /** Moves to a reference, whatever asked. */
-    fun selectPlace(ref: QuranRef) = selectSurah(ref.surah, ref.ayah)
-
-    fun selectPage(pageNumber: Int) = selectPlace(QuranBrowse.placeAtPage(pageNumber).verse)
-
-    fun selectJuz(juzNumber: Int) = selectPlace(QuranBrowse.placeAtJuz(juzNumber).verse)
-
-    fun selectHizb(hizbNumber: Int) = selectPlace(QuranBrowse.placeAtHizb(hizbNumber).verse)
+    /**
+     * Asks for a surah, which is a request for its first verse.
+     *
+     * A surah's ayah 1 is the only verse that means "this surah" - so it is resolved
+     * through the same path as everything else rather than by a second convention.
+     */
+    fun requestOpenSurah(surahNumber: Int) {
+        requestOpen(QuranBrowse.ref(surahNumber, 1) ?: return)
+    }
 
     /**
      * The reader has settled on a verse; remember it for next time.
@@ -1122,17 +1214,30 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
     /** Back to today, whatever day is currently selected. */
     fun clearSelectedDate() = setSelectedDate(null)
 
+    /**
+     * Asks for the reader's last remembered place.
+     *
+     * A request like any other, and the reason it is one is now visible: this used to
+     * *be* the reader's place, in a state field the reader could not see. Pressing
+     * "Continue reading" on the Today page set `selectedSurah`, so the pill named the
+     * surah and the page stayed where it was.
+     */
     fun jumpToContinueReading() {
         val cr = _uiState.value.continueReading
-        selectSurah(cr.surahNumber, cr.ayahNumber)
+        requestOpen(QuranBrowse.ref(cr.surahNumber, cr.ayahNumber) ?: return)
     }
 
     fun toggleBookmark(ayah: Ayah) {
         viewModelScope.launch {
+            // The name comes from the verse, not from whatever surah the reader
+            // happens to have open. They are the same today; if they ever are not, a
+            // bookmark whose name contradicts its own reference is worse than one
+            // with no name.
+            val surah = QuranBrowse.surah(ayah.surahNumber)
             repository.toggleBookmark(
                 surahNumber = ayah.surahNumber,
                 ayahNumber = ayah.ayahNumber,
-                surahName = _uiState.value.selectedSurah.englishName,
+                surahName = surah?.englishName.orEmpty(),
                 snippet = ayah.textArabic
             )
         }
@@ -1140,18 +1245,20 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     // Audio Playback
     fun togglePlayAyah(ayah: Ayah) {
-        if (_uiState.value.isAudioPlaying && _uiState.value.currentAudioAyah == ayah.ayahNumber) {
+        val ref = ayah.ref
+        if (_uiState.value.isAudioPlaying && _uiState.value.currentAudioRef == ref) {
             audioPlayer.pause()
         } else {
+            _uiState.value = _uiState.value.copy(currentAudioRef = ref)
             audioPlayer.playAyah(ayah.surahNumber, ayah.ayahNumber) {
-                // Autoplay next ayah if available
-                val nextAyah = ayah.ayahNumber + 1
-                if (nextAyah <= _uiState.value.selectedSurah.totalVerses) {
-                    val next = _uiState.value.currentSurahAyahs.find { it.ayahNumber == nextAyah }
-                    if (next != null) {
-                        togglePlayAyah(next)
-                    }
-                }
+                // Autoplay the next ayah of **this verse's** surah.
+                //
+                // It used to walk `_uiState.currentSurahAyahs` and stop at
+                // `selectedSurah.totalVerses` - the surah the reader had *open*, which
+                // is not necessarily the surah being recited. Playing 114:6 would try
+                // to continue into a surah that was not being read.
+                QuranBrowse.ayah(ayah.surahNumber, ayah.ayahNumber + 1)
+                    ?.let { next -> togglePlayAyah(next) }
             }
         }
     }

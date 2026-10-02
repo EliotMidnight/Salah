@@ -22,8 +22,36 @@ enum class Prayer(
     DHUHR("Dhuhr", "الظهر", R.drawable.salah_times_dhuhr),
     ASR("Asr", "العصر", R.drawable.salah_times_asr),
     MAGHRIB("Maghrib", "المغرب", R.drawable.salah_times_maghrib),
-    ISHA("Isha", "العشاء", R.drawable.salah_times_isha)
+    ISHA("Isha", "العشاء", R.drawable.salah_times_isha);
+
+    /**
+     * What this prayer does on a fresh install, before the reader has ever chosen.
+     *
+     * A property of the *prayer*, so it is stated here rather than in the repository
+     * that stores the choice - and the answer was written in three places with two
+     * different values. The preference loader and the UI state's field initialiser
+     * both gave Sunrise a **silent reminder**; `PrayerAlertService`, which is what
+     * actually decides whether sound plays, defaulted every prayer to a **full
+     * adhan**. So a reader who had never opened the per-prayer sheet was told sunrise
+     * was silent, and heard a full call to prayer at sunrise.
+     *
+     * Sunrise is the exception because it is not a prayer - [isFard] says so, and has
+     * said so since the enum was written. A reader praying at sunrise is praying Asr,
+     * so an adhan there is wrong on its own terms and not merely loud.
+     */
+    val defaultAlertMode: String
+        get() = if (this == SUNRISE) ALERT_MODE_REMINDER else ALERT_MODE_FULL
 }
+
+/** A full adhan: the call to prayer, with its takbir. */
+const val ALERT_MODE_FULL = "Full Adhan"
+
+/** A silent reminder: the notification, no call. */
+const val ALERT_MODE_REMINDER = "Silent Reminder"
+
+/** Every prayer's default, which is also what "reset all settings" restores. */
+val defaultAlertModes: Map<Prayer, String>
+    get() = Prayer.entries.associateWith { it.defaultAlertMode }
 
 /**
  * One prayer's time.
@@ -38,16 +66,20 @@ enum class Prayer(
  * moved on. Two tabs, two answers.
  *
  * "Which prayer is next" is a live reading. It lives in the ViewModel's one-second
- * ticker, as `nextPrayer` and `previousPrayer`, and screens ask it there. Note that
- * `isCompleted` *is* kept here, because it is not a reading of the clock - it is the
- * reader's own tick, stored per day, and it is the same fact on every screen by
- * construction because there is only one copy of it.
+ * ticker, as `nextPrayer` and `previousPrayer`, and screens ask it there.
+ *
+ * `isCompleted` was also here, with a KDoc arguing that it was safe because it "is not
+ * a reading of the clock". It was, in effect, the same mistake one field over: nothing
+ * ever set it, so it was permanently `false`, and nothing read it, so its value was
+ * never observed. The argument was about *which* clock it read and the problem was
+ * that no clock read it. The reader's own per-day tick is `PrayerLogEntity`, which is
+ * written; a field on a `PrayerTime` is not, and would go stale the moment a day were
+ * recalculated - which is what its neighbours used to do.
  */
 data class PrayerTime(
     val prayer: Prayer,
     val time: LocalTime,
-    val dateTime: LocalDateTime,
-    val isCompleted: Boolean = false
+    val dateTime: LocalDateTime
 )
 
 data class PrayerTimesDay(

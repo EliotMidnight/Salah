@@ -95,11 +95,30 @@ internal fun MushafPage(
     selected: QuranRef?,
     ink: Color,
     accent: Color,
-    onSelectVerse: (Int) -> Unit,
+    /**
+     * A verse on this page was selected, as a **complete reference**.
+     *
+     * A complete reference, and not an ayah number, because a page can hold more
+     * than one surah - 51 of the 604 do - so an ayah number is not enough to say
+     * which verse was tapped. This used to take an `Int` and the caller rebuilt the
+     * reference from the page's *first* surah, which meant that on every one of
+     * those 51 pages, any verse after a surah boundary resolved into the previous
+     * surah: no highlight appeared, the action bar showed a different verse's
+     * translation, and bookmarking saved the wrong reference. **523 verses** were
+     * unreachable by tap.
+     *
+     * The same loss hit the accessibility actions below, which announced the right
+     * `surah:ayah` and then acted on the wrong one - so a screen-reader user was
+     * told one verse and got another.
+     *
+     * [VerseSpan] already carries both numbers, and `MushafPageText` is the only
+     * place that knows which span a tap fell in, so the reference is assembled
+     * there and never reconstructed from a partial one.
+     */
+    onSelectVerse: (QuranRef) -> Unit,
     /** A page turn, for the accessibility action that has no gesture to hang on. */
     onTurn: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
-    onOverflowChange: (Boolean) -> Unit = {},
     /**
      * Space reserved at the top of the surface for the reader's floating chrome.
      *
@@ -196,12 +215,6 @@ internal fun MushafPage(
         }
     }
     val fitScale = fit.scale
-
-    // The reader is told, rather than left to work it out from a page that will not
-    // fit. Through `rememberUpdatedState`, because the effect is keyed on the flag
-    // and would otherwise call a lambda captured in an older composition.
-    val reportOverflow by rememberUpdatedState(onOverflowChange)
-    LaunchedEffect(fit.needsScroll) { reportOverflow(fit.needsScroll) }
 
     // **Pass two**: the text at the scale the fit chose.
     //
@@ -300,7 +313,7 @@ internal fun MushafPage(
                                     result.getOffsetForPosition(inText)
                                 }.getOrNull() ?: return@detectTapGestures
                                 drawn.verseAt(offset)?.let { verse ->
-                                    onSelectVerse(verse.ayahNumber)
+                                    onSelectVerse(verse.ref)
                                 }
                             }
                         }
@@ -343,13 +356,18 @@ internal fun MushafPage(
                                 // the verses are reachable as numbered actions.
                                 // Without them a reader who has been told "page 604,
                                 // verses 112:1 to 114:6" has no way to act on any.
+                                //
+                                // The label and the effect are built from the same
+                                // `Ayah`, which they were not before: the action
+                                // announced `112:1` and then selected ayah 1 of
+                                // whatever surah the page opened in.
                                 ayahs.forEach { ayah ->
                                     add(
                                         CustomAccessibilityAction(
                                             "${strings.more.selectVerse} " +
                                                 "${ayah.surahNumber}:${ayah.ayahNumber}"
                                         ) {
-                                            onSelectVerse(ayah.ayahNumber)
+                                            onSelectVerse(ayah.ref)
                                             true
                                         }
                                     )

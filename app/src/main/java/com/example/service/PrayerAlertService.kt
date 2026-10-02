@@ -29,7 +29,7 @@ class PrayerAlertService : Service() {
         const val ACTION_STOP_ALERT = "com.example.salah.service.STOP_ALERT"
 
         const val EXTRA_PRAYER_NAME = "EXTRA_PRAYER_NAME"
-        const val EXTRA_TIME_FORMATTED = "EXTRA_TIME_FORMATTED"
+        const val EXTRA_PRAYER_TIME = "EXTRA_PRAYER_TIME"
         const val EXTRA_IS_PRE_PRAYER = "EXTRA_IS_PRE_PRAYER"
         const val EXTRA_OFFSET_MINS = "EXTRA_OFFSET_MINS"
         const val FOREGROUND_NOTIFICATION_ID = 4100
@@ -37,14 +37,14 @@ class PrayerAlertService : Service() {
         fun startAlert(
             context: Context,
             prayer: Prayer,
-            timeFormatted: String,
+            prayerTime: String,
             isPrePrayer: Boolean = false,
             offsetMinutes: Int = 10
         ) {
             val intent = Intent(context, PrayerAlertService::class.java).apply {
                 action = ACTION_PLAY_ALERT
                 putExtra(EXTRA_PRAYER_NAME, prayer.name)
-                putExtra(EXTRA_TIME_FORMATTED, timeFormatted)
+                putExtra(EXTRA_PRAYER_TIME, prayerTime)
                 putExtra(EXTRA_IS_PRE_PRAYER, isPrePrayer)
                 putExtra(EXTRA_OFFSET_MINS, offsetMinutes)
             }
@@ -107,7 +107,7 @@ class PrayerAlertService : Service() {
         }
 
         val prayerName = intent.getStringExtra(EXTRA_PRAYER_NAME) ?: return
-        val timeFormatted = intent.getStringExtra(EXTRA_TIME_FORMATTED) ?: ""
+        val prayerTime = intent.getStringExtra(EXTRA_PRAYER_TIME) ?: ""
         val isPrePrayer = intent.getBooleanExtra(EXTRA_IS_PRE_PRAYER, false)
         val offsetMins = intent.getIntExtra(EXTRA_OFFSET_MINS, 10)
 
@@ -125,7 +125,14 @@ class PrayerAlertService : Service() {
         val prePrayerEnabled = prefs.getBoolean("pref_pre_prayer", true)
         val adhanSound = prefs.getString("pref_adhan_sound", "Makkah Al-Mukarramah") ?: "Makkah Al-Mukarramah"
         val adhanVolume = prefs.getFloat("pref_adhan_volume", 0.85f)
-        val alertMode = prefs.getString("pref_alert_mode_${prayer.name}", "Full Adhan") ?: "Full Adhan"
+        // [Prayer.defaultAlertMode], not a literal. This used to say "Full Adhan" for
+        // every prayer while the Settings screen said Sunrise gets a silent reminder -
+        // so a reader who had never opened the per-prayer sheet heard a full adhan at
+        // sunrise, against what the app had told them.
+        val alertMode = prefs.getString(
+            "pref_alert_mode_${prayer.name}",
+            prayer.defaultAlertMode
+        ) ?: prayer.defaultAlertMode
         val autoSilentDuringPrayer = prefs.getBoolean("pref_auto_silent_during_prayer", false)
         val autoSilentDuration = prefs.getInt("pref_auto_silent_duration", 20)
 
@@ -139,7 +146,7 @@ class PrayerAlertService : Service() {
                 PrayerNotificationManager.showPrePrayerNotification(
                     context = this,
                     prayer = prayer,
-                    timeFormatted = timeFormatted,
+                    prayerTime = prayerTime,
                     offsetMinutes = offsetMins,
                     isGlobalSilent = isGlobalSilent
                 )
@@ -160,7 +167,7 @@ class PrayerAlertService : Service() {
         PrayerNotificationManager.showAdhanNotification(
             context = this,
             prayer = prayer,
-            timeFormatted = timeFormatted,
+            prayerTime = prayerTime,
             alertMode = alertMode,
             isGlobalSilent = isGlobalSilent,
             isVibrateOnly = isVibrateOnly

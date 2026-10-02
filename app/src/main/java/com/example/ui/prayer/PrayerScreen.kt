@@ -48,6 +48,7 @@ import com.example.engine.HijriCalendarEngine
 import com.example.engine.PrayerCalculationEngine
 import com.example.ui.SalahUiState
 import com.example.ui.components.ActionRow
+import com.example.ui.settings.appliedAdjustments
 import com.example.ui.components.DetailList
 import com.example.ui.components.StatusDot
 import com.example.ui.components.OptionRow
@@ -311,15 +312,10 @@ fun PrayerScreen(
                             }"
                         },
                         strings.more.madhhabLabelShort to "${state.madhhab.title} (${state.madhhab.shadowFactor}x)",
-                        strings.more.appliedAdjustments to listOf(
-                            Prayer.FAJR to state.adjustments.fajr,
-                            Prayer.DHUHR to state.adjustments.dhuhr,
-                            Prayer.ASR to state.adjustments.asr,
-                            Prayer.MAGHRIB to state.adjustments.maghrib,
-                            Prayer.ISHA to state.adjustments.isha
-                        ).joinToString(", ") { (prayer, minutes) ->
-                            "${strings.prayerName(prayer)} ${signed(minutes)}"
-                        },
+                        strings.more.appliedAdjustments to appliedAdjustments(state.adjustments)
+                            .joinToString(", ") { (prayer, minutes) ->
+                                "${strings.prayerName(prayer)} ${signed(minutes)}"
+                            },
                         strings.offlineStatus to strings.more.computedOnDevice
                     ),
                     modifier = Modifier.padding(space.lg)

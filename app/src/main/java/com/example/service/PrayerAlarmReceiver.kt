@@ -25,7 +25,7 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         const val ACTION_MIDNIGHT_RESCHEDULE = "com.example.salah.ACTION_MIDNIGHT_RESCHEDULE"
 
         const val EXTRA_PRAYER_NAME = "EXTRA_PRAYER_NAME"
-        const val EXTRA_TIME_FORMATTED = "EXTRA_TIME_FORMATTED"
+        const val EXTRA_PRAYER_TIME = "EXTRA_PRAYER_TIME"
         const val EXTRA_OFFSET_MINUTES = "EXTRA_OFFSET_MINUTES"
     }
 
@@ -44,27 +44,27 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
 
             ACTION_PRAYER_ALARM -> {
                 val prayerName = intent.getStringExtra(EXTRA_PRAYER_NAME) ?: return
-                val timeFormatted = intent.getStringExtra(EXTRA_TIME_FORMATTED) ?: ""
+                val prayerTime = intent.getStringExtra(EXTRA_PRAYER_TIME) ?: ""
                 val prayer = try { Prayer.valueOf(prayerName) } catch (_: Exception) { return }
 
                 PrayerAlertService.startAlert(
                     context = context,
                     prayer = prayer,
-                    timeFormatted = timeFormatted,
+                    prayerTime = prayerTime,
                     isPrePrayer = false
                 )
             }
 
             ACTION_PRE_PRAYER_ALARM -> {
                 val prayerName = intent.getStringExtra(EXTRA_PRAYER_NAME) ?: return
-                val timeFormatted = intent.getStringExtra(EXTRA_TIME_FORMATTED) ?: ""
+                val prayerTime = intent.getStringExtra(EXTRA_PRAYER_TIME) ?: ""
                 val offset = intent.getIntExtra(EXTRA_OFFSET_MINUTES, 10)
                 val prayer = try { Prayer.valueOf(prayerName) } catch (_: Exception) { return }
 
                 PrayerAlertService.startAlert(
                     context = context,
                     prayer = prayer,
-                    timeFormatted = timeFormatted,
+                    prayerTime = prayerTime,
                     isPrePrayer = true,
                     offsetMinutes = offset
                 )

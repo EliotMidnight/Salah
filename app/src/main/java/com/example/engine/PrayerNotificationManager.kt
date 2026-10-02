@@ -12,12 +12,59 @@ import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.data.model.Prayer
 import com.example.service.PrayerAlarmReceiver
+import kotlin.math.roundToInt
 
 object PrayerNotificationManager {
 
     const val CHANNEL_ADHAN = "salah_adhan_channel"
     const val CHANNEL_PRE_PRAYER = "salah_pre_prayer_channel"
     const val CHANNEL_SILENT = "salah_silent_channel"
+
+    /**
+     * A bearing in whole degrees, as a reader reads it.
+     *
+     * One function because the number was rendered three ways on one screen: the
+     * header used `%.0f` and the readout directly below it used `toInt()`. Those
+     * are not the same operation - one rounds, one truncates - so a Qibla bearing of
+     * 95.7 printed **96°** at the top of the screen and **95°** below it, on the same
+     * reading, at the same moment.
+     *
+     * Rounded rather than truncated, because a bearing is a direction and a direction
+     * has no half-degree meaning: 95.7 *is* 96 degrees to the nearest degree, and
+     * printing 95 would be reporting a direction the reader is not facing.
+     */
+    fun formatBearing(degrees: Float): String = "${degrees.roundToInt()}°"
+
+    /**
+     * A carried prayer time, as the reader should see it.
+     *
+     * The one place a prayer time is rendered for a notification, and the reason it
+     * exists is that the *other* place used to be the alarm scheduler - which
+     * formatted at the moment the alarm was armed. Toggling 12h/24h in Settings then
+     * changed the app instantly and left every already-armed notification in the old
+     * format, because `setTimeFormat24h` was the only preference setter that did not
+     * re-arm the alarms. A reader who switched would see "Fajr - begins at 5:12 PM"
+     * beside an app reading 17:12, and it would stay wrong until a reboot.
+     *
+     * The alarm carries a [com.example.service.PRAYER_TIME_FORMAT] wall clock and the
+     * preference is read *here*, when the notification is built. So the format a
+     * reader chose is the format they get, with nothing to re-arm.
+     *
+     * Falls back to the carried string rather than to an empty one, so a malformed
+     * value degrades to a slightly odd time rather than to a notification claiming a
+     * prayer begins at nothing.
+     */
+    fun formatPrayerTime(context: Context, prayerTime: String): String {
+        val is24h = context
+            .getSharedPreferences("salah_prefs", Context.MODE_PRIVATE)
+            .getBoolean("pref_time_format_24h", true)
+        val pattern = if (is24h) "HH:mm" else "h:mm a"
+        return runCatching {
+            java.time.LocalTime.parse(prayerTime).format(
+                java.time.format.DateTimeFormatter.ofPattern(pattern)
+            )
+        }.getOrDefault(prayerTime)
+    }
 
     fun initChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -75,13 +122,16 @@ object PrayerNotificationManager {
     fun showAdhanNotification(
         context: Context,
         prayer: Prayer,
-        timeFormatted: String,
+        prayerTime: String,
         alertMode: String = "Full Adhan",
         isGlobalSilent: Boolean = false,
         isVibrateOnly: Boolean = false
     ) {
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        // Shown, not carried: the reader's 12/24-hour choice, read now.
+        val shown = formatPrayerTime(context, prayerTime)
 
         // Content intent: open app
         val contentIntent = Intent(context, MainActivity::class.java).apply {
@@ -128,7 +178,7 @@ object PrayerNotificationManager {
             isVibrateOnly || alertMode.equals("Vibrate Only", ignoreCase = true) -> "Vibrate alert · ${prayer.englishName} has entered"
             alertMode.equals("Takbeer Only", ignoreCase = true) -> "Takbeer alert · Time for ${prayer.englishName}"
             alertMode.equals("Gentle Chime", ignoreCase = true) -> "Gentle Chime alert · Time for ${prayer.englishName}"
-            else -> "Time for ${prayer.englishName} prayer has arrived ($timeFormatted)"
+            else -> "Time for ${prayer.englishName} prayer has arrived ($shown)"
         }
 
         val builder = NotificationCompat.Builder(context, channelId)
@@ -137,7 +187,7 @@ object PrayerNotificationManager {
             .setContentText(statusText)
             .setStyle(
                 NotificationCompat.BigTextStyle()
-                    .bigText("$statusText\nEnter prayer and turn towards the Holy Kaaba ($timeFormatted).")
+                    .bigText("$statusText\nEnter prayer and turn towards the Holy Kaaba ($shown).")
             )
             .setPriority(if (isSilent) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
@@ -166,12 +216,14 @@ object PrayerNotificationManager {
     fun showPrePrayerNotification(
         context: Context,
         prayer: Prayer,
-        timeFormatted: String,
+        prayerTime: String,
         offsetMinutes: Int = 10,
         isGlobalSilent: Boolean = false
     ) {
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        val shown = formatPrayerTime(context, prayerTime)
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -188,7 +240,7 @@ object PrayerNotificationManager {
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.ic_menu_recent_history)
             .setContentTitle("${prayer.englishName} in $offsetMinutes minutes")
-            .setContentText("${prayer.englishName} begins at $timeFormatted · Prepare for prayer")
+            .setContentText("${prayer.englishName} begins at $shown · Prepare for prayer")
             .setPriority(if (isGlobalSilent) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)

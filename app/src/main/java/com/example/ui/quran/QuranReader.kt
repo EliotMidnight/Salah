@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,7 +62,6 @@ import com.example.ui.quran.gesture.readerPinch
 import com.example.ui.quran.reader.ContinuousReader
 import com.example.ui.quran.reader.MushafPager
 import com.example.ui.quran.reader.ReaderPosition
-import com.example.ui.quran.reader.rememberReaderPosition
 import com.example.ui.theme.IconSize
 import com.example.ui.theme.Motion
 import com.example.ui.theme.QuranFonts
@@ -82,9 +82,9 @@ import com.example.ui.theme.layoutMetrics
  *
  * This composable owns exactly three things: the paper, the chrome, and the choice
  * between the two reading surfaces. It does not own position - [ReaderPosition]
- * does - and it does not own how a page is fitted or how a verse is drawn. Each of
- * those was three or four intertwined copies of itself in the previous version, and
- * each is now one thing with a test.
+ * does, and the Quran *destination* owns that - and it does not own how a page is
+ * fitted or how a verse is drawn. Each of those was three or four intertwined
+ * copies of itself in the previous version, and each is now one thing with a test.
  *
  * ### What is deliberately absent
  *
@@ -95,8 +95,16 @@ import com.example.ui.theme.layoutMetrics
 @Composable
 fun QuranReader(
     state: SalahUiState,
-    onSelectSurahAyah: (Int, Int) -> Unit,
-    onAyahViewed: (Ayah) -> Unit,
+    /**
+     * The reader's place, owned by the Quran destination.
+     *
+     * A parameter, and not something created here. It used to be created here, which
+     * meant nothing outside this composable could move the reader: the index sheet
+     * sits above this surface, and the ViewModel's copy of the position could not
+     * reach it, so a surah chosen from the index changed the name in the pill and
+     * left the page where it was. See [com.example.ui.quran.QuranScreen].
+     */
+    position: ReaderPosition,
     onToggleBookmark: (Ayah) -> Unit,
     onTogglePlayAyah: (Ayah) -> Unit,
     onStopAudio: () -> Unit,
@@ -118,21 +126,13 @@ fun QuranReader(
     val accent = MaterialTheme.colorScheme.primary
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
 
-    val surah = state.selectedSurah
-    val ayahs = state.currentSurahAyahs
-
-    // **The position**, and the one debounced writer of the persisted position.
+    val surah = QuranBrowse.surah(position.surah) ?: QuranBrowse.surahs.first()
+    // The surah's verses, derived from the position.
     //
-    // The previous reader had three numbers that all meant "where am I" and three
-    // writers, and they overwrote each other. See `ReaderPosition` for the specific
-    // damage that produced.
-    val position = rememberReaderPosition(
-        initial = QuranBrowse.refOrStart(surah.number, state.readingAyahHint),
-        onPosition = { ref ->
-            onSelectSurahAyah(ref.surah, ref.ayah)
-            QuranBrowse.ayah(ref.surah, ref.ayah)?.let(onAyahViewed)
-        }
-    )
+    // They used to come from the UI state, which held a copy of the reader's surah
+    // that the reader could not see - so the text under the reader and the page the
+    // pill reported were two different answers, and the index could not move either.
+    val ayahs = remember(position.surah) { QuranBrowse.ayahsInSurah(position.surah) }
 
     // A layout change drops the magnification.
     //
@@ -165,10 +165,10 @@ fun QuranReader(
                 .testTag("quran_reader")
         ) {
             if (ayahs.isEmpty()) {
-                // The first frame on launch, because `currentSurahAyahs` starts
-                // empty - and also what a reader would stare at forever if the corpus
-                // ever failed to produce verses. A bare "Loading" with no message and
-                // no way out covered both.
+                // What a reader would stare at forever if the corpus ever failed to
+                // produce verses for the surah the position names - which is the one
+                // case where a bare "Loading" with no way out is the right thing to
+                // show, and the only one.
                 EmptyState(
                     title = strings.more.loading,
                     message = strings.more.loadingQuranMessage,
@@ -180,8 +180,12 @@ fun QuranReader(
                     VerseActions(
                         ayah = ayah,
                         isBookmarked = state.isBookmarked(ayah),
+                        // A whole reference, so "is this the playing verse" is
+                        // exact. It was an ayah number alone, which is true of three
+                        // different ayah-1s on the last page and of any ayah number
+                        // on a page the pager happens to have composed.
                         isPlaying = state.isAudioPlaying &&
-                            state.currentAudioAyah == ayah.ayahNumber,
+                            state.currentAudioRef == ayah.ref,
                         onToggleBookmark = { onToggleBookmark(ayah) },
                         onTogglePlay = { onTogglePlayAyah(ayah) }
                     )
@@ -306,8 +310,14 @@ fun QuranReader(
 
             if (state.isAudioPlaying) {
                 AudioStrip(
-                    surahName = QuranBrowse.surah(surah.number)?.englishName.orEmpty(),
-                    ayahNumber = state.currentAudioAyah,
+                    // From the *playing* reference, not from the reader's surah. The
+                    // strip says what is being recited, and the reader may have
+                    // navigated elsewhere while it plays - in which case the surah
+                    // the text is in and the surah being recited are two different
+                    // answers and the strip must be reporting the audio's.
+                    surahName = QuranBrowse.surah(state.currentAudioRef.surah)
+                        ?.englishName.orEmpty(),
+                    ayahNumber = state.currentAudioRef.ayah,
                     reciter = state.reciter,
                     onStop = onStopAudio,
                     modifier = Modifier

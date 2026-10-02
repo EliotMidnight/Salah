@@ -131,12 +131,13 @@ class SalahRepository(
     private val _prayerAlertModesFlow = MutableStateFlow(loadPrayerAlertModes())
     val prayerAlertModesFlow: StateFlow<Map<Prayer, String>> = _prayerAlertModesFlow.asStateFlow()
 
-    private fun loadPrayerAlertModes(): Map<Prayer, String> {
-        return Prayer.entries.associateWith { prayer ->
-            val defaultMode = if (prayer == Prayer.SUNRISE) "Silent Reminder" else "Full Adhan"
-            prefs.getString("pref_alert_mode_${prayer.name}", defaultMode) ?: defaultMode
+    private fun loadPrayerAlertModes(): Map<Prayer, String> =
+        Prayer.entries.associateWith { prayer ->
+            // [Prayer.defaultAlertMode] - see there for why this is a property of
+            // the prayer and not of the storage that records the choice.
+            prefs.getString("pref_alert_mode_${prayer.name}", prayer.defaultAlertMode)
+                ?: prayer.defaultAlertMode
         }
-    }
 
     val locationService = AppLocationService(context)
     val cachedLocationDbFlow: Flow<CachedLocationEntity?> = dao.getCachedLocation()

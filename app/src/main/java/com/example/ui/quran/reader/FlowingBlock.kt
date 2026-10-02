@@ -137,8 +137,21 @@ internal fun FlowingBlock(
                             result.getOffsetForPosition(inText)
                         }.getOrNull() ?: return@detectTapGestures
                         val span = block.verseAt(offset) ?: return@detectTapGestures
-                        ayahs.firstOrNull { it.ayahNumber == span.ayahNumber }
-                            ?.let(onSelectVerse)
+                        // Matched on **both** numbers, not the ayah number alone.
+                        //
+                        // A block is twelve verses and is allowed to cross a surah
+                        // boundary - 2:285 and 3:1 can share one - so an ayah number
+                        // is not unique within the list. Today the longest such
+                        // overlap is unreachable, because two surahs would have to
+                        // contribute the same ayah number inside twelve verses, and
+                        // the closest pair is 111 verses apart. So this is a trap
+                        // rather than a live bug, and it is a trap in the direction
+                        // that produced 523 unselectable verses elsewhere in this
+                        // module: an identity that looks unique and is not.
+                        ayahs.firstOrNull {
+                            it.surahNumber == span.surahNumber &&
+                                it.ayahNumber == span.ayahNumber
+                        }?.let(onSelectVerse)
                     }
                 }
                 .semantics {
@@ -148,7 +161,15 @@ internal fun FlowingBlock(
                     }.orEmpty()
                     customActions = ayahs.map { ayah ->
                         CustomAccessibilityAction(
-                            "${strings.more.selectVerse} ${ayah.ayahNumber}"
+                            // The *same* identity the mushaf page announces, and for
+                            // the same reason. This used to say only the ayah number
+                            // while acting on the whole verse, so a screen-reader user
+                            // choosing between two blocks heard "Select 3" and "Select
+                            // 3" and could not tell which was which - and a block may
+                            // cross a surah boundary, where the number alone does not
+                            // name a verse.
+                            "${strings.more.selectVerse} " +
+                                "${ayah.surahNumber}:${ayah.ayahNumber}"
                         ) {
                             onSelectVerse(ayah)
                             true

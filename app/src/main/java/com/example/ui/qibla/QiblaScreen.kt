@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.example.engine.MagneticFieldStatus
 import com.example.engine.QiblaEngine
+import com.example.engine.PrayerNotificationManager
 import com.example.ui.SalahUiState
 import com.example.ui.components.BannerTone
 import com.example.ui.components.ConfirmDialog
@@ -142,7 +143,7 @@ private fun QiblaHeader(
         )
         Spacer(Modifier.height(space.xxs))
         Text(
-            text = String.format(java.util.Locale.getDefault(), "%.0f°", bearing),
+            text = PrayerNotificationManager.formatBearing(bearing),
             style = MaterialTheme.typography.displayMedium,
             color = if (isFacing) semantic.success else MaterialTheme.colorScheme.onSurface
         )
@@ -216,7 +217,7 @@ private fun SunReferenceSheet(state: SalahUiState, onDismiss: () -> Unit) {
             items = listOf(
                 strings.more.sunAzimuth to String.format(java.util.Locale.getDefault(), "%.1f°", sun.azimuth),
                 strings.more.sunAltitudeValue to String.format(java.util.Locale.getDefault(), "%.1f°", sun.altitude),
-                strings.more.qiblaBearing to String.format(java.util.Locale.getDefault(), "%.1f°", state.qiblaBearing)
+                strings.more.qiblaBearing to PrayerNotificationManager.formatBearing(state.qiblaBearing)
             )
         )
     }

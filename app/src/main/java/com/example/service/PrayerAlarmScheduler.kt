@@ -41,8 +41,22 @@ object PrayerAlarmScheduler {
                 val adhanEnabled = prefs.getBoolean("pref_adhan_notif", true)
                 val prePrayerEnabled = prefs.getBoolean("pref_pre_prayer", true)
                 val prePrayerOffset = prefs.getInt("pref_pre_prayer_offset", 10)
-                val is24h = prefs.getBoolean("pref_time_format_24h", true)
-                val timeFormatter = DateTimeFormatter.ofPattern(if (is24h) "HH:mm" else "h:mm a")
+                // The *carried* form, and deliberately not the displayed one.
+                //
+                // This used to format for display at arm time, so a reader who
+                // switched between 12 and 24 hour in Settings saw the app change
+                // instantly and the notification keep the old format until something
+                // else re-armed the alarms - a location change, a reboot, midnight.
+                // "Fajr - begins at 5:12 PM" beside an app reading 17:12.
+                //
+                // So the alarm carries a wall clock and the notification decides how
+                // to show it, from the preference as it is when the notification is
+                // built. That also means switching the format does not have to
+                // re-arm anything, which is why `setTimeFormat24h` does not.
+                val timeFormatter = DateTimeFormatter.ofPattern(
+                    PRAYER_TIME_FORMAT,
+                    java.util.Locale.ROOT
+                )
 
                 // Resolve location (cached Room DB or SharedPrefs fallback)
                 val db = SalahDatabase.getDatabase(appContext)
@@ -117,7 +131,7 @@ object PrayerAlarmScheduler {
                                 triggerEpochMs = targetEpochMs,
                                 action = PrayerAlarmReceiver.ACTION_PRAYER_ALARM,
                                 prayer = pt.prayer,
-                                timeFormatted = timeStr,
+                                prayerTime = timeStr,
                                 requestCode = getRequestCode(date, pt.prayer, isPrePrayer = false)
                             )
                         }
@@ -132,7 +146,7 @@ object PrayerAlarmScheduler {
                                     triggerEpochMs = prePrayerEpochMs,
                                     action = PrayerAlarmReceiver.ACTION_PRE_PRAYER_ALARM,
                                     prayer = pt.prayer,
-                                    timeFormatted = timeStr,
+                                    prayerTime = timeStr,
                                     offsetMinutes = prePrayerOffset,
                                     requestCode = getRequestCode(date, pt.prayer, isPrePrayer = true)
                                 )
@@ -154,14 +168,14 @@ object PrayerAlarmScheduler {
         triggerEpochMs: Long,
         action: String,
         prayer: Prayer,
-        timeFormatted: String,
+        prayerTime: String,
         offsetMinutes: Int = 10,
         requestCode: Int
     ) {
         val intent = Intent(context, PrayerAlarmReceiver::class.java).apply {
             this.action = action
             putExtra(PrayerAlarmReceiver.EXTRA_PRAYER_NAME, prayer.name)
-            putExtra(PrayerAlarmReceiver.EXTRA_TIME_FORMATTED, timeFormatted)
+            putExtra(PrayerAlarmReceiver.EXTRA_PRAYER_TIME, prayerTime)
             putExtra(PrayerAlarmReceiver.EXTRA_OFFSET_MINUTES, offsetMinutes)
         }
 
@@ -273,3 +287,14 @@ object PrayerAlarmScheduler {
         return dayIndex + prayerIndex + prePrayerOffset
     }
 }
+
+/**
+ * The wall-clock form a prayer time takes when it is carried in an alarm's `Intent`.
+ *
+ * 24-hour and locale-independent, so the string is a fact about the clock rather than
+ * about the device's locale: an Arabic or Urdu device with 12-hour switched on would
+ * otherwise put Eastern digits in here that [PrayerNotificationManager] then has to
+ * parse back. [PrayerNotificationManager.formatPrayerTime] is the only thing that
+ * turns this into something a reader reads.
+ */
+internal const val PRAYER_TIME_FORMAT = "HH:mm"

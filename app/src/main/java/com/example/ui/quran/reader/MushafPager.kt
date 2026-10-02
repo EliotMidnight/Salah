@@ -211,9 +211,20 @@ private fun PageAt(
     topInset: androidx.compose.ui.unit.Dp,
     onTurn: (Int) -> Unit
 ) {
-    // A page's own surah, needed to resolve a tap into a full reference - and a
-    // page can hold three surahs, so this cannot be read off the reader's position.
-    val firstSurah = QuranBrowse.ayahsOnPage(page).firstOrNull()?.surahNumber ?: return
+    // Nothing is resolved here.
+    //
+    // This used to read the page's *first* surah and rebuild every selected
+    // reference from it, on the reasoning that a page needs to know its own surah
+    // to turn a tap into a reference. A page does not have a single surah: 51 of
+    // the 604 hold more than one, and 523 verses sit after a boundary. For every
+    // one of them the reader got a reference into the previous surah - no
+    // highlight, an action bar showing someone else's translation, and a bookmark
+    // of the wrong verse.
+    //
+    // The page knows which span a tap fell in, and a span knows its own surah, so
+    // the reference is assembled there from the verse. There is nothing left for a
+    // caller to fill in, and so nothing left to get wrong.
+    if (QuranBrowse.ayahsOnPage(page).isEmpty()) return
 
     MushafPage(
         pageNumber = page,
@@ -225,9 +236,7 @@ private fun PageAt(
         selected = selected,
         ink = ink,
         accent = accent,
-        onSelectVerse = { ayahNumber ->
-            onSelectVerse(QuranRef(firstSurah, ayahNumber, page))
-        },
+        onSelectVerse = onSelectVerse,
         // The reader's one page turn, shared with the swipe. A second
         // implementation of "turn a page" is how the two end up disagreeing about
         // where the reader is - and about what happens at the ends of the book.

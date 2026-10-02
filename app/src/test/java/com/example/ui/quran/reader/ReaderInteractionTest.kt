@@ -429,13 +429,14 @@ class ReaderInteractionTest {
             SalahTheme {
                 ProvideAppLanguage(language = "English") {
                     QuranReader(
-                        state = SalahUiState(
-                            selectedSurah = surah,
-                            currentSurahAyahs = ayahs,
-                            quranReadingOptions = options
+                        state = SalahUiState(quranReadingOptions = options),
+                        position = ReaderPosition(
+                            com.example.data.model.QuranRef(
+                                surah.number,
+                                1,
+                                QuranBrowse.pageOf(surah.number, 1)
+                            )
                         ),
-                        onSelectSurahAyah = { _, _ -> },
-                        onAyahViewed = {},
                         onToggleBookmark = {},
                         onTogglePlayAyah = {},
                         onStopAudio = {},

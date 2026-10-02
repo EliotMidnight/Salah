@@ -308,9 +308,20 @@ internal fun VerseActionRow(
     }
 }
 
-/** Builds the text a copy or share puts on the clipboard. */
+/**
+ * The text a copy or share puts on the clipboard.
+ *
+ * **One ayah marker.** This wrote a literal `۝` *and* `ArabicDigits.ayahMarker(...)`,
+ * which is itself `۝` followed by the count - so the verse a reader copied or sent to
+ * someone else carried two ornaments and one number: `۝ ۝٤`. Every other surface in
+ * the app was fixed for exactly this and this one was missed, which is the argument
+ * for having it written in one place at all.
+ *
+ * A copied verse is the one piece of this app a reader hands to another person, so a
+ * doubled ornament is the most visible place the mistake could have landed.
+ */
 internal fun versePayload(ayah: Ayah): String =
-    "${ayah.textArabic} ۝${ArabicDigits.ayahMarker(ayah.ayahNumber)}\n\n" +
+    "${ayah.textArabic} ${ArabicDigits.ayahMarker(ayah.ayahNumber)}\n\n" +
         "\"${ayah.textEnglish}\"\n[${ayah.surahNumber}:${ayah.ayahNumber}]"
 
 internal fun copyVerse(

@@ -8,12 +8,14 @@ import com.example.data.model.QuranPaperTone
 import com.example.data.model.QuranPinchTarget
 import com.example.data.model.QuranReadingLayout
 import com.example.data.model.QuranReadingOptions
+import com.example.data.model.QuranRef
 import com.example.data.model.QuranScrollDirection
 import com.example.data.model.Surah
 import com.example.data.quran.QuranBrowse
 import com.example.ui.SalahUiState
 import com.example.ui.localization.ProvideAppLanguage
 import com.example.ui.quran.QuranReader
+import com.example.ui.quran.reader.ReaderPosition
 import com.example.ui.theme.SalahTheme
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -66,11 +68,7 @@ class QuranReaderScreenshotTest {
     private var ayahs: List<Ayah> = QuranBrowse.ayahsInSurah(surahNumber)
     private var ayahNumber = 1
 
-    private fun state(ayahNumber: Int = this.ayahNumber) = SalahUiState(
-        selectedSurah = surah,
-        currentSurahAyahs = ayahs,
-        readingAyahHint = ayahNumber
-    )
+    private fun state(ayahNumber: Int = this.ayahNumber) = SalahUiState()
 
     /**
      * Point the test at a different surah.
@@ -114,8 +112,18 @@ class QuranReaderScreenshotTest {
                 ProvideAppLanguage(language = language) {
                     QuranReader(
                         state = state(ayahNumber).copy(language = language),
-                        onSelectSurahAyah = { _, _ -> },
-                        onAyahViewed = {},
+                        // The position the destination would own, pointed at the surah
+                        // and verse under test. It used to be reached through three
+                        // state fields, which is why a screenshot could pin a surah and
+                        // a page without anything in the tree having a single "where am
+                        // I" to disagree with.
+                        position = ReaderPosition(
+                            QuranRef(
+                                surahNumber,
+                                ayahNumber,
+                                QuranBrowse.pageOf(surahNumber, ayahNumber)
+                            )
+                        ),
                         onToggleBookmark = {},
                         onTogglePlayAyah = {},
                         onStopAudio = {},
@@ -371,8 +379,13 @@ class QuranReaderScreenshotTest {
                 ProvideAppLanguage(language = "English") {
                     QuranReader(
                         state = state(),
-                        onSelectSurahAyah = { _, _ -> },
-                        onAyahViewed = {},
+                        position = ReaderPosition(
+                            QuranRef(
+                                surahNumber,
+                                ayahNumber,
+                                QuranBrowse.pageOf(surahNumber, ayahNumber)
+                            )
+                        ),
                         onToggleBookmark = {},
                         onTogglePlayAyah = {},
                         onStopAudio = {},
