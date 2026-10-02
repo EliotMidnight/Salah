@@ -87,6 +87,25 @@ app/src/main/resources/quran/  # Uthmani text, metadata, EN translation (see SOU
 app/src/test/                  # JVM + Robolectric suites, screenshot baselines
 ```
 
+### The Quran text is verified, not trusted
+
+Every bundled resource — `uthmani.txt`, `en_sahihintl.txt`, `metadata.xml` — is checked
+against a SHA-256 digest on load, and a mismatch throws rather than warning. That is the
+one place in the app that refuses to run instead of guessing: a swapped or truncated
+corpus would put words in a reader's mouth that are not in the Quran, and no amount of
+correct pagination makes that acceptable.
+
+`QuranResourceIntegrityTest` checks the *declared digests against the shipped files*, so
+editing an asset and forgetting its constant is a red build rather than an empty reader on
+every device that installs it. The hex is formatted with `Locale.ROOT`: a digest is ASCII
+by definition, and the check should depend on the bytes rather than on a formatting
+decision — the failure mode otherwise is the whole corpus, thrown from the first lazy
+access.
+
+Every other number in the app follows the device locale on purpose. The ayah marker does
+not: it is a typographic unit of the mushaf rather than a number in a sentence, so it
+carries Eastern Arabic-Indic digits in every language — see `ArabicDigits`.
+
 ## Data sources & attribution
 
 - Quran Arabic (Uthmani 1.1) and partition metadata: **Tanzil Project** (CC BY 3.0) — https://tanzil.net — see `app/src/main/resources/quran/SOURCES.md` for hashes and notices.
@@ -109,7 +128,7 @@ desktop session, a parallel Compose build gets OOM-killed, so it runs without
 parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
 JDK and memory for it.
 
-391 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
+395 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
 maths, search, prayer maths, Qibla bearing and guidance, localisation coverage,
 sky-text contrast) run on any host, including ARM64 Linux/Termux.
 

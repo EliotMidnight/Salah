@@ -5,6 +5,7 @@ import java.security.MessageDigest
 import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Element
 import org.w3c.dom.Node
+import java.util.Locale
 
 /**
  * The bundled corpus, loaded and verified exactly once.
@@ -65,12 +66,33 @@ internal object QuranCorpus {
     /** A verse as one integer, `surah * 1000 + ayah`. Order-preserving and exact. */
     fun reference(surah: Int, ayah: Int): Int = surah * 1000 + ayah
 
+    /**
+     * A bundled Quran resource, or a hard failure.
+     *
+     * **This is the one thing in the app that refuses to run rather than guess.** A
+     * swapped or truncated `uthmani.txt` would put words in a reader's mouth that are not
+     * in the Quran, and no amount of correct pagination or correct rendering makes that
+     * acceptable. So the digest is checked on every load and a mismatch throws.
+     *
+     * ### Why the hex is formatted with [Locale.ROOT]
+     *
+     * It is not about display. A digest is ASCII by definition, and formatting it with
+     * the device's locale means the *check* depends on a formatting decision rather
+     * than on the bytes. Java's `%x` happens to emit ASCII hex in every locale today; the
+     * cost of relying on that is that the failure mode is the whole corpus — a mismatch
+     * throws from the first `by lazy` access, so the reader opens empty — and the trigger
+     * would be a cosmetic locale change nobody was looking for.
+     *
+     * `Locale.ROOT` makes the check depend on the bytes and nothing else. Every other
+     * number in the app follows the device locale on purpose (see [ArabicDigits] for why
+     * the ayah marker does not); this one must not.
+     */
     private fun resource(name: String, hash: String): ByteArray {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/quran/$name")) {
             "Missing Quran resource: $name"
         }.use { it.readBytes() }
         val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
-            .joinToString("") { "%02x".format(it.toInt() and 255) }
+            .joinToString("") { String.format(Locale.ROOT, "%02x", it.toInt() and 255) }
         require(digest == hash) { "Quran resource integrity check failed: $name" }
         return bytes
     }
