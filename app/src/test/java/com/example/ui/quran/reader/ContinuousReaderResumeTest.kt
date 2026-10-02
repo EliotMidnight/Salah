@@ -222,6 +222,105 @@ class ContinuousReaderResumeTest {
         }
     }
 
+    @Test
+    fun `the block arithmetic is right for every verse of every surah`() {
+        // The resume position *is* this function, so one sampled surah at seven indices
+        // leaves the whole shape of the corpus untested: a surah shorter than a block, a
+        // surah whose last block is short, a surah whose verse count is an exact multiple
+        // of the block size. Those are the cases a divisor gets wrong, and each is a
+        // different wrong answer - too far, one past the end, or off by one block.
+        //
+        // 6,236 assertions, which is nothing, against a resume that silently lands a
+        // reader on a blank sheet.
+        for (surah in 1..114) {
+            val ayahs = QuranBrowse.ayahsInSurah(surah)
+            val blocks = ayahs.chunked(FLOW_BLOCK_VERSES)
+            val ranges = globalRangeOf(blocks)
+
+            for (verseIndex in ayahs.indices) {
+                val expected = verseIndex / FLOW_BLOCK_VERSES
+                assertEquals(
+                    "verse ${surah}:${ayahs[verseIndex].ayahNumber} (index " +
+                        "$verseIndex of ${ayahs.size}) resolved to the wrong block",
+                    expected,
+                    flowIndexOf(verseIndex, blocks)
+                )
+                assertTrue(
+                    "verse ${surah}:${ayahs[verseIndex].ayahNumber} resolved to a " +
+                        "block that does not contain it",
+                    verseIndex in ranges[flowIndexOf(verseIndex, blocks)]
+                )
+            }
+
+            // And the last verse of every surah lands in the *last* block rather than
+            // one past it, which is the case the counted arithmetic exists for.
+            if (ayahs.isNotEmpty()) {
+                assertEquals(
+                    "the last verse of surah $surah did not land in the last block",
+                    blocks.lastIndex,
+                    flowIndexOf(ayahs.lastIndex, blocks)
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `every surah shorter than one block is a single block`() {
+        // Derived from the corpus rather than listed, because a hand-written list of
+        // surah numbers is exactly the kind of fact that rots: the first version of this
+        // test named Al-Alaq as one of the shortest surahs, and it has nineteen verses.
+        val short = (1..114)
+            .map { it to QuranBrowse.ayahsInSurah(it) }
+            .filter { (_, ayahs) -> ayahs.size < FLOW_BLOCK_VERSES }
+
+        assertTrue(
+            "no surah in the book is shorter than a block, which cannot be right",
+            short.isNotEmpty()
+        )
+        assertEquals(
+            "Al-Kawthar is three verses and should be the shortest in the book",
+            3,
+            short.minOf { (_, ayahs) -> ayahs.size }
+        )
+
+        for ((number, ayahs) in short) {
+            val blocks = ayahs.chunked(FLOW_BLOCK_VERSES)
+            assertEquals(
+                "surah $number has ${ayahs.size} verses, which is fewer than a " +
+                    "block, so it must be one block and not ${blocks.size}",
+                1,
+                blocks.size
+            )
+            for (verseIndex in ayahs.indices) {
+                assertEquals(
+                    "verse $verseIndex of surah $number did not resolve to its only block",
+                    0,
+                    flowIndexOf(verseIndex, blocks)
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `an out-of-range index resolves to the last block rather than past the end`() {
+        // A `scrollToItem` past the end of a list is how a reader ends up looking at a
+        // blank sheet instead of at the text they asked for, so this is clamped rather
+        // than trusted.
+        val blocks = QuranBrowse.ayahsInSurah(2).chunked(FLOW_BLOCK_VERSES)
+        assertEquals(blocks.lastIndex, flowIndexOf(9_999, blocks))
+        assertEquals(blocks.lastIndex, flowIndexOf(Int.MAX_VALUE, blocks))
+        assertEquals(0, flowIndexOf(-1, blocks))
+        assertEquals(0, flowIndexOf(Int.MIN_VALUE, blocks))
+
+        val empty = emptyList<List<com.example.data.model.Ayah>>()
+        assertEquals(
+            "an empty flow resolved to something other than 0",
+            0,
+            flowIndexOf(0, empty)
+        )
+        assertEquals(0, flowIndexOf(7, empty))
+    }
+
     /**
      * Each block's verse indices in the surah's own numbering.
      *
