@@ -57,6 +57,8 @@ import com.example.ui.components.EmptyState
 import com.example.ui.components.OptionListSheet
 import com.example.ui.components.SearchInput
 import com.example.ui.localization.LocalStrings
+import com.example.ui.localization.isArabicInterface
+import com.example.ui.localization.LocalLanguage
 import com.example.ui.theme.ArabicFamily
 import com.example.ui.theme.QuranFonts
 import com.example.ui.theme.QuranShape
@@ -159,6 +161,9 @@ fun QuranIndexSheet(
         juzOf = strings.more.juzOf,
         surahsFound = strings.more.surahsFound,
         searchShowingFirst = strings.more.searchShowingFirst,
+        // The row shows both names whichever language the interface is in, so which one
+        // leads is a decision about the reader rather than about the data.
+        preferArabicName = isArabicInterface(LocalLanguage.current),
         versesFound = strings.more.versesFound,
         selected = strings.more.selected,
         notSelected = strings.more.notSelected,
@@ -402,9 +407,21 @@ internal fun SurahIndexRow(
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = surah.englishName,
+                // Which name leads is the reader's language, not the data's.
+                //
+                // The row shows both names either way — the English on one side, the
+                // Arabic on the other — and the prominent one used to be the English
+                // unconditionally. In an Arabic interface that made "Al-Fatihah" the
+                // headline of الفاتحة and demoted the name a reader is actually looking
+                // for to a quiet aside on the far edge.
+                //
+                // It is not only aesthetic: `searchSurahs` matches the Arabic name, so a
+                // reader who searched الفاتحة was handed a row whose largest text was
+                // not the thing they typed.
+                text = if (strings.preferArabicName) surah.arabicName else surah.englishName,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
+                fontFamily = if (strings.preferArabicName) ArabicFamily else null,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -432,9 +449,14 @@ internal fun SurahIndexRow(
         Spacer(Modifier.width(space.sm))
 
         Text(
-            text = surah.arabicName,
-            style = MaterialTheme.typography.titleLarge,
-            fontFamily = ArabicFamily,
+            // The other name, on the far side, quiet — so whichever leads, both are shown.
+            text = if (strings.preferArabicName) surah.englishName else surah.arabicName,
+            style = if (strings.preferArabicName) {
+                MaterialTheme.typography.titleMedium
+            } else {
+                MaterialTheme.typography.titleLarge
+            },
+            fontFamily = if (strings.preferArabicName) null else ArabicFamily,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             modifier = Modifier.clearAndSetSemantics { }
@@ -877,6 +899,7 @@ internal data class IndexLabels(
     val juzOf: String,
     val surahsFound: String,
     val searchShowingFirst: String,
+    val preferArabicName: Boolean,
     val versesFound: String,
     val selected: String,
     val notSelected: String,

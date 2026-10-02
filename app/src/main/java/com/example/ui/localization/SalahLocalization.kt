@@ -3751,6 +3751,21 @@ object LocalizationManager {
 
 val LocalStrings = staticCompositionLocalOf { EnglishStrings }
 
+/**
+ * The interface language, as the reader chose it.
+ *
+ * The third answer to the same question, and the one that was missing. "Which language
+ * is this interface in?" was answerable only by comparing strings against all ten
+ * bundles, or — for a decision about *which of two languages already on screen* is the
+ * one the reader is reading — not at all.
+ *
+ * [LocalStrings] cannot answer it. It has already been used to produce the strings and
+ * does not know which bundle they came from, and a reader who has chosen Arabic is still
+ * looking at the Quran's Arabic, an English translation, an English surah name and a
+ * romanisation of it. Picking between those needs the language, not the strings.
+ */
+val LocalLanguage = staticCompositionLocalOf { "English" }
+
 val UiStrings.navPrayers: String
     get() = navPrayer
 
@@ -3844,7 +3859,8 @@ fun ProvideAppLanguage(language: String, content: @Composable () -> Unit) {
     }
     CompositionLocalProvider(
         LocalStrings provides strings,
-        LocalLayoutDirection provides direction
+        LocalLayoutDirection provides direction,
+        LocalLanguage provides language
     ) {
         content()
     }

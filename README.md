@@ -87,6 +87,29 @@ app/src/main/resources/quran/  # Uthmani text, metadata, EN translation (see SOU
 app/src/test/                  # JVM + Robolectric suites, screenshot baselines
 ```
 
+### The surah index led with the romanisation, in every language
+
+Every row in the surah index showed the **English** name as its prominent line and the
+surah's Arabic name on the far side, small and quiet — in every language. In an Arabic
+interface that made "Al-Fatihah" the headline of الفاتحة.
+
+It was not only which line was loudest. **`QuranSearch.searchSurahs` matches the Arabic
+name**, so a reader who searched الفاتحة was handed a row whose largest text was not the
+thing they had typed: search and result disagreed about which name a surah has.
+
+The row now shows both names whichever way round they are, and the prominent one follows
+the interface. Urdu does **not** promote the Arabic name — its interface is in
+Perso-Arabic script, but the surah names this app carries are in Arabic, and promoting
+them for an Urdu reader would be a claim about a language the row cannot render. The
+English *meaning* ("The Opener") has no equivalent in the bundle and stays where it is
+rather than being invented.
+
+Deciding it needed a new CompositionLocal. `LocalStrings` cannot answer "which language is
+this interface in?" — by the time a composable reads it the strings have been produced
+and the bundle they came from is gone. The question is real *because* the interface
+language is not the only language on screen, so `LocalLanguage` sits beside
+`LocalStrings` and `LocalLayoutDirection` as the third answer to the same question.
+
 ### The Quran text is verified, not trusted
 
 Every bundled resource — `uthmani.txt`, `en_sahihintl.txt`, `metadata.xml` — is checked
@@ -128,7 +151,7 @@ desktop session, a parallel Compose build gets OOM-killed, so it runs without
 parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
 JDK and memory for it.
 
-404 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
+407 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
 maths, search, prayer maths, Qibla bearing and guidance, localisation coverage,
 sky-text contrast) run on any host, including ARM64 Linux/Termux.
 
