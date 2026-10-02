@@ -356,15 +356,13 @@ private fun SalahApp(viewModel: SalahViewModel) {
                         onAdhanSoundSelect = viewModel::setAdhanSound,
                         onHijriAdjustmentChange = viewModel::setHijriAdjustment,
                         onReciterSelect = viewModel::setReciter,
-                        onRefreshClick = viewModel::refreshData,
                         onPrePrayerOffsetChange = viewModel::setPrePrayerOffsetMinutes,
                         onAdhanVolumeChange = viewModel::setAdhanVolume,
                         onPrayerAlertModeChange = viewModel::setPrayerAlertMode,
                         onPlayAudioPreview = viewModel::playAudioPreview,
                         onStopAudioPreview = viewModel::stopAudioPreview,
                         onCustomLocationSave = viewModel::setCustomLocation,
-                        onTranslationSelect = viewModel::setTranslationEdition,
-                        onRecomputeEphemerisCache = viewModel::recomputeEphemerisCache,
+                        onReschedulePrayers = viewModel::reschedulePrayers,
                         onResetAllSettings = viewModel::resetAllSettings,
                     )
                 }

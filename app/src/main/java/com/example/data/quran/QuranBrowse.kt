@@ -51,6 +51,15 @@ object QuranBrowse {
     const val TOTAL_SURAHS = QuranCorpus.SURA_COUNT
     const val TOTAL_VERSES = QuranCorpus.VERSE_COUNT
 
+    /**
+     * The translation every verse's English text comes from.
+     *
+     * Re-exported for the same reason as [SajdaKind]: the edition is part of what
+     * the reader is reading, so it belongs on the public surface rather than
+     * something a screen reaches past this facade to find.
+     */
+    const val TRANSLATION_EDITION = QuranCorpus.TRANSLATION_EDITION
+
     /** Every verse, in canonical order. */
     val ayahs: List<Ayah> get() = QuranCorpus.ayahs
 

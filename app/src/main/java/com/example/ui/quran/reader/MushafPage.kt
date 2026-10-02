@@ -133,7 +133,10 @@ internal fun MushafPage(
     // here rather than trusting the layout to clear it is what stops the top of a
     // fitted page, including a surah name, from ending up behind the pill.
     var viewport by remember { mutableStateOf(IntSize.Zero) }
-    val gutter = space.lg
+    // The cutout is added to the design gutter, and the result is one value for both
+    // sides - see [PageInsets.gutter], which explains why the tap maths below depends
+    // on that symmetry.
+    val gutter = PageInsets.gutter(space.lg)
     val contentWidth = remember(viewport, density, gutter) {
         (viewport.width - with(density) { gutter.roundToPx() } * 2).coerceAtLeast(0)
     }

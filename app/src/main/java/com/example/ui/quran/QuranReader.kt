@@ -52,7 +52,7 @@ import com.example.data.model.Ayah
 import com.example.data.model.QuranReadingLayout
 import com.example.data.model.QuranReadingOptions
 import com.example.data.quran.QuranBrowse
-import com.example.ui.components.statusBarInset
+import com.example.ui.components.SafeArea
 import com.example.ui.SalahUiState
 import com.example.ui.components.EmptyState
 import com.example.ui.components.StatusBanner
@@ -300,8 +300,8 @@ fun QuranReader(
                 onToggle = { onImmersiveChange(!immersive) },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = statusBarInset() + space.xs)
-                    .padding(end = space.lg)
+                    .padding(top = SafeArea.top() + space.xs)
+                    .padding(end = space.lg + SafeArea.sides())
             )
 
             if (state.isAudioPlaying) {
@@ -347,6 +347,10 @@ private fun ReaderControls(
 ) {
     val space = Space.current
     val strings = LocalStrings.current
+    // The cutout at the trailing edge, added to the design gutter. This row is the
+    // reader's only chrome, so in landscape it was the row that went under the notch
+    // on the side it happens to start from.
+    val sides = SafeArea.sides()
 
     AnimatedVisibility(
         visible = visible,
@@ -358,20 +362,20 @@ private fun ReaderControls(
             modifier = Modifier.fillMaxWidth()
         ) {
             Spacer(
-                Modifier.height(statusBarInset() + space.xs)
+                Modifier.height(SafeArea.top() + space.xs)
             )
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = space.lg)
+                    .padding(start = space.lg + sides)
                     // Room for the immersive button, which is in its own corner and
                     // drawn over this row in the non-immersive state too. Without
                     // this reserve the last circle button sat exactly underneath it
                     // and only the top one was reachable.
                     .padding(
                         end = MaterialTheme.layoutMetrics.minTouchTarget +
-                            space.xs + space.lg
+                            space.xs + space.lg + sides
                     ),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(space.xs)

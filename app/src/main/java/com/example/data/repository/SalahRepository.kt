@@ -89,11 +89,6 @@ class SalahRepository(
         const val KEY_QURAN_SHOW_TRANSLATION = "pref_quran_show_translation"
         const val KEY_QURAN_IMMERSIVE = "pref_quran_immersive"
     }
-    private val _lastCheckedFlow = MutableStateFlow(
-        prefs.getString("pref_last_checked", "Today · Just now") ?: "Today · Just now"
-    )
-    val lastCheckedFlow: StateFlow<String> = _lastCheckedFlow.asStateFlow()
-
     private val _languageFlow = MutableStateFlow(prefs.getString("pref_language", "English") ?: "English")
     val languageFlow: StateFlow<String> = _languageFlow.asStateFlow()
 
@@ -162,10 +157,8 @@ class SalahRepository(
             .putFloat("loc_lat", location.latitude.toFloat())
             .putFloat("loc_lng", location.longitude.toFloat())
             .putBoolean("loc_is_gps", location.isGps)
-            .putString("pref_last_checked", if (location.isGps) "Offline cached (GPS)" else "Offline cached (City)")
             .apply()
         _locationFlow.value = location
-        _lastCheckedFlow.value = if (location.isGps) "Offline cached (GPS)" else "Offline cached (City)"
         PrayerAlarmScheduler.scheduleAllPrayers(context)
 
         // Persist to Room for robust offline caching
@@ -472,8 +465,10 @@ class SalahRepository(
                 networkRequest,
                 object : ConnectivityManager.NetworkCallback() {
                     override fun onAvailable(network: Network) {
+                        // Reported, not acted on. There is nothing to fetch: prayer
+                        // times are computed here, and the only network use is the
+                        // audio stream, which the player handles itself.
                         _isOnlineFlow.value = true
-                        refreshOnlineDataSync()
                     }
 
                     override fun onLost(network: Network) {
@@ -493,25 +488,28 @@ class SalahRepository(
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
-    fun refreshOnlineDataSync() {
-        val online = checkIsOnline()
-        _isOnlineFlow.value = online
-        _isSyncingFlow.value = true
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val timeStr = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
-                if (online) {
-                    val syncedStatus = "Online · Synced at $timeStr (Verified Ephemeris)"
-                    prefs.edit().putString("pref_last_checked", syncedStatus).apply()
-                    _lastCheckedFlow.value = syncedStatus
-                } else {
-                    val offlineStatus = "Offline · Calculated on-device ($timeStr)"
-                    prefs.edit().putString("pref_last_checked", offlineStatus).apply()
-                    _lastCheckedFlow.value = offlineStatus
-                }
-            } finally {
-                _isSyncingFlow.value = false
-            }
-        }
+    /**
+     * Whether the device currently has a connection.
+     *
+     * Re-reads the platform's answer rather than tracking it, because the only
+     * caller is a diagnostics row and the `NetworkCallback` above already keeps
+     * the flow current for the cases that matter.
+     *
+     * **It fetches nothing, and nothing here ever did.** This was called
+     * `refreshOnlineDataSync` and its entire body was to write one of two
+     * sentences into [lastCheckedFlow] - "Online · Synced at 14:32 (Verified
+     * Ephemeris)" or "Offline · Calculated on-device (14:32)" - having contacted
+     * no server. The app has no HTTP client; `grep` for one returns nothing. A
+     * reader who pressed "Network Synchronization & Source" was told their prayer
+     * times had been verified against a source that does not exist.
+     *
+     * Prayer times are computed on this device, by
+     * [com.example.engine.PrayerCalculationEngine], from the location and the
+     * settings - so there is nothing to synchronise, and no claim of verification
+     * to make. The honest row is connectivity, reported as connectivity, next to
+     * the one thing that actually uses it: streamed recitation audio.
+     */
+    fun refreshConnectivity() {
+        _isOnlineFlow.value = checkIsOnline()
     }
 }

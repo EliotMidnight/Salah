@@ -7,14 +7,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -54,6 +51,14 @@ import com.example.ui.theme.layoutMetrics
  *   still applied, so content does not slide under the clock - only the title
  *   row goes. Used by the two screens whose heading merely repeated the bottom
  *   navigation label.
+ *
+ * The insets come from [SafeArea] rather than from `WindowInsets.statusBars`
+ * directly, which is the whole point of that file: the status bar and the cutout
+ * are one fact, and a caller that asks only for the status bar is not asking the
+ * question. Both were true here - these two functions were the copy that got the
+ * cutout wrong, so on a device whose camera hole reaches the top edge a title sat
+ * underneath it. The horizontal reserve is the half nobody had: rotated, the cutout
+ * is 30-40dp deep at the left or right edge against a 16dp gutter.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,6 +72,7 @@ fun ScreenScaffold(
     content: @Composable (PaddingValues) -> Unit
 ) {
     val space = Space.current
+    val sides = SafeArea.sides()
 
     Column(
         modifier = modifier
@@ -81,9 +87,7 @@ fun ScreenScaffold(
                 actions = actions
             )
         } else {
-            Spacer(
-                Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
-            )
+            Spacer(Modifier.height(SafeArea.top()))
         }
 
         Box(
@@ -97,7 +101,7 @@ fun ScreenScaffold(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = MaterialTheme.layoutMetrics.contentMaxWidth)
-                    .padding(horizontal = space.lg),
+                    .padding(horizontal = space.lg + sides),
                 content = { content(PaddingValues(bottom = space.xxxl)) }
             )
         }
@@ -122,13 +126,19 @@ fun ScreenTopBar(
     actions: @Composable () -> Unit = {}
 ) {
     val space = Space.current
+    val sides = SafeArea.sides()
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
-            .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
-            .padding(start = space.lg, end = space.sm, top = space.md, bottom = space.md),
+            .padding(top = SafeArea.top())
+            .padding(
+                start = space.lg + sides,
+                end = space.sm + sides,
+                top = space.md,
+                bottom = space.md
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (onBack != null) {
@@ -206,7 +216,7 @@ fun ContentColumn(
         modifier = modifier
             .fillMaxWidth()
             .widthIn(max = MaterialTheme.layoutMetrics.contentMaxWidth)
-            .padding(horizontal = Space.current.lg),
+            .padding(horizontal = Space.current.lg + SafeArea.sides()),
         verticalArrangement = Arrangement.Top,
         content = { content() }
     )

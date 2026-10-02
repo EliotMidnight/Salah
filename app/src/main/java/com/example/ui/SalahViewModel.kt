@@ -120,7 +120,20 @@ data class SalahUiState(
     val isGlobalSilentMode: Boolean = false,
     val autoSilentDuringPrayer: Boolean = false,
     val autoSilentDurationMinutes: Int = 20,
-    val lastChecked: String = "Today · Synced locally",
+
+    /**
+     * Whether the device currently has a connection.
+     *
+     * Reported, never acted on. There is no data to fetch and no server to fetch
+     * it from; prayer times are computed on this device. The one network use is
+     * streamed recitation audio, which the player handles itself.
+     *
+     * It has three writers, all of which claimed something untrue: "Offline
+     * cached (GPS)" when a *city* was chosen from a list, "Online · Synced at
+     * 14:32 (Verified Ephemeris)" having contacted nothing, and "Recomputed at
+     * 14:32:11 · 365 Days Verified" for a code path that computed one day. It is
+     * one boolean from the platform, and that is all it can honestly be.
+     */
     val isOnline: Boolean = false,
     // Expanded user preferences
     val language: String = "English",
@@ -141,7 +154,6 @@ data class SalahUiState(
         Prayer.ISHA to "Full Adhan",
         Prayer.SUNRISE to "Silent Reminder"
     ),
-    val translationEdition: String = "English (Saheeh International)",
     // Qibla state & magnetic sensor diagnostics
     val compassAzimuth: Float = 0f,
     val qiblaBearing: Float = 0f,
@@ -375,12 +387,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         }
 
         viewModelScope.launch {
-            repository.lastCheckedFlow.collectLatest { last ->
-                _uiState.value = _uiState.value.copy(lastChecked = last)
-            }
-        }
-
-        viewModelScope.launch {
             repository.languageFlow.collectLatest { lang ->
                 _uiState.value = _uiState.value.copy(language = lang)
             }
@@ -505,15 +511,28 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         startCompass()
     }
 
+    /**
+     * Whether this device has a compass at all.
+     *
+     * For the Qibla tab to decide whether to offer itself. A phone with no
+     * magnetometer has no Qibla to show, so it should not be offered one: a dial
+     * that will never move, with no explanation, is worse than no tab. That is a
+     * change to navigation rather than to this class, and hiding a tab is a bigger
+     * call than adding a warning inside it, so it belongs to whoever owns the
+     * navigation rather than to a cleanup commit.
+     *
+     * It was a state field and nothing read it, which is how a Qibla tab came to be
+     * visible on a device that cannot serve it. The query is cheap and the answer
+     * is fixed for the life of the process, so a plain `val` on the ViewModel
+     * rather than a `StateFlow` a collector would hold open for nothing.
+     */
+    val hasCompass: Boolean get() = rotationSensor != null || magneticSensor != null
+
     fun startCompass() {
-        // Whether this device has a compass is not published as state. It was, and
-        // nothing read it - which meant a phone with no magnetometer showed a Qibla
-        // screen with a dial that would never move, and no message saying why. The
-        // honest fix is not another row: a device with no magnetometer has no Qibla to
-        // offer, so it should not offer one. That is a change to the Qibla tab's
-        // visibility rather than to this class, and it is worth doing deliberately -
-        // hiding a tab is a bigger call than showing a warning inside it, and it is the
-        // next person's decision rather than mine to make silently.
+        // A device with no compass registers nothing and simply never hears from
+        // a sensor, which is the same as a device whose sensors are all asleep.
+        // [hasCompass] is what tells those two apart, for the caller deciding
+        // whether to show the Qibla tab.
         rotationSensor?.let {
             sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
@@ -857,8 +876,16 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         repository.setHijriAdjustment(adjustment)
     }
 
-    fun refreshData() {
-        repository.refreshOnlineDataSync()
+    /**
+     * Re-read connectivity, and re-derive today's times.
+     *
+     * Was "refresh data". There is no data to fetch - the app computes prayer
+     * times on this device and has no network client - so the honest name is
+     * `refreshConnectivity`, and the second half is not decoration: a reader who
+     * has just come back into range and wants their times re-derived gets them.
+     */
+    fun refreshConnectivity() {
+        repository.refreshConnectivity()
         recalculateAll()
     }
 
@@ -914,10 +941,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         AdhanAudioSynthesizer.stop()
     }
 
-    fun setTranslationEdition(edition: String) {
-        _uiState.value = _uiState.value.copy(translationEdition = edition)
-    }
-
     fun playAudioPreview(title: String) {
         if (_uiState.value.audioPreviewPlaying == title) {
             stopAudioPreview()
@@ -963,12 +986,28 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         setLocation(custom)
     }
 
-    fun recomputeEphemerisCache() {
+    /**
+     * Re-derive the schedule and re-arm the alarms.
+     *
+     * Was `recomputeEphemerisCache`, and it wrote a third, differently-worded
+     * sentence into `lastChecked` - "Recomputed at 14:32:11 · 365 Days Verified" -
+     * on a code path that touched neither the cache nor 365 days.
+     *
+     * **There is no cache.** `PrayerAlarmScheduler` computes today and tomorrow
+     * from the engine every time it is asked and hands the result to
+     * `AlarmManager`; nothing is stored, so nothing can go stale and there is
+     * nothing to recompute. The engine runs in well under a millisecond for one
+     * day. The button was reporting that it had verified a year of times.
+     *
+     * What it *should* do - and now does - is the one action with a visible
+     * effect: re-derive today's times and re-arm the alarms, so a reader whose
+     * notifications stopped after a reboot, a permission change or an
+     * uninstall of a battery-optimisation app can put them back without
+     * reinstalling.
+     */
+    fun reschedulePrayers() {
         recalculateAll()
-        val timeStr = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))
-        _uiState.value = _uiState.value.copy(
-            lastChecked = "Recomputed at $timeStr · 365 Days Verified"
-        )
+        PrayerAlarmScheduler.scheduleAllPrayers(getApplication())
     }
 
     fun resetAllSettings() {

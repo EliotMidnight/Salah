@@ -6,9 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -51,8 +48,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Prayer
@@ -64,6 +59,7 @@ import com.example.engine.HijriCalendarEngine
 import com.example.engine.PrayerCalculationEngine
 import com.example.engine.QiblaEngine
 import com.example.ui.SalahUiState
+import com.example.ui.components.SafeArea
 import com.example.ui.localization.LocalStrings
 import com.example.ui.localization.prayerName
 import com.example.ui.localization.isArabicInterface
@@ -229,7 +225,9 @@ fun TodayScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(
-                    top = statusBarTop() + space.sm,
+                    top = SafeArea.top() + space.sm,
+                    start = SafeArea.sides(),
+                    end = SafeArea.sides(),
                     bottom = space.xxl
                 ),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -722,15 +720,4 @@ private fun isAfter(prayer: Prayer, current: Prayer, next: Prayer): Boolean {
         if (index == at) return true
     }
     return false
-}
-
-/** Status bar height plus any display cutout, as a Dp. */
-@Composable
-internal fun statusBarTop(): Dp {
-    val density = LocalDensity.current
-    val px = maxOf(
-        WindowInsets.statusBars.getTop(density),
-        WindowInsets.displayCutout.getTop(density)
-    )
-    return with(density) { px.toDp() }
 }

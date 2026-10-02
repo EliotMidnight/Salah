@@ -3,7 +3,7 @@ package com.example.ui.quran.reader
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.Dp
-import com.example.ui.components.statusBarInset
+import com.example.ui.components.SafeArea
 import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
 
@@ -22,7 +22,7 @@ import com.example.ui.theme.layoutMetrics
  *
  * So the reader - which knows - passes the number down, and the page reserves what
  * it is told. Each page measuring its own insets cannot know about immersive mode,
- * and the old arrangement (a page reading `statusBarInset()` unconditionally)
+ * and the old arrangement (a page reading the status-bar inset unconditionally)
  * reserved the room in both states.
  *
  * ### What is in it
@@ -31,6 +31,17 @@ import com.example.ui.theme.layoutMetrics
  * little air. The immersive button is in its own corner and is covered by the same
  * reserve, because it is on screen in *both* states - which is deliberate: a button
  * that disappears when a reader needs it is a trap.
+ *
+ * ### And the sides, which both reading surfaces share
+ *
+ * [gutter] is the other half, and it exists here rather than in each surface
+ * because two of them needed it and the reason is not obvious. A design gutter of
+ * 16dp is enough in portrait, where a display cutout is at the top and
+ * [SafeArea.top] has already covered it. Rotated, the cutout moves to the left or
+ * right edge and is 30-40dp deep, so the outer column of every page of Arabic was
+ * underneath it - and in right-to-left text the outer column is the *first* one,
+ * so a reader lost the beginning of the page, which is a wrong reading rather than
+ * a crowded one.
  */
 object PageInsets {
 
@@ -43,20 +54,28 @@ object PageInsets {
         val space = Space.current
         val minTouch = MaterialTheme.layoutMetrics.minTouchTarget
         val chrome = if (controlsVisible) minTouch + space.sm else minTouch
-        return statusBarInset() + chrome + space.xs
+        return SafeArea.top() + chrome + space.xs
     }
-}
 
-/**
- * The inset a *continuously* scrolling surface uses, which has no page chrome.
- *
- * Not used, and kept only because it is the obvious next question: "what about the
- * list, which has no pages?" The answer turned out to be [top] as well, passed as the
- * list's content padding rather than as a heading's padding - a lazy list can be at
- * any offset, so a room reserved by one item is a room reserved for one offset. This
- * version had no `controlsVisible`, so it would also have reserved the control row in
- * immersive mode, which is the bug [top] exists to avoid.
- */
-@Composable
-internal fun continuousTopInset(): Dp =
-    statusBarInset() + Space.current.sm
+    /**
+     * The horizontal margin around the text, and where both reading surfaces get it.
+     *
+     * [minimum] is the design gutter; the display cutout is *added* to it rather
+     * than replacing it, so a device with no cutout looks exactly as it did.
+     *
+     * **It must stay one value applied to both sides.** Both `MushafPage` and
+     * `FlowingBlock` reserve this with a single `padding(horizontal = ...)` and then
+     * subtract the same number from a tap's x coordinate to move from node space
+     * into text space - the padding is a layout modifier on the *same node* as the
+     * text, so the node's origin is the outer edge of the gutter while the text
+     * layout's coordinates start at the text. Symmetry is what makes that
+     * subtraction correct. Padding each side by its own cutout inset would be more
+     * precise and would silently break tap hit-testing on the side with the notch,
+     * resolving taps to the wrong verse.
+     *
+     * A *vertical* value needs no such care, which is why this asymmetry exists at
+     * all and why it is easy to break.
+     */
+    @Composable
+    fun gutter(minimum: Dp): Dp = minimum + SafeArea.sides()
+}

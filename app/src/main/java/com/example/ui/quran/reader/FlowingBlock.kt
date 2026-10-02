@@ -107,7 +107,7 @@ internal fun FlowingBlock(
     // `TextLayoutResult` is only valid for the text it was measured from.
     var layout by remember(block, style) { mutableStateOf<TextLayoutResult?>(null) }
 
-    val gutter: Dp = space.xl
+    val gutter: Dp = PageInsets.gutter(space.xl)
 
     Box(
         modifier = modifier

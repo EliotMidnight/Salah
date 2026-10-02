@@ -39,6 +39,22 @@ internal object QuranCorpus {
     const val METADATA_HASH = "8867c1d88191472adec9db694b3cd9f135b1a2ef580574d32cf888dcb22c5c7a"
     const val EN_SAHIH_HASH = "f090ed258e647a393ddaa0b48f1e81ab7a5ccd5ad7d72d0da498e151bc0dbc18"
 
+    /**
+     * The one translation this app ships.
+     *
+     * `en_sahihintl.txt` is the only translation in the bundle, and [EN_SAHIH_HASH]
+     * is checked against it at load. So this is a *description of the resource
+     * above*, and it lives next to the resource rather than in a list of editions
+     * in a settings screen - which is where it used to be, offering twelve choices
+     * when there was one, because a list of editions is somewhere a second edition
+     * can be added without anyone noticing that the code which would read it does
+     * not exist.
+     *
+     * Shown to the reader so they know what they are being shown. Not a preference,
+     * and there is nothing to persist.
+     */
+    const val TRANSLATION_EDITION = "English (Saheeh International)"
+
     const val SURA_COUNT = 114
     const val VERSE_COUNT = 6236
     const val PAGE_COUNT = 604

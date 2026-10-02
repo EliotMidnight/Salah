@@ -47,6 +47,7 @@ import com.example.data.model.CalculationMethod
 import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
 import com.example.data.model.UserLocation
+import com.example.data.quran.QuranBrowse
 import com.example.ui.SalahUiState
 import com.example.ui.components.ActionRow
 import com.example.ui.components.EmptyState
@@ -103,22 +104,8 @@ private val RECITERS = listOf(
     "Mahmoud Khalil Al-Husary",
     "Saud Ash-Shuraim"
 )
-private val RIWAYAHS = listOf("Hafs 'an 'Asim", "Warsh 'an Nafi", "Qalun 'an Nafi", "Al-Duri 'an Abi 'Amr")
+private val RIWAYAHS = listOf("Hafs 'an 'Asim", "Warsh 'an Nafi", "Qalun 'an Nafi", "Al-Duri 'an Abi 'Amir")
 private val SCRIPTS = listOf("Uthmani (Madani)", "Maghrebi", "Indo-Pak")
-private val TRANSLATIONS = listOf(
-    "English (Saheeh International)",
-    "English (Pickthall)",
-    "Français (Hamidullah)",
-    "Bahasa Indonesia",
-    "Türkçe (Diyanet)",
-    "اردو",
-    "Bahasa Melayu",
-    "বাংলা",
-    "Русский",
-    "Deutsch",
-    "Español",
-    "العربية"
-)
 private val THEMES = listOf("System Default", "Dark Mode (OLED)", "Clean Light")
 private val HIJRI_OFFSETS = listOf(-2, -1, 0, 1, 2)
 private val PRE_PRAYER_OFFSETS = listOf(5, 10, 15, 20, 30)
@@ -220,15 +207,13 @@ fun SettingsScreen(
     onAdhanSoundSelect: (String) -> Unit = {},
     onHijriAdjustmentChange: (Int) -> Unit = {},
     onReciterSelect: (String) -> Unit = {},
-    onRefreshClick: () -> Unit = {},
     onPrePrayerOffsetChange: (Int) -> Unit = {},
     onAdhanVolumeChange: (Float) -> Unit = {},
     onPrayerAlertModeChange: (Prayer, String) -> Unit = { _, _ -> },
     onPlayAudioPreview: (String) -> Unit = {},
     onStopAudioPreview: () -> Unit = {},
     onCustomLocationSave: (String, Double, Double, Double) -> Unit = { _, _, _, _ -> },
-    onTranslationSelect: (String) -> Unit = {},
-    onRecomputeEphemerisCache: () -> Unit = {},
+    onReschedulePrayers: () -> Unit = {},
     onResetAllSettings: () -> Unit = {},
     onFetchLocation: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -430,10 +415,32 @@ fun SettingsScreen(
                     onClick = { sheet = Sheet.RECITER }
                 )
                 RowDivider()
+                // A fact, not a choice.
+                //
+                // This opened a twelve-item picker. The corpus bundles exactly one
+                // translation - `en_sahihintl.txt`, verified at load by SHA-256 and
+                // asserted to be complete - so eleven of the twelve changed nothing
+                // at all, and the choice was never persisted either, so the tick
+                // moved back to the first item on the next launch. A reader could
+                // pick Français, be shown English, and be told nothing.
+                //
+                // The two things a reader can actually do - show the translation, and
+                // how large it is - are real and live in the reader's own Reading
+                // options, which is where they are now. This row stays because a
+                // reader deserves to know *which* translation they are being shown,
+                // and saying so is not decoration; what was decoration was offering
+                // twelve answers to a question with one.
+                //
+                // The same treatment as the Arabic-size row below, and for the same
+                // reason: a control that does not do anything is worse than no
+                // control, because it is a promise.
                 ActionRow(
                     title = strings.translationLabel,
-                    value = state.translationEdition,
-                    onClick = { sheet = Sheet.TRANSLATION }
+                    value = QuranBrowse.TRANSLATION_EDITION,
+                    subtitle = strings.more.reader.changeInReader,
+                    showChevron = false,
+                    enabled = false,
+                    onClick = {}
                 )
                 RowDivider()
                 // A summary, not a second slider.
@@ -458,10 +465,25 @@ fun SettingsScreen(
             // -- Diagnostics ----------------------------------------------
             SectionHeader(strings.more.sectionAbout)
             SectionGroup {
+                // "Prayer schedule cache" and its "Last checked" subtitle are gone.
+                //
+                // The row opened a sheet whose detail read "Last checked: Online ·
+                // Synced at 14:32 (Verified Ephemeris)", and the three sentences
+                // that could appear there were written by three different code
+                // paths, none of which contacted a server - the app has no HTTP
+                // client at all. One of them claimed 365 days were verified for a
+                // path that computes one. A prayer app telling a reader its times
+                // have been verified is not a cosmetic bug.
+                //
+                // The information a reader actually wants here is *how* their
+                // times are derived, and that is real, is already collected, and
+                // is already on the Prayer screen. So the row becomes what it
+                // always should have been: the calculation source, with a control
+                // that does something.
                 ActionRow(
-                    title = strings.more.ephemerisCacheLabel,
-                    subtitle = state.lastChecked,
-                    onClick = { sheet = Sheet.EPHEMERIS }
+                    title = strings.transparentCalculationSource,
+                    subtitle = strings.more.computedOnDevice,
+                    onClick = { sheet = Sheet.CALCULATION }
                 )
                 RowDivider()
                 ActionRow(
@@ -475,12 +497,19 @@ fun SettingsScreen(
                     onClick = { sheet = Sheet.COMPASS }
                 )
                 RowDivider()
+                // Connectivity, reported as connectivity.
+                //
+                // It is a *status*, not an action: nothing is fetched, so there is
+                // nothing to retry, and a button that re-reads the platform's own
+                // answer and reports it back is a control that only exists to be
+                // pressed. The reason it is worth showing at all is the audio
+                // stream, and that is stated in the storage sheet beside it.
                 ActionRow(
                     title = strings.networkSyncLabel,
                     subtitle = if (state.isOnline) strings.onlineStatus else strings.offlineStatus,
-                    onClick = {
-                        onRefreshClick()
-                    }
+                    showChevron = false,
+                    enabled = false,
+                    onClick = {}
                 )
                 RowDivider()
                 SectionGroup {
@@ -940,21 +969,6 @@ fun SettingsScreen(
             }
         }
 
-        Sheet.TRANSLATION -> OptionSheet(
-            title = strings.more.chooseTranslation,
-            onDismiss = { sheet = null }
-        ) {
-            // Previously this list of twelve sat in a non-scrolling sheet and the
-            // last four were unreachable on a phone.
-            TRANSLATIONS.forEach { value ->
-                OptionRow(
-                    title = value,
-                    selected = value == state.translationEdition,
-                    onClick = { onTranslationSelect(value); sheet = null }
-                )
-            }
-        }
-
         Sheet.VOLUME -> OptionSheet(
             title = strings.more.adhanVolume,
             onDismiss = { sheet = null; onStopAudioPreview() }
@@ -998,29 +1012,52 @@ fun SettingsScreen(
             }
         }
 
-        Sheet.EPHEMERIS -> OptionSheet(
-            title = strings.more.ephemerisCacheLabel,
+        Sheet.CALCULATION -> OptionSheet(
+            title = strings.transparentCalculationSource,
             subtitle = strings.more.computedOnDevice,
             onDismiss = { sheet = null }
         ) {
+            // Every row here is a real, current input to the engine, read from
+            // state. That is the whole reason to show this sheet: a reader whose
+            // Isha looks wrong can see which method, which madhhab, which
+            // adjustment and which coordinates produced it, and change any of them
+            // from the rows above. Nothing here is a claim about a server.
             DetailList(
                 items = listOf(
                     strings.more.methodology to state.method.title,
+                    strings.more.madhhabLabelShort to state.madhhab.title,
                     strings.locationLabel to state.location.name,
-                    strings.more.lastVerified to state.lastChecked
+                    strings.more.appliedAdjustments to listOf(
+                        Prayer.FAJR to state.adjustments.fajr,
+                        Prayer.DHUHR to state.adjustments.dhuhr,
+                        Prayer.ASR to state.adjustments.asr,
+                        Prayer.MAGHRIB to state.adjustments.maghrib,
+                        Prayer.ISHA to state.adjustments.isha
+                    ).joinToString(", ") { (prayer, minutes) ->
+                        "${strings.prayerName(prayer)} ${signed(minutes)}"
+                    }
                 )
             )
             Spacer(Modifier.height(space.md))
+            // Re-derive today's times and re-arm the alarms.
+            //
+            // The only control in this sheet, and the only one with an effect a
+            // reader can observe: alarms are lost when a device reboots, when a
+            // battery-optimisation app is installed, and when a permission is
+            // revoked, and the app cannot always hear about it. This puts them
+            // back. It is not a "recompute 365-day schedule" - nothing is cached
+            // and nothing is 365 days; the engine computes today and tomorrow in
+            // under a millisecond and hands the result to AlarmManager.
             OutlinedButton(
                 onClick = {
-                    onRecomputeEphemerisCache()
+                    onReschedulePrayers()
                     sheet = null
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
             ) {
-                Text(strings.more.recomputeSchedule, style = MaterialTheme.typography.labelLarge)
+                Text(strings.more.reschedulePrayers, style = MaterialTheme.typography.labelLarge)
             }
         }
 
@@ -1084,9 +1121,16 @@ fun SettingsScreen(
 private enum class Sheet {
     LANGUAGE, THEME, LOCATION, METHOD, MADHHAB, ADJUSTMENTS, HIJRI,
     PRE_PRAYER, PRAYER_MODES, ADHAN_SOUND, RECITER, RIWAYAH, SCRIPT,
-    TRANSLATION, VOLUME, EPHEMERIS, STORAGE, COMPASS
+    VOLUME, CALCULATION, STORAGE, COMPASS
 }
 
+/**
+ * A minute offset, always signed.
+ *
+ * "+0" and "0" are different sentences, and a reader scanning a list of five
+ * offsets should not have to check which convention each one uses.
+ */
+private fun signed(minutes: Int): String = if (minutes >= 0) "+$minutes" else "$minutes"
 
 /** Per-prayer minute offsets, -15..+15. */
 @Composable

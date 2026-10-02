@@ -320,8 +320,7 @@ fun PrayerScreen(
                         ).joinToString(", ") { (prayer, minutes) ->
                             "${strings.prayerName(prayer)} ${signed(minutes)}"
                         },
-                        strings.offlineStatus to strings.more.computedOnDevice,
-                        strings.more.lastVerified to state.lastChecked
+                        strings.offlineStatus to strings.more.computedOnDevice
                     ),
                     modifier = Modifier.padding(space.lg)
                 )
