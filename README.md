@@ -87,6 +87,26 @@ app/src/main/resources/quran/  # Uthmani text, metadata, EN translation (see SOU
 app/src/test/                  # JVM + Robolectric suites, screenshot baselines
 ```
 
+### Juz' and hizb were never swept, and a reader navigates through them
+
+The mushaf's 604 pages have a full integrity walk: each page has verses, a turn from every
+page lands on that page, the pages tile the book, and the 51 that cross a surah boundary
+are the ones that do. **The 30 juz' and 60 hizb had no equivalent** — nothing checked that
+any partition has a verse in it, that they cover the book, that they do not overlap, or
+that `juzOf` agrees with the partition a verse actually lands in.
+
+That matters because `QuranBrowse.placeAtJuz` and `placeAtHizb` take `.first()` of a
+partition. An empty one is not an empty list, it is a crash — and those are exactly the
+functions the index sheet's juz' and hizb filters call. So a bad bound would have taken
+the reader's sheet down instead of showing nothing.
+
+`QuranPartitionIntegrityTest` (10) is that walk applied to both: every partition non-empty,
+the two partitions tiling all 6,236 verses exactly once, each contiguous in corpus order,
+each juz' exactly two hizb, `juzOf`/`hizbOf` agreeing with the partitions **verse by verse
+across the whole book**, and the first juz' beginning with 1:1 and the last ending at 114:6.
+**A hizb grouped by two quarters instead of four was planted and watched fail**: *2:44 is in
+hizb 1 but hizbOf says 2*.
+
 ### The surah index led with the romanisation, in every language
 
 Every row in the surah index showed the **English** name as its prominent line and the
@@ -151,7 +171,7 @@ desktop session, a parallel Compose build gets OOM-killed, so it runs without
 parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
 JDK and memory for it.
 
-407 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
+417 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
 maths, search, prayer maths, Qibla bearing and guidance, localisation coverage,
 sky-text contrast) run on any host, including ARM64 Linux/Termux.
 
