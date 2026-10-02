@@ -32,41 +32,22 @@ import androidx.compose.ui.platform.testTag
 /**
  * The continuous surah, read sideways.
  *
- * ### What this replaces, and why it was wrong
- *
- * The horizontal axis used to be a `horizontalScroll` around a content column given a
- * **fixed 720dp measure**. That is a panning surface, not a reading one, and it produced
- * the behaviour it is here to remove: a line of Arabic laid out across 720dp runs a verse
- * out past both edges of the screen, so a reader opening a surah on this axis sees one very
- * long line that has to be dragged sideways to read at all — the "whole sentence in one
- * line, exceeding the screen" report.
- *
- * The measure was the bug, and it could not be fixed by making it smaller. Any fixed width
- * wider than the screen puts text off the screen; any width equal to the screen leaves
- * nothing to pan. So the content is now **the viewport's width** and the axis scrolls
- * *through the text* rather than *within a line* — which is what a reader asking for a
- * sideways axis wants: swipe to move on, the way the page axis works.
- *
  * ### Why right-to-left
  *
  * Arabic is read right to left, so on this axis the first block sits at the **right** and
  * advancing moves leftward. The override is scoped to this pager rather than applied to the
- reader, because an English or French interface is still left to right everywhere else —
- only this axis is reading order for the Book.
-
- * The same reasoning is why the per-page `MushafPager` sets its own direction: it inherited
- * the interface language, so an English reader was swiping left to right through an Arabic
- * mushaf.
+ * reader, because an English or French interface is still left to right everywhere else -
+ * only this axis is reading order for the Book.
  *
  * ### One block per screen
  *
  * The blocks are the same twelve-verse groups the vertical axis scrolls through, and
  * `flowIndexOf` already maps the reader's verse onto one, so a reader who switches axes
- * * arrives at the same words rather than at the top of the surah.
-
- * * The surah heading sits above the pager rather than being a page of its own, so it stays
+ * arrives at the same words rather than at the top of the surah.
+ *
+ * The surah heading sits above the pager rather than being a page of its own, so it stays
  * put while the reader moves, which is what a heading is for. A mushaf has it in the margin
- for the same reason.
+ * for the same reason.
  */
 @Composable
 internal fun HorizontalFlow(

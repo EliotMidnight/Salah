@@ -11,16 +11,6 @@ import androidx.compose.ui.unit.sp
 
 /**
  * A deliberately short type scale.
- *
- * The previous scale carried 15 Material slots and the screens then bypassed it
- * entirely with ~19 hardcoded `sp` literals (10, 11, 11.5, 12, 12.5, 13, 13.5,
- * 14, 14.5, 15, 16, 17, 18, 20, 22, 24, 28sp ...). Nothing lined up and several
- * of those sizes failed contrast at 4.5:1.
- *
- * Every text style in the app now comes from this table. Sizes are trimmed to
- * the ones the product actually needs, `bodySmall` is raised from 12sp to 13sp
- * because 12sp is below comfortable reading size for the secondary metadata this
- * app is full of, and line heights are opened up slightly for readability.
  */
 
 private val Sans = FontFamily.Default
@@ -31,18 +21,6 @@ val ArabicFamily = FontFamily.Serif
 /**
  * Handwriting, for the one place on the Today page that wants to feel written
  * rather than typeset - the prayer's name, at headline size.
- *
- * Kalam, under the SIL Open Font License (`res/font/kalam_license.txt`).
- *
- * Latin and Devanagari only. A handwritten face has no Arabic, Bengali, Cyrillic
- * or Latin-extended coverage, so those scripts fall back per-glyph to
- * [ArabicFamily] / the system face - which is the right outcome anyway, since
- * an Arabic headline in a Latin handwriting alphabet would be unreadable. It
- * means the headline *style* differs by language, not just its content.
- *
- * Static Regular and Bold rather than the variable cut: `minSdk 24` predates
- * reliable variable-font support, and a headline that renders at a different
- * weight on some devices is worse than two weights everywhere.
  */
 val HandwritingFamily = FontFamily(
     Font(R.font.kalam_regular, FontWeight.Normal),
@@ -190,9 +168,6 @@ val Typography = Typography(
 
 /**
  * Small all-caps label used for section headers.
- *
- * Not a Material slot because it is a distinct thing: a quiet group label, not a
- * heading competing with the screen title.
  */
 val SectionLabelStyle: TextStyle
     get() = Typography.labelMedium.copy(

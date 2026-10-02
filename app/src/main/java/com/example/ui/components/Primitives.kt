@@ -68,15 +68,6 @@ import com.example.ui.theme.layoutMetrics
 
 /**
  * A tappable row: icon, title, supporting text, optional value, optional chevron.
- *
- * This is the app's workhorse. It replaces four near-identical private composables
- * (two in Settings, one in Prayer, one in Quran) that had each grown their own
- * padding, radius and semantics. A row is always at least 48dp tall, and the
- * whole row - not just the text - is the target.
- *
- * The icon is decorative by default and dropped from the accessibility tree, since
- * it almost always restates the title. Pass [iconDescription] when it carries
- * meaning the title does not.
  */
 @Composable
 fun ActionRow(
@@ -204,10 +195,6 @@ fun RowDivider(
 
 /**
  * A labelled container for a related group of rows.
- *
- * Plain surface, no border, no shadow. On the tinted page a white surface with
- * 12dp corners is already enough separation; adding a hairline on top of that is
- * the "excessive borders" problem, not a solution to it.
  */
 @Composable
 fun SectionGroup(
@@ -228,10 +215,6 @@ fun SectionGroup(
 
 /**
  * The one place a "nothing here yet" state is built.
- *
- * Previously each list hand-rolled its own: an icon at 34dp or 48dp, then a
- * sentence, then sometimes a second sentence. Icon, short title, one line of
- * guidance, and an optional action.
  */
 @Composable
 fun EmptyState(
@@ -299,11 +282,6 @@ enum class BannerTone { Neutral, Success, Warning, Danger }
 
 /**
  * One inline message: information, confirmation, a warning, or a failure.
- *
- * Replaces four unrelated treatments - a red adhan-playing bar, a
- * `primaryContainer` "reset to real time" chip, an `errorContainer` magnetic
- * interference card, and a bare `primary`-coloured status line - with one row
- * that has the same shape every time.
  */
 @Composable
 fun StatusBanner(
@@ -364,10 +342,6 @@ fun StatusBanner(
 
 /**
  * A key/value line, for the read-only diagnostic panels.
- *
- * The old version coloured its value with `primary`, which put the accent on ~12
- * lines per sheet and weakened the hierarchy. Values now use the normal text
- * colour, and the *label* carries the muted tone.
  */
 @Composable
 fun DetailRow(
@@ -424,11 +398,6 @@ fun StatusDot(
 
 /**
  * A selectable option inside a sheet.
- *
- * Selection is carried by a filled check plus the accent text colour, not by a
- * coloured background *and* a border *and* a check. A selected row that is only a
- * slightly different shade of the sheet is invisible - which is what the old
- * unselected state amounted to, at roughly 1.05:1 against its own container.
  */
 @Composable
 fun OptionRow(
@@ -497,11 +466,6 @@ fun OptionRow(
 
 /**
  * A compact segmented control for 2-5 mutually exclusive options.
- *
- * Used where the old code put a row of `Surface` chips with hand-rolled weights
- * and borders (auto-silent duration, per-prayer alert modes). Options are real
- * buttons with a selected state, so the group is navigable by keyboard and
- * announced correctly.
  */
 @Composable
 fun SegmentedOptions(
@@ -563,10 +527,6 @@ fun SegmentedOptions(
 
 /**
  * A label, a live value and a slider, with the value announced to screen readers.
- *
- * The old sliders labelled themselves with a decorative "A" on each end and no
- * semantics, so TalkBack read out a bare percentage. This carries a real
- * [contentDescription] and a [stateDescription] of the current value.
  */
 @Composable
 fun LabeledSlider(
@@ -618,20 +578,6 @@ fun LabeledSlider(
 
 /**
  * A label, an optional subtitle, and a switch whose whole row is the target.
- *
- * Promoted out of Settings so the reading-options sheet and Settings do not
- * each carry their own: the reader needed a switch and the obvious move was to
- * copy one, which is how two rows end up disagreeing about padding and about
- * whether the switch itself is in the accessibility tree.
- *
- * The switch is deliberately decorative ([Switch]'s own onCheckedChange is
- * null and its semantics are cleared): the row carries the click and the
- * semantics, so exposing the switch as well would double-announce every toggle
- * on both screens.
- *
- * [role] is a parameter because a row that *opens a picker* is not a switch -
- * Settings' pre-prayer row does that, and announcing "switch, double tap to
- * activate" before showing a sheet is a lie about what the tap will do.
  */
 @Composable
 fun ToggleRow(
@@ -728,11 +674,6 @@ fun hairlineBorder(color: Color = MaterialTheme.colorScheme.outlineVariant) =
 
 /**
  * A search input.
- *
- * Takes the full width of its container, takes focus when it appears, and closes
- * the keyboard on submit. The Quran library used to share a row with the screen
- * title - both children `weight(1f)` - so the title collapsed to half width and
- * ellipsized the moment you typed, and the field needed a second tap to focus.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -790,16 +731,6 @@ fun SearchInput(
 
 /**
  * A floating row of pill tabs, drawn over the content beneath it.
- *
- * The Quran library uses this instead of a Material `TabRow`. The difference
- * matters: a `TabRow` is a full-width band with an underline, which claims
- * horizontal space and adds a second rule to the page. Pills carry their own
- * shape, so the row reads as controls sitting on the content rather than as
- * another structural element - and because each pill has a visible boundary,
- * the selected state does not need an indicator to be legible.
- *
- * Callers must reserve the row's height themselves (see `PillTabBarHeight`)
- * before their scrolling content, otherwise the first row can slide underneath.
  */
 val PillTabBarHeight = 48.dp
 
@@ -868,16 +799,5 @@ fun PillTabRow(
 
 /**
  * Whether this colour is dark enough to need light ink on it.
- *
- * One function, because this question was being answered three times: a hand-rolled
- * `0.299r + 0.587g + 0.114b` in the reader, and `Color.luminance() < 0.5f` on the Today
- * page. Those are not the same number - Compose's `luminance()` is a different
- * weighting - so two screens could disagree about whether the background is dark, and
- * the ink chosen for one would be wrong on the other. The first is the ITU-R BT.601
- * luma and the second is not; the BT.601 one is the correct answer and is the one
- * kept.
- *
- * The threshold is 0.5, which is not neutral: it is a decision about which of the app's
- * light and dark paper tones get dark ink, and the app's tones sit well away from it.
  */
 fun Color.isDarkSurface(): Boolean = (0.299f * red + 0.587f * green + 0.114f * blue) < 0.5f

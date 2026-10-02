@@ -484,10 +484,6 @@ fun QiblaDirectionFinder(
 
 /**
  * Heading and Qibla bearing, as two labelled figures in one row.
- *
- * The bearing takes the accent and the heading the plain text colour, because
- * the bearing is the one the user is trying to match - it is the fixed value
- * they are turning towards, and the heading is what moves.
  */
 @Composable
 private fun DialReadout(
@@ -653,14 +649,4 @@ private fun QiblaGuidanceBanner(
 
 /**
  * The old English `getCardinalDirection`, gone.
- *
- * It returned "N", "NE", "E", "SE", "S", "SW", "W", "NW" and was used in two visible
- * places: the caption under the heading readout, and the text beside the azimuth. So
- * a reader in Arabic saw an English abbreviation in an app that translates everything
- * else it says about the compass - and German, which abbreviates *Nordost* to "NO"
- * rather than "NE", would have been given the wrong abbreviation even in English script.
- *
- * The sectors now live in [ReaderStrings.cardinal] with the words beside them, so a
- * sector boundary cannot differ between the caption and the azimuth text, and
- * `QiblaDirectionTest` can check all eight boundaries.
  */

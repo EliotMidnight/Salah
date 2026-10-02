@@ -26,21 +26,6 @@ import androidx.compose.ui.platform.LocalContext
 
 /**
  * Reduced-motion support.
- *
- * Compose has no first-class "the user wants less motion" flag, but Android does:
- * the accessibility setting *Remove animations* (and the developer option
- * *Animator duration scale = 0*) is exposed as
- * [Settings.Global.ANIMATOR_DURATION_SCALE], which is 0 when animations are off.
- *
- * Read once per composition, published through [SalahReduceMotion.Local], and
- * mirrored into [Motion.reduced] so the non-composable helpers below can collapse
- * to an instant change.
- *
- * Continuous motion - the living sky, the syncing spinner - is the part that
- * actually matters here. Large-area, slow-moving patterns are exactly what
- * triggers vestibular symptoms, so [continuousPhase] is what the sky and the
- * spinner should drive: when motion is reduced it returns a fixed value and the
- * animation never starts at all.
  */
 object SalahReduceMotion {
 
@@ -64,9 +49,6 @@ object SalahReduceMotion {
 
 /**
  * The motion language: short, calm, and communicative.
- *
- * Durations dropped from 200/350/500ms to 120/200/280ms. Motion here exists to
- * show where a thing came from and to confirm an action landed - nothing more.
  */
 object Motion {
 
@@ -83,10 +65,6 @@ object Motion {
 
     /**
      * A 0..1 phase for decorative continuous motion.
-     *
-     * Returns a permanently fixed value when motion is reduced, so callers can
-     * keep reading a phase unconditionally and the underlying infinite animation
-     * is never even created.
      */
     @Composable
     fun continuousPhase(

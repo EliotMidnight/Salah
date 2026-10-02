@@ -25,26 +25,6 @@ import kotlinx.coroutines.flow.onEach
 /**
  * Where the reader is, and the one way it changes.
  *
- * ### The defect this exists to fix
- *
- * The previous reader had **three** writers of "where am I", all writing
- * different things to different state, and they overwrote each other:
- *
- * 1. `pageCursor` - the page the pager was on, written by the pager's own
- *    `snapshotFlow`, and separately re-seeded from the anchor in a `LaunchedEffect`.
- * 2. `state.activeReadingAyahNumber` - the anchor, written by `selectSurah` and
- *    again by `onAyahViewed`, and read only as the *initial* value of the position
- *    below: a second anchor feeding a value consumed once. Removed; the seed is
- *    `state.readingAyahHint` and nothing else writes it.
- * 3. `browsedPage` - a *third* number, written by `onVerseVisible` from
- *    `onGloballyPositioned` inside the flowing text, purely so the pill could show
- *    something sensible.
- *
- * Which produced the defects the previous commit messages describe: a page
- * indicator that disagreed with the page on screen, a pill whose number changed
- * meaning when the layout changed, and a "continue reading" that recorded the top
- * of the visible block rather than the verse under the reader's eye.
- *
  * ### One value, and one direction
  *
  * There is a single [ref] here, and everything else is *derived* from it:
@@ -88,10 +68,6 @@ class ReaderPosition internal constructor(
 
     /**
      * Moves to [next].
-     *
-     * The one entry point. Everything that navigates calls this, so there is one
-     * place where a navigation clears the selection - and a reader who jumps to
-     * another surah is not left with a verse from the old one "selected".
      */
     fun goTo(next: QuranRef) {
         ref = next
@@ -100,9 +76,6 @@ class ReaderPosition internal constructor(
 
     /**
      * Moves to [next] *keeping* the selection, where the selection is still valid.
-     *
-     * Only for a page turn within the same page's neighbours, and only when the
-     * new page actually contains the selected verse - see [goTo].
      */
     fun turnTo(next: QuranRef) {
         ref = next
@@ -168,24 +141,12 @@ class ReaderPosition internal constructor(
 
     /**
      * Whether a magnified view should claim a one-finger drag.
-     *
-     * The single switch that decides who owns a one-finger drag on the surface.
-     *
-     * The previous reader re-keyed its **whole gesture detector** on this, which
-     * fixed the stale-scale capture and *broke the pinch*: tearing the detector
-     * down on the frame the scale crossed 1 discarded the accumulated zoom
-     * mid-gesture. So this is now read inside a stable detector rather than being
-     * its key.
      */
     val isViewMagnified: Boolean
         get() = viewScale > MAGNIFIED_THRESHOLD
 
     /**
      * Magnifies the view, for a pinch set to *Zoom the view*.
-     *
-     * Temporary on purpose: the scale belongs to the view, not to the reading, so
-     * reopening the reader shows the text at the size the reader chose rather than
-     * at whatever magnification they left behind.
      */
     fun magnifyBy(zoomChange: Float) {
         val next = PinchMath.applyZoom(viewScale, zoomChange)
@@ -212,14 +173,6 @@ class ReaderPosition internal constructor(
 
     /**
      * The reader's own pan plus the pinch correction, clamped **as one value**.
-     *
-     * Clamping the sum rather than each part is load-bearing. The focal correction
-     * is not bounded by the same thing the pan is: a pinch at the far corner of a
-     * surface at maximum magnification asks for a correction exactly the size of
-     * the visible surplus, and adding that to an already-clamped pan drags the
-     * reading past the edge of its own content and leaves blank paper with no way
-     * back. Clamped together, the reader gets the best correction the geometry
-     * allows and the surface never shows anything that is not text.
      */
     val appliedPan: Offset
         get() = PinchMath.clampPan(pan + focal, viewScale, surfaceSize)
@@ -239,20 +192,6 @@ class ReaderPosition internal constructor(
 
 /**
  * The reader's position, and the one debounced writer of the persisted position.
- *
- * ### Why the position is persisted through a debounce and a flow
- *
- * Turning a page is a discrete event, but scrolling is not: a continuous
- * `snapshotFlow` of the first visible item fires dozens of times a second, and
- * the previous reader wrote a database row for each one. It is also wrong to
- * record a position more precisely than a verse - nobody needs to know they were
- * 40% down verse 12 - and writing on every frame means the row being written is
- * one the reader has already scrolled past.
- *
- * So the position is emitted as a **flow**, debounced, and it is the same flow
- * the persistence collects. There is exactly one writer: the position moves,
- * [onPosition] fires when it settles, and everything downstream - the saved
- * position, Continue Reading, the Today shortcut - reads that one value.
  */
 @OptIn(FlowPreview::class)
 @Composable
@@ -297,10 +236,5 @@ fun rememberReaderPosition(
 
 /**
  * The scale above which the view counts as magnified.
- *
- * Slightly above 1 rather than exactly 1, because a pinch that lands on 1.004
- * is a wobble and not a magnification - and a surface that started claiming
- * one-finger drags at 1.004 would steal a scroll from a reader who had not asked
- * to zoom at all.
  */
 internal const val MAGNIFIED_THRESHOLD = 1.01f

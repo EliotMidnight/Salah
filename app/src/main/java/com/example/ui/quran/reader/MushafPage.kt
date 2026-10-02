@@ -56,31 +56,8 @@ import com.example.ui.theme.Space
  * clipped. "Where am I" has to be answerable by a page number, and it cannot be
  * while half the page is off the top of the screen.
  *
- * The previous version tried to achieve that by *estimating* a page's height from
- * character counts and a fudge factor, then scaling by the ratio. Because the
- * estimate was wrong, pages were shrunk that fitted and clipped pages that did
- * not. Worse, the scale it clamped at was 0.5 - below the reader's own slider
- * minimum of 0.7 - so the text on screen could be smaller than the preference
- * that supposedly set it, with nothing able to put it back.
- *
- * So the page is **measured**, by the same [TextMeasurer] the layout will use, at
- * the width the page actually has, and [PageFit] does arithmetic on two real
- * numbers. There is no longer a heuristic in the path.
  *
  * ### The two passes, and why the text is built twice
- *
- * Pass one measures the page's text *at the size the reader asked for*. [PageFit]
- * compares that height to the space available and returns the scale to draw at.
- * Pass two builds the text at that scale and lays it out normally.
- *
- * Scaling the already-laid-out text with a graphics layer instead would be one
- * pass and cheaper, and would be wrong twice over: the glyphs would be resampled
- * rather than re-shaped, so the text would be visibly softer than the same text
- * in the continuous reader; and the tap hit-testing would be working in the
- * unscaled coordinate space, so a reader's tap would select whatever verse
- * happened to be under the *unscaled* point. Rebuilding is a string concatenation
- * over one page's verses, and it is the reason a tap selects the verse under the
- * finger rather than a neighbouring one.
  *
  * ### When the page still does not fit
  *
@@ -102,16 +79,6 @@ internal fun MushafPage(
      *
      * A complete reference, and not an ayah number, because a page can hold more
      * than one surah - 51 of the 604 do - so an ayah number is not enough to say
-     * which verse was tapped. This used to take an `Int` and the caller rebuilt the
-     * reference from the page's *first* surah, which meant that on every one of
-     * those 51 pages, any verse after a surah boundary resolved into the previous
-     * surah: no highlight appeared, the action bar showed a different verse's
-     * translation, and bookmarking saved the wrong reference. **523 verses** were
-     * unreachable by tap.
-     *
-     * The same loss hit the accessibility actions below, which announced the right
-     * `surah:ayah` and then acted on the wrong one - so a screen-reader user was
-     * told one verse and got another.
      *
      * [VerseSpan] already carries both numbers, and `MushafPageText` is the only
      * place that knows which span a tap fell in, so the reference is assembled
@@ -123,19 +90,10 @@ internal fun MushafPage(
     modifier: Modifier = Modifier,
     /**
      * Space reserved at the top of the surface for the reader's floating chrome.
-     *
-     * Passed in rather than read from an inset here, because the reader knows
-     * whether its chrome is currently on screen and the page does not. A page that
-     * reserved the room unconditionally would lose it in immersive mode, where
-     * nothing is floating over it.
      */
     topInset: androidx.compose.ui.unit.Dp = 0.dp,
     /**
      * How a line is filled to its margin. See [Justification].
-     *
-     * Elongating is the default because it is what a mushaf page does and what Arabic is
-     * set for; widening the gaps is the fallback for a line with nowhere to elongate, and
-     * is applied per line by [Kashida] rather than by choosing between two whole pages.
      */
     justification: Justification = Justification.ELONGATE
 ) {
@@ -265,11 +223,6 @@ internal fun MushafPage(
 
     /**
      * The page's text, elongated so every line reaches the margin.
-     *
-     * Memoised on the viewport width because it costs a measure-adjust-measure loop, and
-     * because a reader turning between two pages must not pay for that on every frame.
-     * The width is the only thing about the viewport that changes the answer: growing the
-     * box and then typing shrinks it back to the same width and should not re-justify.
      */
     val justified = remember(drawn, drawnStyle, contentWidth, justification) {
         if (justification == Justification.ELONGATE) {
@@ -424,9 +377,6 @@ internal fun MushafPage(
 
 /**
  * The height [text] needs at [widthPx].
- *
- * Unbounded height on purpose: the question is "how tall would this be", and
- * asking it under a height cap answers with the cap.
  */
 private fun measureHeight(
     measurer: TextMeasurer,
@@ -449,16 +399,6 @@ private fun measureHeight(
 /**
  * What a screen reader announces for a whole page.
  *
- * The reference and the extent, because "page 42" alone tells a screen-reader user
- * nothing about the text. The surah *range* rather than one name, since a page can
- * cross a boundary and naming only the surah it opens in would be a lie on the
- * 50-odd pages that do.
- *
- * **Built from [ReaderStrings], not written here.** This used to be an English
- * sentence assembled in this file, which had no access to the strings - so the page
- * was announced in English while the page number in the pill beside it was announced
- * in the reader's own language, on the same screen, about the same thing. Ten
- * languages ship; all ten have this sentence.
  *
  * `Locale.ROOT`, so a reference reads `2:255` in the same digits as the pill's page
  * number and the ayah markers. Two conventions for one fact is the thing this whole
@@ -488,27 +428,10 @@ private fun describePage(
 
 /**
  * The measurer, and the cache size it is given.
- *
- * Named so it cannot shadow `androidx.compose.ui.text.rememberTextMeasurer`. The
- * framework's version defaults to `Density(1f)` and `LayoutDirection.Ltr`, and a
- * same-named private wrapper that shadows it means the next unqualified call in
- * this file silently measures with those defaults - which produces a plausible
- * number and a wrong fit.
- *
- * The cache is bounded on purpose. A reader turns pages continuously, and an
- * unbounded cache holds every page at every size it has ever been drawn at - which
- * for a book of 6,236 verses read at two text sizes is the whole corpus, laid out,
- * held for the life of the process. Sixteen is far more than a pager can have on
- * screen, and it means a page measured while scrolling back and forth is still
- * there when the reader returns to it.
  */
 @Composable
 /**
  * One text measurer for the whole reader.
- *
- * `internal` rather than private because the continuous layout measures too, and a second
- * `rememberTextMeasurer` would be a second cache of the same measurements — the fit
- * algorithm and the justification pass both ask the same questions about the same strings.
  */
 internal fun rememberPageTextMeasurer(): TextMeasurer =
     androidx.compose.ui.text.rememberTextMeasurer(

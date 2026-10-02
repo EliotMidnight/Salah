@@ -29,11 +29,6 @@ import java.time.LocalDate
 
 /**
  * Previous / next day, with the current day always one tap away.
- *
- * Shared by the Prayer tab and the Today page rather than written twice. These
- * are not two views of one control, they are *the* control: both screens read
- * [com.example.ui.SalahUiState.selectedDate], so a second copy would be a
- * second thing to keep in sync and a second thing to get subtly wrong.
  */
 @Composable
 fun DaySelector(

@@ -74,27 +74,7 @@ import kotlinx.coroutines.flow.first
  *
  * ### The axis is a mechanism, never a shape
  *
- * Turning the axis changes **which way the surface travels under the finger** and
- * nothing else. The verses stay in the same order, down the page, the same way
- * round, breaking at the same places.
  *
- * That is worth stating because the earlier implementation got it wrong, and the
- * mistake is easy to repeat: it laid each verse out in its own fixed-width column
- * and put the columns in a `Row`. So turning the axis did not change how you
- * *moved* through the text, it changed what the text *looked like* - a surah that
- * read top to bottom became one that read left to right, one verse per screen,
- * each needing its own pan and its own return. Reading order was destroyed, and
- * the reader had to hold the whole surah in their head as a strip of disconnected
- * panels.
- *
- * So both axes render the same ordered column of verses, and the mechanism is added
- * *around* the reading rather than in place of it.
- *
- * ### The horizontal axis was a panning surface, and that was the bug
- *
- * It used to be a `horizontalScroll` around a column given a **fixed 720dp measure**,
- * and the comment above it claimed the overflow was correct. It was not; it was the
- * report this replaced: *the whole sentence on one line, exceeding the screen*.
  *
  * A fixed width cannot be fixed by choosing a different fixed width. Any measure wider
  * than the screen puts text off the screen; any measure equal to the screen leaves
@@ -132,13 +112,6 @@ internal fun ContinuousReader(
     val horizontal = options.scroll == QuranScrollDirection.HORIZONTAL
 
     // The flowing text's blocks, grouped once.
-    //
-    // It used to be written twice - once for the items and once *inside the item
-    // lambda*, to find the previous block's first verse for the page boundary. A
-    // `LazyColumn` composes an item on every scroll frame, so that was a fresh list
-    // of every block in the surah allocated per block per frame: for Al-Baqarah, 24
-    // lists of 286 verses each, every time the reader moved. Nothing about it looked
-    // wrong and the profile was the only place it appeared.
     //
     // Declared up here rather than inside the `LazyListScope` body, because that body
     // is not a composable scope and so cannot `remember`.
@@ -311,7 +284,6 @@ internal fun ContinuousReader(
                         ink = ink,
                         accent = accent,
                         // The verse itself, not a number to go and look up. This
-                        // used to search the whole surah for a verse it was already
                         // holding - a linear scan per tap, on a list of up to 286,
                         // to recover fields it had just been handed.
                         onSelectVerse = { ayah ->
@@ -328,13 +300,6 @@ internal fun ContinuousReader(
             }
 
             // The selected verse's actions, at the end of the flow.
-            //
-            // They used to be an inspector card inserted *below the whole surah*, so
-            // tapping a verse on page 1 of Al-Baqarah sent the reader scrolling
-            // through 286 verses to find the card that had just opened. In a flow
-            // with no page boundaries, the end is the only place that is not in the
-            // middle of the text - and it is where a reader's eye is after a tap
-            // near the bottom anyway.
             position.selection?.let { selected ->
                 ayahs.firstOrNull { it.surahNumber == selected.surah && it.ayahNumber == selected.ayah }
                     ?.let { ayah ->
@@ -386,22 +351,6 @@ internal fun ContinuousReader(
 /**
  * The surah's name, written onto the paper.
  *
- * Three lines, and nothing else. This used to be a card - a centred column with the
- * Arabic name at display size, the English name, the meaning, the verse count, the
- * revelation place, then the basmalah - roughly a third of a phone screen tall
- * before a single word of the surah, paid for once per layout.
- *
- * None of it was wrong as *content* and all of it was wrong as *chrome*: the reader
- * is a reading surface, not a chapter opening, and the surah is already named in
- * the location pill and in the index. The heading is kept because a screen reader
- * still needs a landmark to jump to when navigating a surah.
- *
- * ### No basmalah
- *
- * The bundled Tanzil text carries the basmalah **inside verse 1** of every surah
- * but At-Tawbah, so printing one here printed it twice - on all 113 of them, not
- * the two the old code excepted. The rule is in [MushafPageText] and is read from
- * the corpus.
  */
 @Composable
 internal fun SurahHeading(
@@ -434,13 +383,6 @@ internal fun SurahHeading(
             textAlign = TextAlign.Center
         )
         // One part per line, each its own paragraph.
-        //
-        // This used to be three parts joined with " · " into one string. A single
-        // string is a single bidirectional paragraph, and under RTL that is not three
-        // phrases in a row: the Latin and the digits each take their own run, and the
-        // order the reader sees is the *visual* order. The line came out as
-        // "4 · آية · The Sincerity" - reversed, with the count first and the meaning in
-        // the middle.
         //
         // Splitting the paragraphs is the whole fix, and no direction override is
         // needed or wanted: `TextStyle.textDirection` already defaults to `Content`,
@@ -475,17 +417,6 @@ internal fun SurahHeading(
 /**
  * One verse, broken out as its own unit: reference, Arabic, and the actions that
  * belong to that verse alone.
- *
- * ### Why nothing is drawn behind it
- *
- * No card, no fill, no border. A surface behind each verse looked tidy in isolation
- * and was wrong in context: a stack of filled rectangles with gaps between them
- * turns a page of Arabic into a column of panels, and the panels are what the eye
- * reads first. The paper is already the background.
- *
- * Selection is visible, but by *inking* the verse - the highlight sits behind the
- * Arabic itself, so selecting highlights the words rather than drawing a frame
- * around the ayah marker, which a reader would read as a frame around a number.
  */
 @Composable
 internal fun VerseRow(
@@ -553,17 +484,6 @@ internal fun VerseRow(
 
 /**
  * Which block a verse is in, as an item index.
- *
- * Flowing text is `ayahs.chunked(FLOW_BLOCK_VERSES)`, so a verse's item is its
- * block's index - which is its verse index divided by the block size, not the verse
- * index itself. Getting that wrong scrolls to a block twelve times further on, which
- * on Al-Baqarah means landing anywhere at all in a 24-block surah.
- *
- * Counted rather than divided, because blocks are the last one short: 286 verses at
- * twelve a block is 23 full blocks and one of ten, so the last verse is in block 23
- * and not 23.83 rounded. Dividing gives 24, which is one past the end of the list -
- * and a `scrollToItem` past the end is how a reader ends up looking at a blank sheet
- * rather than at the text they asked for.
  */
 internal fun flowIndexOf(verseIndex: Int, blocks: List<List<Ayah>>): Int {
     if (verseIndex < 0) return 0
@@ -583,11 +503,6 @@ internal fun flowIndexOf(verseIndex: Int, blocks: List<List<Ayah>>): Int {
 
 /**
  * A hairline and a page number, between the text of one mushaf page and the next.
- *
- * The continuous layout has no page breaks, which is the point of it. But the
- * mushaf *is* paginated, and a reader looking for a particular page - the one a
- * discussion referred to, the one their tahfiz is open to - has no way to find it in
- * an unbroken flow, and no way to tell they have crossed into the next one.
  *
  * A rule with the number on it answers both without reintroducing a break: nothing
  * stops or snaps, the text runs through, and the number sits on the line. Drawn
@@ -630,9 +545,6 @@ internal fun PageRule(page: Int, modifier: Modifier = Modifier) {
  * them a verse is announced as an unlabelled button with no indication of whether it
  * is the one selected, which leaves a screen-reader user with no way to tell
  * *which* of four identical-looking buttons they are on.
- *
- * The labels are the caller's to supply, because this file does not read strings -
- * a translated surface builds its own labels and passes them down.
  */
 internal fun Modifier.selectableVerse(
     selectLabel: String,
@@ -670,12 +582,6 @@ internal const val FLOW_BLOCK_VERSES = 12
 
 /**
  * How far past the reader's verse the initial seat scrolls, then back.
- *
- * One screenful of items, which is about three screens of blocks. Enough for the
- * reader to see where they have arrived and still be at their verse, and it is what
- * makes the list compose *whole* blocks above the target instead of starting
- * mid-line: a lazy list begins composing at the item's own first pixel, so a plain
- * `scrollToItem` puts the top of the screen inside a line of Arabic.
  */
 internal const val DEFAULT_RESUME_OVERSHOOT = 3
 

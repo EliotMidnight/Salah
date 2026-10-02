@@ -9,30 +9,6 @@ import java.util.Locale
 
 /**
  * The bundled corpus, loaded and verified exactly once.
- *
- * Tanzil Uthmani 1.1 Arabic text plus the Saheeh International English
- * translation, with the Tanzil partition metadata. See
- * `app/src/main/resources/quran/SOURCES.md` for provenance, licensing and
- * attribution.
- *
- * ### What "verified" means here
- *
- * Each file's SHA-256 is checked at load, and before anything is served the
- * corpus asserts that it holds 114 surahs, 6,236 verses in canonical order, and
- * complete 604-page / 30-juz' / 240-hizb-quarter partitions. A truncated or
- * reordered resource fails loudly at startup instead of producing a mushaf with
- * a missing page in the middle of it.
- *
- * ### Why the partitions are ranges and not lookups per verse
- *
- * The partition of a verse is "the last partition that starts at or before it",
- * which reads as a linear scan - and doing that scan 6,236 times, three times
- * over, is 4.4 million comparisons on the main thread while the reader is
- * opening. Instead each partition becomes a **half-open range of verse
- * indices**, and a verse's page falls out of a precomputed lookup table.
- *
- * This also gives the rest of the app O(1) navigation: "which verses are on page
- * 285" is two array reads and a `subList`, not a 6,236-element `filter`.
  */
 internal object QuranCorpus {
 
@@ -42,17 +18,6 @@ internal object QuranCorpus {
 
     /**
      * The one translation this app ships.
-     *
-     * `en_sahihintl.txt` is the only translation in the bundle, and [EN_SAHIH_HASH]
-     * is checked against it at load. So this is a *description of the resource
-     * above*, and it lives next to the resource rather than in a list of editions
-     * in a settings screen - which is where it used to be, offering twelve choices
-     * when there was one, because a list of editions is somewhere a second edition
-     * can be added without anyone noticing that the code which would read it does
-     * not exist.
-     *
-     * Shown to the reader so they know what they are being shown. Not a preference,
-     * and there is nothing to persist.
      */
     const val TRANSLATION_EDITION = "English (Saheeh International)"
 
@@ -75,13 +40,6 @@ internal object QuranCorpus {
      * acceptable. So the digest is checked on every load and a mismatch throws.
      *
      * ### Why the hex is formatted with [Locale.ROOT]
-     *
-     * It is not about display. A digest is ASCII by definition, and formatting it with
-     * the device's locale means the *check* depends on a formatting decision rather
-     * than on the bytes. Java's `%x` happens to emit ASCII hex in every locale today; the
-     * cost of relying on that is that the failure mode is the whole corpus — a mismatch
-     * throws from the first `by lazy` access, so the reader opens empty — and the trigger
-     * would be a cosmetic locale change nobody was looking for.
      *
      * `Locale.ROOT` makes the check depend on the bytes and nothing else. Every other
      * number in the app follows the device locale on purpose (see [ArabicDigits] for why
@@ -130,12 +88,6 @@ internal object QuranCorpus {
     /**
      * The seven manzil, and the 556 ruku'.
      *
-     * Both have been in Tanzil's metadata since the beginning and **neither was ever
-     * read** — the corpus served 604 pages, 30 juz' and 240 rub' al-hizb and had never
-     * counted the two partitions sitting between them in the same file. Nothing rendered
-     * wrong, which is exactly why it went unnoticed: an unread partition is not a visible
-     * defect, it is an unverified claim.
-     *
      * `QuranStructure` now checks both, so a bundle that lost them fails the gate rather
      * than passing it.
      */
@@ -156,18 +108,6 @@ internal object QuranCorpus {
 
     /**
      * Half-open verse-index ranges for a partition list.
-     *
-     * `bounds[i]` is the index of the first verse of partition `i`, and
-     * `bounds[n + 1]` is the end of the last one, so partition `i` is exactly
-     * `bounds[i] until bounds[i + 1]`. `bounds[0]` is a sentinel: nothing is
-     * "in partition zero", and reading it must not throw.
-     *
-     * Partitions are written at their own index rather than one past it. The
-     * earlier version offset every write by one and then read back at the
-     * un-offset index, so the first partition was never written at all and
-     * partition 33 came out as -1 - "page 33 has no verses", on a partition that
-     * is perfectly well formed. Offsets that are *derived from each other* have
-     * to be written in exactly one convention and read in the same one.
      */
     private fun boundsOf(parts: List<Partition>): IntArray {
         val bounds = IntArray(parts.size + 2)
@@ -196,9 +136,6 @@ internal object QuranCorpus {
 
     /**
      * The verse texts, joined once, in canonical order.
-     *
-     * Index `i` of this list is the same `i` every partition range is expressed
-     * in, which is what makes the ranges and the page table agree.
      */
     private val verseTexts: List<Ayah> by lazy {
         // The translation is loaded first so that a corrupt translation fails
@@ -242,10 +179,6 @@ internal object QuranCorpus {
     /**
      * Confirms the corpus is 114 surahs of exactly the metadata's verse counts,
      * in order, with nothing missing and nothing repeated.
-     *
-     * This is the assertion that makes every arithmetic index below safe. If
-     * this holds, a verse's position in [verseTexts] is
-     * `surahOffset[surah] + ayah - 1` with no table and no search.
      */
     private fun verifyCanonicalOrder(verses: List<Ayah>) {
         val suraNodes = metadata.getElementsByTagName("sura")
@@ -283,9 +216,6 @@ internal object QuranCorpus {
      * `surahOffset[s]` is the index of surah `s`'s first verse, and
      * `surahOffset[s + 1]` is the end of it, so surah `s` is exactly
      * `surahOffset[s] until surahOffset[s + 1]`.
-     *
-     * Sized `SURA_COUNT + 2` so the entry one past the last surah is a real slot
-     * and not an out-of-bounds read on the final surah.
      */
     private val surahOffset: IntArray by lazy {
         val offsets = IntArray(SURA_COUNT + 2)
@@ -350,12 +280,6 @@ internal object QuranCorpus {
 
     /**
      * Hizb boundaries, taken from the quarter table.
-     *
-     * The corpus stores quarters (1..240) rather than hizb (1..60) because that
-     * is the finer partition, and four quarters make one hizb. Deriving the
-     * coarser boundary from the finer one means a reader can never land in two
-     * different hizb numbers for one verse, which is what a second hand-kept
-     * table would eventually do.
      */
     val hizbBounds: IntArray by lazy {
         val bounds = IntArray(HIZB_COUNT + 2)
@@ -394,14 +318,6 @@ internal object QuranCorpus {
 
     /**
      * What the bundle actually contains, measured rather than assumed.
-     *
-     * Read from the data on every load rather than from a constant, because a check that
-     * compares a constant with itself is not a check. The counts are the ones
-     * [QuranStructure] asserts, gathered in one place.
-     *
-     * The basmalah is the one count that costs something to measure — it compares the
-     * folded opening of every surah against the folded Al-Fatihah — so it is done once,
-     * lazily, on the load path rather than per keystroke.
      */
     val structure: QuranStructure.StructureCounts by lazy {
         QuranStructure.StructureCounts(
@@ -420,14 +336,6 @@ internal object QuranCorpus {
 
     /**
      * How many surahs open with the basmalah.
-     *
-     * Counted by **folding**, because the opening is not one spelling. Al-Tin and Al-Qadr
-     * begin with a shadda on the ba where every other surah has a bare kasra — the same
-     * word in the same script, and a byte comparison against one spelling reports those
-     * two surahs as having none. `MushafPageText` already folds for the same reason and
-     * for the same two surahs.
-     *
-     * The answer is **113**, not 114: At-Tawbah has none.
      */
     private fun countBasmalahs(): Int {
         val reference = QuranText.normalise(verseTexts[0].textArabic)
@@ -451,10 +359,6 @@ internal object QuranCorpus {
      * so it is the last moment before a verse could be displayed and the first moment the
      * counts are known. A failure names the structure that did not match instead of
      * arriving as a reader looking at an empty screen.
-     *
-     * It runs once, because [ayahs] is a `lazy` — the check is not a per-frame cost, and
-     * the fact that it is a `lazy` at all is why it does not run on a cold start before the
-     * reader has asked for anything.
      */
     val ayahs: List<Ayah> by lazy {
         QuranStructure.requireIntact(structure)
@@ -537,12 +441,6 @@ internal object QuranCorpus {
 
     /**
      * The fifteen prostrations, keyed by the verse they follow.
-     *
-     * Bundled in the metadata since the beginning and never read by the reader,
-     * which is why a page containing a sajdah looked exactly like one that did
-     * not. A prostration position is marked in the margin of every printed
-     * mushaf, and a reader looking for it has no other way to know they are
-     * standing on one.
      */
     val sajdaAfter: Map<Int, SajdaKind> by lazy {
         val nodes = metadata.getElementsByTagName("sajda")

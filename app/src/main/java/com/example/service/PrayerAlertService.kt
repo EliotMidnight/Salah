@@ -79,14 +79,6 @@ class PrayerAlertService : Service() {
 
     /**
      * The reader's strings, read at the moment a notification is built.
-     *
-     * The same `pref_language` the UI and `PrayerNotificationManager` read, so the
-     * ongoing alert cannot disagree with the notification that launched it about which
-     * language the reader is using. A property rather than a field read once at
-     * construction, because a service can outlive a language change.
-     *
-     * English if the preference is missing. A notification cannot afford to fail
-     * because a preference could not be read.
      */
     private val strings: UiStringsMore
         get() = LocalizationManager

@@ -51,18 +51,6 @@ import androidx.compose.foundation.clickable
 
 /**
  * One bottom sheet.
- *
- * Settings previously contained 18 near-identical sheets, each re-declaring the
- * same `Column(padding 20/16)` + `Text(titleLarge)` + `Spacer(14.dp)` prologue,
- * and each owning a boolean flipped by the caller. That last part was an actual
- * bug: because the sheets were closed by flipping a flag rather than by calling
- * `sheetState.hide()`, the shared state kept the value `Expanded`, so the next
- * sheet opened with no enter animation and a stale scrim.
- *
- * Here the state is created *inside* the sheet, so every open gets a correct
- * enter animation and a correct dismissal. Content always scrolls, which fixes
- * the 12-option translation sheet that was clipped off the bottom of the screen
- * with no way to reach the last four entries.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,11 +95,6 @@ fun OptionSheet(
  * settings sheet with a dozen rows and wrong for a list of anything a reader can
  * browse: the Quran index drew all 114 surahs, every saved verse, and all 604 page
  * numbers through that path, on the frame the sheet opened.
- *
- * The list here is capped rather than infinite, because a bottom sheet is a
- * *panel* - it should not become the whole screen - and the cap is what makes the
- * lazy list able to exist at all: a bounded viewport is the only thing a
- * `LazyColumn` can measure.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,10 +107,6 @@ fun OptionListSheet(
     header: @Composable ColumnScope.() -> Unit = {},
     /**
      * The list. Scrolled, lazy, and bounded by the sheet.
-     *
-     * Not `@Composable`, because it is a `LazyListScope` body rather than a
-     * composable body: the items it declares are composed when they scroll into
-     * view, which is the entire point of this sheet existing.
      */
     list: LazyListScope.() -> Unit
 ) {
@@ -210,9 +189,6 @@ fun SheetHeader(
 
 /**
  * A confirmation dialog.
- *
- * [destructive] puts the confirm action in the danger colour, which is reserved
- * for actions that cannot be undone.
  */
 @Composable
 fun ConfirmDialog(
@@ -275,9 +251,6 @@ fun ConfirmDialog(
 
 /**
  * A short, scrollable list of read-only facts, used by the diagnostic panels.
- *
- * Replaces three identical hand-built `Card` + `Column` + `Divider` blocks and
- * the separate `StatusRow` composable that had grown a fourth variant.
  */
 @Composable
 fun DetailList(

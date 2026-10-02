@@ -5,23 +5,7 @@ package com.example.data.quran
  *
  * ### Why this is a gate and not a test
  *
- * Every other check in the codebase lives in a test, and tests do not run on a user's
- * phone. This one runs on the load path: [QuranCorpus] refuses to serve a verse until the
- * dataset has been proved to be the dataset it claims to be.
- *
- * That is the right weight for this particular claim. A wrong verse count or a shifted
- * page boundary does not produce a visible glitch — it produces **the wrong Quran, drawn
- * correctly**. Pagination, verse selection and every announcement would be faithfully
- * reporting on text that is not the text. There is no rendering bug to notice and no
- * crash to report, so a gate that fails loudly is the only thing that catches it.
- *
  * ### Why the numbers are named rather than inlined
- *
- * They are the traditional structure of the book — 114 surahs, 30 juz', 240 rub' al-hizb,
- * 604 pages of a 15-line mushaf — and they are also *assertions about this bundle*. Both
- * meanings matter, and they are not the same claim: the first is what the Quran is, the
- * second is what Tanzil v1.0 ships. Naming them once, here, keeps a reader from having to
- * guess which is being checked.
  *
  * ### Two numbers that are commonly quoted differently
  *
@@ -39,13 +23,6 @@ package com.example.data.quran
  * all — Tanzil's metadata gives each page a *starting verse* and nothing more. There is no
  * `line` attribute anywhere in the file. So a line count is not a property of the data and
  * cannot be validated against it.
- *
- * It is a property of the *rendering*: the reader lays a page's text onto a 15-line grid,
- * the way a printed mushaf is set, and 604 x 15 is the arithmetic of the grid rather than
- * a datum to compare. Where a page cannot hold fifteen lines — Al-Fatihah's seven verses,
- * or the tail of Al-Baqarah's first five — the printed mushaf gives it fewer and the
- * reader does the same. That is checked at the rendering layer, not here, and pretending
- * otherwise would be a check that passes because it cannot fail.
  */
 object QuranStructure {
 
@@ -56,13 +33,6 @@ object QuranStructure {
 
     /**
      * The book has 6,236 verses.
-     *
-     * Under the **Kufan verse-numbering convention**, which is what Tanzil's `uthmani`
-     * download uses and what this bundle carries. The convention is not cosmetic: it is
-     * the reason at-Tawbah has **129** verses here, where the Hafs count gives 127. A
-     * reader who counts differently is not wrong, and the app does not offer the other
-     * scheme — but a verse *reference* printed by this app is a Kufan reference, and the
-     * page numbers beside it are Kufan page numbers.
      */
     const val AYAH_COUNT = 6236
 
@@ -82,11 +52,6 @@ object QuranStructure {
 
     /**
      * The book has **556** ruku'.
-     *
-     * Tanzil's own count, and what this bundle carries. 558 is also in circulation; the
-     * difference is a division convention, not an error in either. This gate asserts what
-     * the data says, because a gate that disagrees with its own bundle is worse than no
-     * gate.
      */
     const val RUKU_COUNT = 556
 
@@ -111,9 +76,6 @@ object QuranStructure {
 
     /**
      * The basmalah opens every surah but At-Tawbah.
-     *
-     * Not 114: At-Tawbah has none. In Al-Fatihah it is the whole of verse 1 rather than
-     * sitting inside it.
      */
     const val BASMALAH_COUNT = 113
 
@@ -135,10 +97,6 @@ object QuranStructure {
 
     /**
      * Every structural expectation, evaluated.
-     *
-     * Returns the failures rather than throwing, so a caller can report *all* of them at
-     * once — a shifted metadata offset usually breaks several counts together, and one at
-     * a time means five successive launches to find one problem.
      */
     fun expectations(counts: StructureCounts): List<Expectation> = listOf(
         Expectation("surahs", SURA_COUNT, counts.surahs),
@@ -169,10 +127,6 @@ object QuranStructure {
 
     /**
      * Throws unless the dataset is the Quran.
-     *
-     * The message is the whole point. A reader who hits this has a broken install, and
-     * "the bundled Quran data does not match the expected structure" with the failing
-     * counts is what turns an unexplained blank reader into a report someone can act on.
      */
     fun requireIntact(counts: StructureCounts) {
         val failures = expectations(counts).filter { !it.holds }

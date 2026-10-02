@@ -26,21 +26,6 @@ abstract class SalahDatabase : RoomDatabase() {
         /**
          * **2 to 3.** Drops the orphaned `cached_locations` table, and gives `bookmarks`
          * the unique index it should always have had.
-         *
-         * Written by hand rather than left to `fallbackToDestructiveMigration`, which is
-         * what the previous version did for every version bump - and which would have
-         * taken the reader's **bookmarks and their Continue Reading position** with it
-         * to remove a table that nothing read. Those are the only user-authored data
-         * this app has; they are not worth an empty table.
-         *
-         * The index is the other half, and it fixes a real defect rather than tidying:
-         * `BookmarkEntity` had an `autoGenerate` primary key and no natural key, so the
-         * read-then-write in `SalahRepository.toggleBookmark` could insert the same verse
-         * twice when two taps landed close together, and the Saved list showed it
-         * twice. A unique index makes the second insert a no-op, so the rows that exist
-         * are the rows that are meant to. The `DELETE` first collapses any duplicates a
-         * previous build already created, keeping the oldest - which is the one whose
-         * timestamp says when the reader actually saved it.
          */
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -65,11 +50,6 @@ abstract class SalahDatabase : RoomDatabase() {
         /**
          * **3 to 4.** Drops `continue_reading.snippetAr` and `continue_reading.surahNameAr`.
          *
-         * Both were written on every verse viewed and read by nothing, and one of them
-         * held a hand-typed copy of Quranic text that had already drifted from the corpus
-         * - the copy lacked the tatweel the corpus writes before the dagger alif in
-         * الرحمن. A second copy of the Book is worse than a missing one, so both go.
-         *
          * ### Why the table is recreated rather than `ALTER TABLE ... DROP COLUMN`
          *
          * `DROP COLUMN` needs SQLite 3.35, which is Android 12. This app supports API 24,
@@ -78,11 +58,6 @@ abstract class SalahDatabase : RoomDatabase() {
          * only recovery Room has is `fallbackToDestructiveMigration`. The
          * create-copy-drop-rename dance works on every SQLite there is, which is why it is
          * written out rather than being neat.
-         *
-         * The column list is spelled rather than derived, which is what Room's own
-         * generated migrations do for the same reason: it has to match the entity exactly
-         * or the schema check fails on open, and a check that fires on a user's device
-         * rather than in a test is the thing worth avoiding.
          */
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {

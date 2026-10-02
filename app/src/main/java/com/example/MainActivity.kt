@@ -95,11 +95,6 @@ import com.example.ui.theme.screenExitForward
 
 /**
  * The five top-level destinations.
- *
- * The label is carried in the enum only as documentation; the rendered label
- * always comes from the localisation dictionary, because hardcoding "Today" here
- * meant the bottom bar stayed English in Arabic, Urdu and the other nine
- * languages.
  */
 enum class SalahDestination(
     val route: String,
@@ -391,12 +386,6 @@ private const val KEY_ASKED_NOTIFICATIONS = "asked_post_notifications"
 
 /**
  * Explains why notifications are wanted before the system prompt appears.
- *
- * Three lines, one decision, and an honest Not now: the adhan is the app's
- * reason to exist, so silently never asking would have been worse, and asking
- * blind would have been colder. The prayer times themselves are always visible
- * on Today, so declining costs nothing, and the setting stays reachable in
- * Settings > Notifications.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

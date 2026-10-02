@@ -263,23 +263,6 @@ class AppLocationService(private val context: Context) {
 
 /**
  * Why a location could not be determined.
- *
- * ### An enum, not a sentence
- *
- * This was `reason: String` on [LocationFetchResult.Failure], and there were exactly
- * three possible values, each a fixed English sentence written in the service layer:
- * "Location permission not granted", "Location services disabled on device", "Unable
- * to acquire GPS signal. Using cached location." They were handed to the UI as a
- * `StatusBanner(message = ...)`, so a reader in any of the ten shipped languages saw
- * English, and there was nowhere in the UI that could have changed it.
- *
- * An enum says *which* of three things happened. The sentence is a presentation
- * concern and now lives in the strings, which is also the only place it can be
- * translated - see `UiStringsMore.locationError*`.
- *
- * The names are about the *cause*, not the remedy, because the remedy differs by
- * device and is the reader's to choose: `PERMISSION_NOT_GRANTED` may be answered by
- * granting the permission or by picking a city, and the app does not presume which.
  */
 enum class LocationFailure {
     /** The location permission was not granted, so nothing was asked for. */

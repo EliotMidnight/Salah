@@ -29,12 +29,6 @@ import com.example.ui.theme.Space
 /**
  * What a selected verse offers.
  *
- * One bar, one surface, and the same [VerseActions] the continuous layouts use -
- * because the actions belong to a *verse*, not to a layout. The previous reader had
- * them modelled as six hand-assembled parameter lists per surface, and the result
- * was a per-verse block offering Play while the inspector on the very same verse
- * offered Pause.
- *
  * ### Why it sits at the foot of a page rather than under the verse
  *
  * A mushaf page is a fixed object: these lines, on this paper, in this order. Putting
@@ -42,14 +36,6 @@ import com.example.ui.theme.Space
  * the page - and reflowing changes where every line falls, so the reader's eye
  * loses the place they were reading. The foot of the page is the only part of it
  * that is not text.
- *
- * ### Why the translation is here and not in the page
- *
- * Because it is an *action* on the selected verse, not a property of the page. A
- * page with translations on is a different reading mode - the reader asked for the
- * whole page translated - and this is one verse's translation, revealed by a tap.
- * Mixing the two is what made the old continuous layout append 286 verses of
- * English below a whole surah the moment the setting was turned on.
  */
 @Composable
 internal fun PageActionBar(
@@ -110,15 +96,6 @@ internal fun PageActionBar(
  * different things: in a scrolling list the bar is an *item* and moves with the
  * text, while on a page it is an overlay at the foot. Sharing the content and
  * splitting the placement is what stops the two from drifting.
- *
- * ### Why this existed and was not used
- *
- * There were three renderings of one bar: [PageActionBar], a hand-written
- * `SelectedVersePanel` in `ContinuousReader.kt` that duplicated it line for line,
- * and this alias, which called neither. Three copies is three places for a change
- * to the actions to be applied to some of them and not others - and the two that
- * were actually used had already drifted apart in their test tags and in their
- * vertical padding, so a test could find one bar and not the other.
  */
 @Composable
 internal fun SelectedVerseActions(

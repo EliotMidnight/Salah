@@ -61,10 +61,6 @@ private data class Translation(
 
 /**
  * The translations on offer.
- *
- * Only what is actually bundled is listed. The corpus carries Saheeh
- * International, so offering a language here that has no text behind it would
- * be a control that silently does nothing.
  */
 private val Translations = listOf(
     Translation("English (Saheeh International)", "English — Saheeh International")
@@ -72,21 +68,6 @@ private val Translations = listOf(
 
 /**
  * Reading options.
- *
- * The existing sheet, extended rather than replaced: it was already the right
- * surface, already scrolled correctly, and already carried the layout choice.
- * What changed is that the reader now has enough settings that the old
- * two-control sheet could not describe them - layout, axis, paper, typeface and
- * what a pinch means are all real decisions a reader makes once and then never
- * thinks about again.
- *
- * ### One rule about disabled controls
- *
- * Continuous text has no pages, so it cannot scroll sideways. Rather than
- * hiding the scroll control when continuous is chosen - which makes the sheet
- * jump and the reader wonder where the option went - the option stays and says
- * why it is unavailable. A control that explains itself is better than one that
- * disappears.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -97,8 +78,6 @@ fun ReadingOptionsSheet(
 ) {
     val space = Space.current
     val strings = LocalStrings.current
-    // The shared answer, which is the third copy of this formula in the app. The other
-    // two had already moved to `Color.isDarkSurface`; leaving this one inline meant a
     // future change to the threshold would fix two screens and not this one, which is
     // exactly the drift the shared function exists to prevent.
     val isDark = MaterialTheme.colorScheme.background.isDarkSurface()
@@ -108,7 +87,6 @@ fun ReadingOptionsSheet(
         onDismiss = onDismiss
     ) {
         // --- Layout -----------------------------------------------------------
-        // Two, because there are two surfaces. Anything that used to be a third
         // - "per ayah" - is now the per-page mushaf with verses broken out,
         // which is what it was drawing all along.
         GroupLabel(strings.more.selectLayoutTitle)
@@ -278,20 +256,6 @@ private fun GroupLabel(text: String) {
 
 /**
  * One typeface, shown by its own glyphs.
- *
- * The tile renders a real word from the real Quranic corpus in that face rather
- * than a Latin sample string, because the only honest way to choose a
- * Quranic typeface is to see Arabic in it. The face's own leading is applied to
- * the preview, so a Nastaliq tile is visibly taller than a Naskh one - which is
- * information, not a layout bug.
- *
- * ### Every face here is the real face
- *
- * The preview used to fall back to Amiri for any face whose file was not bundled,
- * and five of the seven offered faces were exactly that - so five of the seven
- * previews in the picker were the same picture under five different names. Every
- * face in [QuranFontFace] now ships with the app, and this renders the face it
- * names.
  */
 @Composable
 private fun FontFaceTile(
@@ -363,12 +327,6 @@ private fun borderColour(selected: Boolean) =
 
 /**
  * Human name for a face, written out rather than showing its storage key.
- *
- * These are the fonts' own names, and they are proper nouns of their designers -
- * "Scheherazade" and "Harmattan" are the names of a thirteenth-century copyist and
- * a city, and transliterating or anglicising them would be a small dishonesty about
- * who made them. They are not translated either: a font's name is not a word, and
- * translating it would make a face unrecognisable to anyone who has seen it.
  */
 internal fun faceLabel(face: QuranFontFace): String = when (face) {
     QuranFontFace.AMIRI -> "Amiri"
@@ -380,11 +338,6 @@ internal fun faceLabel(face: QuranFontFace): String = when (face) {
 
 /**
  * The paper swatches.
- *
- * Each swatch is the paper it selects, drawn in the reader's current light or
- * dark treatment, so the row reads as seven sheets rather than seven flat chips
- * that change meaning when the theme does. Selection is a ring in the paper's
- * own ink: a hue so close to its own wash cannot select itself.
  */
 @Composable
 private fun PaperSwatches(
@@ -442,8 +395,6 @@ private fun PaperSwatches(
  *
  * A `when` over the tone rather than a name on the enum, because a name on the enum
  * would be English by construction and the tone enum knows nothing about the interface
- * language. This used to be a `when` with English words in it, which put an English
- * label under the row *and* English in each swatch's `contentDescription`.
  *
  * [QuranPaperTone.DEFAULT] is [ReaderStrings.backgroundDefault] rather than a colour,
  * because "app default" is a different kind of answer: it is the absence of a choice,
@@ -462,10 +413,6 @@ internal fun paperLabel(tone: QuranPaperTone, reader: ReaderStrings): String = w
 
 /**
  * A live sample of the two sliders' effect.
- *
- * Present because the two scales are independent and it is genuinely not
- * obvious what 70% Arabic and 180% translation looks like together - and a
- * settings screen that shows you the result before you leave is worth one card.
  */
 @Composable
 private fun LivePreview(

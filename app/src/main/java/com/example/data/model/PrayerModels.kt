@@ -34,10 +34,6 @@ enum class Prayer(
      * actually decides whether sound plays, defaulted every prayer to a **full
      * adhan**. So a reader who had never opened the per-prayer sheet was told sunrise
      * was silent, and heard a full call to prayer at sunrise.
-     *
-     * Sunrise is the exception because it is not a prayer - [isFard] says so, and has
-     * said so since the enum was written. A reader praying at sunrise is praying Asr,
-     * so an adhan there is wrong on its own terms and not merely loud.
      */
     val defaultAlertMode: String
         get() = if (this == SUNRISE) ALERT_MODE_REMINDER else ALERT_MODE_FULL
@@ -58,23 +54,8 @@ val defaultAlertModes: Map<Prayer, String>
  *
  * A *time*, and nothing about what time it is now.
  *
- * `isNext`, `isCurrent` and `isPassed` used to be here, stamped by the engine when it
- * calculated the day. That put a clock reading inside a value describing a schedule,
- * and the reading went stale immediately: the day is only recalculated on a settings
- * or location change and at midnight, so "which prayer is next" froze at whatever it
- * was at the last recalculation while the Today page recomputed it every second and
- * moved on. Two tabs, two answers.
- *
  * "Which prayer is next" is a live reading. It lives in the ViewModel's one-second
  * ticker, as `nextPrayer` and `previousPrayer`, and screens ask it there.
- *
- * `isCompleted` was also here, with a KDoc arguing that it was safe because it "is not
- * a reading of the clock". It was, in effect, the same mistake one field over: nothing
- * ever set it, so it was permanently `false`, and nothing read it, so its value was
- * never observed. The argument was about *which* clock it read and the problem was
- * that no clock read it. The reader's own per-day tick is `PrayerLogEntity`, which is
- * written; a field on a `PrayerTime` is not, and would go stale the moment a day were
- * recalculated - which is what its neighbours used to do.
  */
 data class PrayerTime(
     val prayer: Prayer,

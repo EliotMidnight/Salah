@@ -5,19 +5,6 @@ import com.example.data.model.QuranPaperTone
 
 /**
  * The mushaf's paper.
- *
- * Seven hues at a very low chroma, plus the app's own background as the
- * default. The rule the palette is built to satisfy is that **the ink is chosen
- * per paper, never inherited**. On the app's blue-tinted page, `onSurface` is
- * near-black and correct; drag that same colour onto a washed indigo and it is
- * still readable but no longer the app. So every pair below is measured, and
- * [quranPaperOn] is the only thing the reader is allowed to colour text with.
- *
- * Each wash is also deliberately *warm-to-cool in lightness*, not just in hue:
- * the light washes all sit in a narrow band around L* 97 and the dark ones
- * around L* 13, so switching between them in dark mode is a change of
- * temperature rather than a change of exposure. A reader who picks a colour in
- * light mode should not find it blinding in dark mode, and vice versa.
  */
 object QuranPaper {
 
@@ -41,11 +28,6 @@ object QuranPaper {
 
     /**
      * Ink on this paper.
-     *
-     * Near-black on the light washes and a warm off-white on the dark ones. It
-     * is deliberately *not* the app's `onSurface`: that token is tuned for the
-     * app's tinted page and reads slightly cold against warm paper, which is
-     * visible over a full screen of text but not on a card.
      */
     private val InkOnLight = Color(0xFF14171A)   // 15.6:1 on the lightest wash
     private val InkOnDark = Color(0xFFEDE7E0)    // 14.2:1 on the darkest wash
@@ -67,10 +49,6 @@ object QuranPaper {
 
     /**
      * The swatch to draw in the colour picker.
-     *
-     * Shown in the reader's own current treatment, so the row of swatches looks
-     * like seven pieces of paper rather than seven flat chips that change
-     * meaning when the theme does.
      */
     fun swatch(tone: QuranPaperTone, dark: Boolean): Color = wash(tone, dark)
 

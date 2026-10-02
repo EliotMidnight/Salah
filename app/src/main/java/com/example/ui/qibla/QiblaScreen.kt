@@ -28,16 +28,6 @@ import kotlin.math.abs
 
 /**
  * Qibla.
- *
- * The compass is the screen, so it gets the space and everything else is
- * supporting text. The previous version put a 22dp "verified" icon and a title
- * above the compass, then a bordered warning card, then the compass, then more
- * bordered cards - four competing frames around one instrument.
- *
- * It also rendered outside any scaffold, which on a phone meant two real bugs:
- * the first row sat under the status bar and clock, and because nothing scrolled,
- * the location and calibration rows at the bottom were simply unreachable. It now
- * uses the same frame as every other screen.
  */
 @Composable
 fun QiblaScreen(
@@ -112,17 +102,6 @@ fun QiblaScreen(
 
 /**
  * Which way the Kaaba is from here.
- *
- * This is the *destination* bearing, not a live compass heading: it depends only
- * on where you are, so it holds still while you turn. It used to be rendered with
- * no label at all, sitting directly above the dial, where it read as a heading
- * that had frozen - which is precisely the question it cannot answer. The label
- * now sits above it, and the true/magnetic north reference reads as a caption
- * instead of a second value.
- *
- * The turn instruction is not repeated here: it belongs on the banner beside the
- * dial, which is where the user is actually turning. Two identical "Turn 12° to
- * the right" lines used to be on screen at once.
  */
 @Composable
 private fun QiblaHeader(

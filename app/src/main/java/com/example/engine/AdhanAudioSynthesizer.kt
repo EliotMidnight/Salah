@@ -25,10 +25,6 @@ object AdhanAudioSynthesizer {
 
     /**
      * Whether a phrase is sounding, for this class's own loops.
-     *
-     * Private now. It was public and nothing outside read it - a state a reader of the
-     * class could have consulted and been told the wrong thing by, since it is only
-     * about synthesis and says nothing about whether a *stream* is playing.
      */
     @Volatile
     private var isPlaying: Boolean = false

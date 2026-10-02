@@ -260,19 +260,6 @@ object PrayerCalculationEngine {
      *
      * ### Two tiers, and why not `HH:MM:SS`
      *
-     * Hours and minutes while there are hours left; minutes and seconds once there
-     * are not. The switch is the point. An hour is too coarse to be worth watching
-     * when the next prayer is four minutes out, and seconds are noise when it is
-     * six hours away - so the last hour gets the seconds and the rest does not.
-     *
-     * This used to be `HH:MM:SS` here *and* a second, differently-formatted
-     * implementation inside `TodayScreen`. The page rendered the second one and this
-     * one had no reader at all, which is how a countdown ends up frozen: the page
-     * computed its own inside a `remember(day, isToday)`, whose keys do not change
-     * between seconds, so the number never moved while the headline prayer and the
-     * "next" row did not either. There is one countdown now, and it is computed once
-     * a second by the ticker that already runs.
-     *
      * A target on the far side of midnight counts forwards rather than backwards,
      * so the countdown never reads as a large negative.
      */

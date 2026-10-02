@@ -24,31 +24,10 @@ import com.example.ui.quran.reader.rememberReaderPosition
  * is one tap away from the reading surface and dismisses back onto it, rather
  * than being a screen you have to pass *through* to reach the book.
  *
- * That is the whole difference from the previous version, and it is why the
- * reader's back affordance is a dock tab rather than an arrow: leaving is a
- * change of destination, not an undo.
- *
- * The two sheets are owned here rather than by the reader so that dismissing
- * one does not disturb reader state - an earlier version kept the sheet flags
- * inside the reader, so opening the options sheet and rotating the device
- * dismissed it.
- *
  * ### The reader's place is owned *here*
  *
  * `ReaderPosition` is created at the destination and handed down, rather than being
- * created inside the reader. That is not tidiness; it is the fix for the module's
- * worst defect.
- *
- * The position was inside `QuranReader`, and the ViewModel held a copy of it as
- * `selectedSurah`. Navigation came in through the ViewModel, and the reader never
- * asked - so **the index could not move the reader at all.** Picking Al-Kafirun
- * changed the name in the pill and left the page on 285, and the pill's page number
- * and surah name then came from two different objects at two different latencies, so
- * they disagreed for 600ms on every page turn that crossed a surah boundary.
- *
- * The destination is the natural owner: the reader renders the position, the index
- * navigates it, the chrome reports it, and the ViewModel asks it to be somewhere
- * once. One object, one writer, and every part of the surface reads the same value.
+ * created inside the reader, so exactly one writer can move it.
  */
 @Composable
 fun QuranScreen(

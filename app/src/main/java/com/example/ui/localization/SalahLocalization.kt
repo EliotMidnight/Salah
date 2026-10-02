@@ -184,18 +184,6 @@ data class UiStrings(
 
     /**
      * Copy added by the redesign.
-     *
-     * These are not fields on [UiStrings] on purpose. A Kotlin data class
-     * generates a `copy` and a `componentN` per property, and the JVM caps a
-     * method signature at 255 slots - so folding 160-odd strings into the same
-     * class compiles cleanly and then dies at runtime with
-     * `ClassFormatError: Too many arguments in method signature`. A second
-     * data class keeps both well inside the limit.
-     *
-     * Read them as `strings.someLabel`. Every value here replaces an
-     * English literal that used to sit directly in a layout file, which is
-     * exactly why none of them could ever be translated. They are English
-     * defaults; add a per-language override as each is translated.
      */
     val more: UiStringsMore = UiStringsMore(),
     val dateNav: DateNavStrings = DateNavStrings()
@@ -205,18 +193,9 @@ data class UiStrings(
 /**
  * Strings for the clock page: the 24-hour dial, the windows a worshipper
  * watches for, and the day pager.
- *
- * Separate from [UiStringsMore] on purpose. That class is at 247 fields and the
- * JVM refuses a constructor with more than 255 parameters, so it cannot absorb
- * another screen's worth. A screen that needs its own copy should get its own
- * class rather than pushing the shared one over the edge.
  */
 /**
  * The immersive reader's strings.
- *
- * Its own class so the reader's thirty-odd labels do not push [UiStringsMore]
- * past the JVM's 255-parameter constructor limit - a failure that compiles fine
- * and then throws `ClassFormatError` from the class loader at runtime.
  */
 data class ReaderStrings(
     /** Opens the surah / saved / search index. */
@@ -391,17 +370,6 @@ data class ReaderStrings(
 
     /**
      * The compass direction [azimuthDegrees] points towards, in this language.
-     *
-     * Eight half-open sectors of 45 degrees each, starting at north. **Half-open, and
-     * that is the point**: the previous `when` used closed ranges (`22.5f..67.5f` and
-     * `67.5f..112.5f`), so every boundary belonged to two sectors and the answer
-     * depended on which arm of the `when` was tested first. It happened to come out
-     * right and it happened to be untested. With `..<` each boundary has exactly one
-     * answer, and `QiblaDirectionTest` checks all eight of them.
-     *
-     * North wraps, so 337.5 through 360 and 0 through 22.5 are one sector rather than
-     * two - the naive version of this returned "N" for the first and had to special-case
-     * nothing only because its final `else` happened to be north.
      */
     fun cardinal(azimuthDegrees: Float): String {
         val norm = ((azimuthDegrees % 360f) + 360f) % 360f
@@ -431,12 +399,6 @@ data class DateNavStrings(
  * **249 `String` fields, which is past a limit — see `RobolectricPackages.kt` in the
  * test sources.**
  *
- * Robolectric's instrumenter emits a constructor with one parameter per field, and at
- * this size that crosses the JVM's 64 KB method limit: the suite failed with
- * `ClassFormatError: Too many arguments in method signature` before a single assertion
- * ran. The test sources stop instrumenting this package, which is safe because every
- * field here is an immutable `String` with nothing for the instrumenter to rewrite.
- *
  * **That is a mitigation, not a fix.** A data class with 249 constructor parameters is
  * not a list of strings; it is a list of strings nobody has reviewed as a group, and it
  * will cross a real limit on a lower one. The right shape is several nested classes —
@@ -459,25 +421,6 @@ data class DateNavStrings(
  * **before a single assertion ran** — which meant no test involving the app's own
  * strings could execute at all, and the failure named a bytecode limit rather than the
  * design problem behind it.
- *
- * Splitting is the fix; the alternatives are not. Narrowing Robolectric's
- * `instrumentedPackages` does not help, because a class-level `@Config` overrides the
- * properties file and every test class here sets one. Suppressing instrumentation
- * cannot even be expressed here — the annotation lives in Robolectric's annotations
- * artifact, which is a *test* dependency, and this file is in `main`.
- *
- * And the size was a symptom anyway: a data class with 249 constructor parameters is not
- * a list of strings, it is a list of strings nobody has reviewed as a group. These
- * nineteen had a natural boundary all along — they are built in one place
- * (`PrayerNotificationManager`), shown in one place, and read by a reader looking at a
- * notification.
- *
- * The same shape will solve the next one: a surface with its own boundary becomes its
- * own class rather than more fields on this one. `ReaderStrings` is already one, at 52.
- * **The remaining ~230 fields on `UiStringsMore` are still the next thing to do to this
- * file**, and they should be split the same way — settings, the Hijri calendar, the
- * sky, search. That is deliberate work over every call site, not something to smuggle in
- * beside a bug fix.
  */
 data class NotificationStrings(
     val notifChannelAdhan: String = "Adhan & Prayer Call Alerts",
@@ -522,12 +465,6 @@ data class UiStringsMore(
     val computedOnDevice: String = "Computed on this device",
     /**
      * Re-derive today's times and re-arm the alarms.
-     *
-     * Was "Recompute 365-day schedule", and it is a *button* rather than a status
-     * because alarms are lost on reboot, on a battery-optimisation app being
-     * installed and on a revoked permission - none of which the app is always told
-     * about - so "re-arm" is a real action with a real effect. "365-day" was not:
-     * nothing is cached and nothing was ever 365 days.
      */
     val reschedulePrayers: String = "Re-arm prayer alarms",
     val minutesShort: String = "min",
@@ -539,13 +476,6 @@ data class UiStringsMore(
 
     /**
      * The note that says the list is a page and not everything.
-     *
-     * Appended to the count, which is the **total**: "143 verses - showing the first 50".
-     *
-     * It exists because the count used to be the page size, so a search for a common
-     * word reported "50 verses" when 143 verses contain it. Fifty results with no
-     * admission reads as *all* of them, and nothing on the screen contradicts that, so
-     * the number was a lie rather than a truncation.
      */
     val searchShowingFirst: String = "showing the first %d",    val surahsFound: String = "%d surahs",
     val verseCount: String = "%d verses",
@@ -3754,11 +3684,6 @@ val LocalStrings = staticCompositionLocalOf { EnglishStrings }
 /**
  * The interface language, as the reader chose it.
  *
- * The third answer to the same question, and the one that was missing. "Which language
- * is this interface in?" was answerable only by comparing strings against all ten
- * bundles, or — for a decision about *which of two languages already on screen* is the
- * one the reader is reading — not at all.
- *
  * [LocalStrings] cannot answer it. It has already been used to produce the strings and
  * does not know which bundle they came from, and a reader who has chosen Arabic is still
  * looking at the Quran's Arabic, an English translation, an English surah name and a
@@ -3794,11 +3719,6 @@ val UiStrings.ayahLabel: String
 
 /**
  * Is the interface in Arabic?
- *
- * The Today page's headline follows the interface language, and Arabic leads
- * only when the reader chose Arabic - so this needs to answer that question, not
- * "is this right-to-left", because Urdu is also RTL and has its own name for a
- * prayer that should lead in Urdu.
  */
 fun isArabicInterface(language: String): Boolean =
     AppLanguage.entries.firstOrNull {
@@ -3820,16 +3740,6 @@ fun UiStrings.prayerName(prayer: com.example.data.model.Prayer): String {
 
 /**
  * The display label for a stored prayer-alert mode.
- *
- * The five mode strings are **persisted preference keys**, not copy. They are
- * compared by name in AdhanAudioSynthesizer, PrayerNotificationManager,
- * PrayerAlertService and SalahViewModel, and they are already written into
- * existing users' SharedPreferences. They must stay English and stable.
- *
- * What was missing was a display layer: Home and Settings both rendered these
- * keys straight to the screen, so in Arabic, Urdu and the other ten languages
- * every prayer row showed an English word. This maps the key to a label without
- * touching storage, which is why it is safe to add.
  */
 fun UiStringsMore.alertModeLabel(storedValue: String): String = when (storedValue) {
     "Full Adhan" -> alertAdhan
@@ -3842,12 +3752,6 @@ fun UiStringsMore.alertModeLabel(storedValue: String): String = when (storedValu
 
 /**
  * Applies the selected language.
- *
- * Also sets [LocalLayoutDirection]. The project previously tracked
- * `AppLanguage.isRtl` (true for Arabic and Urdu) but never used it, so Arabic
- * and Urdu interfaces rendered left-to-right with the labels merely swapped.
- * Providing the direction here means `start`/`end` padding, row order and the
- * auto-mirrored icons all follow the language, in one place.
  */
 @Composable
 fun ProvideAppLanguage(language: String, content: @Composable () -> Unit) {

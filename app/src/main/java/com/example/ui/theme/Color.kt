@@ -5,8 +5,6 @@ import androidx.compose.ui.graphics.Color
 /**
  * SALAH colour system.
  *
- * Rules this palette is built to satisfy:
- *
  * 1. **One accent.** A single calm blue carries every interactive and "this is
  *    selected" signal. Nothing else competes with it.
  * 2. **A real elevation ladder.** The previous palette set `background` and
@@ -118,9 +116,6 @@ val OnWarningContainerDark = Color(0xFFFEF0C7)
 
 /**
  * Blends towards white by [amount].
- *
- * Used instead of a hand-picked pale constant per sky period so the static
- * background stays in step with the live palette rather than drifting from it.
  */
 internal fun Color.lighten(amount: Float): Color = Color(
     red = red + (1f - red) * amount,

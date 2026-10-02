@@ -55,15 +55,6 @@ internal val ChipHeight = 28.dp
 
 /**
  * What a verse offers, and what state it is in.
- *
- * Modelled as one value rather than six booleans because every verse surface
- * renders the same row of actions, and they used to be six hand-assembled
- * parameter lists per surface - which is how the inspector came to offer Pause
- * while the per-verse block offered Play, on the very same verse.
- *
- * [ayah] rides along so the copy and share actions can be derived rather than
- * passed twice into every call site. It is null only on surfaces that show the
- * row without owning a verse.
  */
 @Immutable
 data class VerseActions(
@@ -78,10 +69,6 @@ data class VerseActions(
 
 /**
  * The verse's reference as a pill.
- *
- * One component for all three places it appears - the per-ayah block, the
- * inspector and the saved list - so "2:255" is always the same size, colour and
- * shape wherever the reader shows it.
  */
 @Composable
 internal fun VerseReferenceChip(
@@ -117,15 +104,6 @@ internal fun VerseReferenceChip(
 
 /**
  * The translation card.
- *
- * Unchanged in design and unchanged in role: a quiet surface carrying the
- * reference above the translation, at the reader's translation scale so the
- * Arabic and its translation stay in proportion while both are adjusted.
- *
- * One composable rather than a per-surface variant, because it renders
- * identically under a verse block, under the inspector and in the index - and
- * three copies of a card that is meant to look like one thing is how they stop
- * looking like one thing.
  */
 @Composable
 fun VerseTranslationCard(
@@ -187,15 +165,6 @@ fun VerseTranslationCard(
 
 /**
  * The Arabic of one verse, in the reader's typeface and size.
- *
- * The single place the Quranic text style is built. The flowing page, the
- * per-ayah block, the inspector and the index preview all call this, which is
- * what keeps them from disagreeing about the leading of identical text - the
- * thing that went wrong three separate times before this component existed.
- *
- * The face comes from [LocalQuranTypeface], so it does not have to be threaded
- * through every call site, and a surface rendered outside a reader still gets a
- * correct Arabic style rather than a default one.
  */
 @Composable
 internal fun VerseArabic(
@@ -208,7 +177,6 @@ internal fun VerseArabic(
 ) {
     Text(
         text = if (showEndMarker) {
-            // `ayahMarker` already carries the U+06DD ornament. This used to write a
             // literal ۝ and *then* call it, so every per-verse block ended with two
             // ayah circles - the per-page mushaf does not, because
             // `MushafPageText` calls the same function once.
@@ -253,9 +221,6 @@ internal fun VerseActionButton(
 
 /**
  * The row of per-verse actions, shared by the block and the inspector.
- *
- * Copy and share are derived from [VerseActions.ayah] so a verse copied from the
- * flowing page is byte-identical to one copied from its block.
  */
 @Composable
 internal fun VerseActionRow(

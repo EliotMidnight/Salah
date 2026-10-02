@@ -86,11 +86,6 @@ private val ALERT_MODES = listOf("Full Adhan", "Takbeer Only", "Gentle Chime", "
 
 /**
  * Sunrise's options.
- *
- * Sunrise is seeded with "Silent Reminder" (SalahViewModel), which is not one
- * of [ALERT_MODES] - and a full adhan at sunrise is not a sensible offer. These
- * are the levels that make sense for the dawn sign, and they include the seeded
- * value so the row can show the truth.
  */
 private val SUNRISE_ALERT_MODES = listOf("Silent Reminder", "Vibrate Only", "Silent")
 private val AUTO_SILENCE_OPTIONS = listOf(15, 20, 30, 45)
@@ -120,12 +115,6 @@ private val CapitalsListMaxHeight = 360.dp
 
 /**
  * The play/stop control on an audio option.
- *
- * It was copy-pasted into three sheets, and the copies had drifted: one played a
- * fixed icon, two toggled, and the icon was 20dp in two places and 16dp in the
- * third. One composable, one icon size, and a label that names the thing it
- * previews - six identical "Test sound" buttons in a row were indistinguishable
- * to a screen reader.
  */
 @Composable
 private fun PlayPreviewButton(
@@ -149,10 +138,6 @@ private fun PlayPreviewButton(
 
 /**
  * One line in the privacy card: a check and a fact.
- *
- * The card states what the app does not do, which is the whole of its privacy
- * stance - there is no server, account or SDK to describe. A check reads as an
- * assurance; the text carries the fact.
  */
 @Composable
 private fun PrivacyFact(text: String) {
@@ -180,16 +165,6 @@ private fun PrivacyFact(text: String) {
 
 /**
  * Settings.
- *
- * Every one of the twenty settings the app had is still here, with the same
- * callback behind it. What changed is that they are grouped by what a person is
- * actually trying to do - "where am I and how are the times worked out", "how
- * should it get my attention", "how should the Quran read" - instead of one flat
- * run of thirty identical bordered cards that took about 2,600dp to scroll.
- *
- * The eighteen pick-one dialogs are now one [OptionSheet]. The old ones each
- * declared their own `ModalBottomSheetState` that was never used to dismiss them,
- * so the second sheet you opened skipped its enter animation.
  */
 @Composable
 fun SettingsScreen(
@@ -1215,18 +1190,6 @@ private fun AdjustmentSliders(
 
 /**
  * The six applied offsets, in reading order, with Sunrise among them.
- *
- * One list, because the same five-and-a-half facts were written out in **three**
- * places - this summary, the Prayer screen's "Applied adjustments" and the Settings
- * calculation sheet - and all three omitted Sunrise. So a reader who set a +3 minute
- * sunrise offset saw an *empty* summary, two diagnostic sheets that never mentioned
- * sunrise, and an engine that applied it. A summary that silently drops one of six
- * settings is worse than no summary: it says "nothing adjusted" and means something
- * else.
- *
- * Sunrise is here because the reader can set it. The `Prayer` enum carries it because
- * the engine applies it, and an offset the reader can change and no screen will
- * report has not really been exposed.
  */
 internal fun appliedAdjustments(adjustments: PrayerAdjustments): List<Pair<Prayer, Int>> =
     listOf(
@@ -1256,9 +1219,6 @@ private fun adjustmentSummary(state: SalahUiState): String {
 
 /**
  * The one or two letters a prayer is abbreviated to in the summary.
- *
- * Hand-written rather than derived, because "Fajr" and "Sunrise" both begin with F
- * and a summary is only useful if the reader can tell them apart at a glance.
  */
 private fun Prayer.ordinalLetter(): String = when (this) {
     Prayer.FAJR -> "F"

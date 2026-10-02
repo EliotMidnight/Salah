@@ -7,14 +7,6 @@ import androidx.compose.runtime.Immutable
  *
  * ### Why this exists at all
  *
- * The reader used to hold a bare `selectedAyah: Int` and ask
- * `ayah.ayahNumber == selected`. That is ambiguous, and not in the abstract - it
- * is ambiguous on a real page. Page 604 holds Al-Ikhlas, Al-Falaq and An-Nas, so
- * ayah 1 exists three times on it; page 285 crosses from Al-Isra into Al-Kahf.
- * Selecting "verse 3" on either highlighted *two* verses, and the copy and
- * bookmark actions then fired on whichever one happened to be first in the
- * list. A verse is only a verse when the surah is part of the identity.
- *
  * ### Why the page is carried along
  *
  * A page number is not derivable from a reference without a corpus lookup, and
@@ -49,14 +41,6 @@ data class QuranRef(
 
 /**
  * A place in the mushaf that is not a single verse.
- *
- * Used by the browse surfaces, which answer "where do I go" for a page, a juz'
- * or a hizb just as much as for a surah, and by the reader's own chrome, which
- * has to be able to say "page 285" without inventing a verse that is not there.
- *
- * [verse] is always the *first* verse of the place, which is what a reader
- * expects when they arrive: the opening line of the page, the opening verse of
- * the juz', the start of the surah.
  */
 @Immutable
 data class QuranPlace(

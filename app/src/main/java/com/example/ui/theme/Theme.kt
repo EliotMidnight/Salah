@@ -95,9 +95,6 @@ private val DarkColors = darkColorScheme(
 
 /**
  * Semantic colours that Material 3 has no slot for.
- *
- * Kept as one small object rather than four loose composition locals so a
- * screen can only ever reach for a colour that has a defined meaning.
  */
 @Immutable
 data class SemanticColors(

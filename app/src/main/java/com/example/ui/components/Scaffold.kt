@@ -38,27 +38,6 @@ import com.example.ui.theme.layoutMetrics
 
 /**
  * The frame every screen sits in.
- *
- * Previously each of the five screens hand-rolled its own version of this and
- * they had drifted apart: Home centred at 680dp with no horizontal padding,
- * Settings centred at 680dp *with* 16dp padding, Prayer at 680dp, Qibla at
- * 680dp, and only two of the five respected the display cutout. Now there is one
- * implementation and one reading measure.
- *
- * @param onBack when non-null, shows a back affordance and the screen is treated
- *   as a pushed destination. Top-level tabs pass null.
- * @param title pass null to drop the top bar entirely. The status-bar inset is
- *   still applied, so content does not slide under the clock - only the title
- *   row goes. Used by the two screens whose heading merely repeated the bottom
- *   navigation label.
- *
- * The insets come from [SafeArea] rather than from `WindowInsets.statusBars`
- * directly, which is the whole point of that file: the status bar and the cutout
- * are one fact, and a caller that asks only for the status bar is not asking the
- * question. Both were true here - these two functions were the copy that got the
- * cutout wrong, so on a device whose camera hole reaches the top edge a title sat
- * underneath it. The horizontal reserve is the half nobody had: rotated, the cutout
- * is 30-40dp deep at the left or right edge against a 16dp gutter.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -182,10 +161,6 @@ fun ScreenTopBar(
 
 /**
  * A quiet group label.
- *
- * Not a heading - the screen title already owns that role. This exists to say
- * "the next few rows belong together" without competing for attention, which is
- * what the old all-caps accent-coloured headers were doing on every screen.
  */
 @Composable
 fun SectionHeader(
@@ -203,9 +178,6 @@ fun SectionHeader(
 
 /**
  * Vertical rhythm for a screen that manages its own scrolling (lists, grids).
- *
- * Same measure and insets as [ScreenScaffold] so a lazy screen lines up pixel
- * for pixel with a scrolling one.
  */
 @Composable
 fun ContentColumn(

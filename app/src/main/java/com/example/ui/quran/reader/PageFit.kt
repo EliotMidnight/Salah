@@ -7,26 +7,10 @@ import com.example.data.model.QuranReadingOptions
  *
  * ### Why this cannot be arithmetic
  *
- * The obvious rule - "height is proportional to size, so multiply by the ratio" -
- * is **wrong for this text**, and wrong in a way that loses verses.
- *
  * A page's height is `lines x lineHeight`. Raising the type size does two things at
  * once: the line height grows *with* the size, and so does the number of lines,
  * because a bigger font wraps the same text into more lines. Height therefore
  * scales roughly with the **square** of the size, not linearly.
- *
- * Under the linear assumption a dense page is over-shrunk (visibly smaller than it
- * needs to be), and - worse - [needsScroll] extrapolates that a page clamped at
- * the minimum size now fits, when at that size it is still too tall. The page is
- * then reported as fitting, is not scrolled, and its last lines are cut off with
- * no way to reach them. That is the one failure a mushaf reader cannot have: a
- * printed page is never missing a line.
- *
- * So the only honest answer comes from **measuring at the scale we intend to
- * draw**. [MushafPage] does that: measure at the reader's size, and if it does not
- * fit, measure again at the candidate fitted scale. The measurement is cheap - it
- * is a text layout the app performs anyway - and it is the difference between
- * "probably fits" and "fits".
  *
  * ### The rules
  *
@@ -43,44 +27,21 @@ object PageFit {
 
     /**
      * How many bisection steps a fit takes when the page does not fit.
-     *
-     * Each step is a real text measurement, so this is a bound on work as much as
-     * on iterations. Three is enough: it narrows the scale to within about 3% of
-     * the largest that fits, which is far below what a reader can see on a page of
-     * Arabic, and it holds the worst case to four measurements including the one
-     * at the reader's own size.
      */
     const val MAX_ITERATIONS = 3
 
     /**
      * The most measurements a non-fitting page can cost.
-     *
-     * One at the reader's size, one at the floor - which has to be measured even
-     * when nothing else fits, because [PageFitResult.needsScroll] is an answer
-     * about *that* scale and extrapolating it from the reader's size is the bug
-     * this type exists to fix - and up to [MAX_ITERATIONS] in between.
      */
     const val MAX_MEASUREMENTS = 2 + MAX_ITERATIONS
 
     /**
      * The largest scale worth trying.
-     *
-     * Never above the reader's own size, which is the ceiling - but a page that is
-     * *shorter* than the viewport stays at exactly the reader's size, and this
-     * constant is what keeps the first attempt from trying to grow it.
      */
     fun ceiling(requested: Float): Float = requested
 
     /**
      * The scale to draw a page at, from measurements taken *at* the candidates.
-     *
-     * [measure] is called with a candidate scale and returns the height that scale
-     * produces. It is the text measurer; it is passed in rather than held here so
-     * this stays a pure decision, testable without a font, a density or a
-     * composition.
-     *
-     * The result is one of three things, and which one is reported rather than
-     * inferred:
      *
      * - the requested scale, if the page fits at it;
      * - a scale strictly between the floor and the request, if the page was
@@ -147,10 +108,6 @@ data class PageFitResult(
     val wasScaled: Boolean,
     /**
      * True when the page still does not fit at the scale chosen.
-     *
-     * The page must then be scrollable, and must say so. Clipping a page's last
-     * lines with no way to reach them is the one failure a mushaf reader cannot
-     * have.
      */
     val needsScroll: Boolean
 ) {

@@ -60,15 +60,6 @@ import java.time.format.DateTimeFormatter
 
 /**
  * The whole Hijri month, as a grid of its days.
- *
- * Reached from the Today page's `Full Hijri month` row. It shows the Hijri
- * month the selected day falls in - which is usually *two* months at a glance,
- * because a Gregorian month almost never lines up with a Hijri one - with each
- * cell carrying both numbers and a marker for the days a prayer falls on.
- *
- * Times for the selected day are printed underneath rather than in every cell:
- * thirty cells of five numbers is a spreadsheet, not a calendar, and the
- * timetable is one tap away either way.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -81,12 +72,6 @@ fun HijriMonthSheet(
     timeFormatter: DateTimeFormatter,
     /**
      * The reader's Hijri adjustment, in days.
-     *
-     * Passed in rather than read from a global, because the month grid and the
-     * adjustment have to agree: the heading, the day numbers and the month the arrows
-     * page between are all the same question, and a sheet that read the adjustment
-     * from one place and the grid from another draws the month boundary in the wrong
-     * place.
      */
     hijriAdjustment: Int = 0,
     onSelectDate: (LocalDate) -> Unit,
@@ -225,10 +210,6 @@ fun HijriMonthSheet(
 
 /**
  * One day of the Hijri month.
- *
- * Shows the Hijri number large and the Gregorian number small under it, because
- * a Hijri month seen through a Gregorian lens needs both or it is unreadable to
- * half the people looking at it.
  */
 @Composable
 private fun HijriDayCell(
@@ -335,11 +316,6 @@ private fun PrayerTimesCompact(times: PrayerTimesDay, timeFormatter: DateTimeFor
 
 /**
  * Every Gregorian day belonging to the same Hijri month as [date].
- *
- * Found by walking outward from [date] rather than by arithmetic: the Hijri
- * month length is 29 or 30 days depending on the cycle position, and guessing
- * it wrong puts a day in two months or none. Asking the engine is cheap here -
- * it runs once, for the whole sheet, and is remembered.
  */
 private fun hijriMonthDays(date: LocalDate, adjustment: Int): List<LocalDate> {
     val target = hijriOf(date, adjustment)
@@ -362,11 +338,6 @@ private fun hijriMonthDays(date: LocalDate, adjustment: Int): List<LocalDate> {
 
 /**
  * The first day of the Hijri month [steps] away from [from].
- *
- * Stepping by 29 or 30 Gregorian days instead would drift, because a Hijri
- * month is one of those two and neither is ever the right number; by the end of
- * a year the arrows land in the wrong month. Walking to the neighbouring month
- * and sliding back to its first day cannot drift.
  */
 private fun shiftHijriMonth(from: LocalDate, steps: Int, adjustment: Int): LocalDate {
     val current = hijriOf(from, adjustment)
@@ -401,18 +372,6 @@ private fun sameHijriMonth(candidate: LocalDate, month: HijriDate, adjustment: I
 
 /**
  * The Hijri date of a Gregorian day, with the reader's adjustment applied.
- *
- * One function, so "what Hijri month is this day in" has one answer in this file.
- * Before it, the sheet mixed an adjusted `selected` with an unadjusted grid: the
- * heading said one month and the days under it were gathered by another, which is a
- * month boundary drawn in the wrong place - and only visible to a reader who has set
- * an adjustment of ±2 days, which is to say to a reader following a local calendar.
- *
- * The grid still shows *Gregorian* days, because the reader's choice is a Gregorian
- * day - prayer times, the app's date switcher and every other screen work in that
- * calendar. So the adjustment shifts which Hijri month a day belongs to, and the
- * dates on offer do not move. That is what an adjustment means: a disagreement about
- * *today's* Hijri date, not about which days exist.
  */
 private fun hijriOf(date: LocalDate, adjustment: Int): HijriDate =
     HijriCalendarEngine.getHijriDate(date.plusDays(adjustment.toLong()))

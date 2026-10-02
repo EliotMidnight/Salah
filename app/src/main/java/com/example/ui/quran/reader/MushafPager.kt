@@ -33,45 +33,7 @@ import androidx.compose.ui.unit.LayoutDirection
  *
  * ### A pager, and why not a list
  *
- * The previous vertical layout was a `LazyColumn` of all 604 pages, which meant a
- * swipe *scrolled across a boundary* rather than turning anything, three pages sat
- * half-visible in the viewport at all times, and "which page am I on" became a
- * question the reader could only answer by scrolling back to find the seam. All
- * three are what the printed mushaf is not. Both axes are a pager here: a vertical
- * swipe turns forward, a horizontal one turns sideways, and never more than one
- * page is on screen.
- *
  * ### The pager writes the position, and the position writes the pager
- *
- * Two directions, both declared here, both guarded on inequality so neither
- * re-fires on the other's write and the two cannot loop.
- *
- * Getting this wrong is what produced the module's most-reported bug.
- * `rememberPagerState` reads `initialPage` **once**, at composition, and ignores it
- * for the rest of its life - so a separate `LaunchedEffect` was re-seeding a page
- * cursor on every anchor change. Picking a surah from the index moved the number
- * in the pill and nothing else: the pager stayed where it was, and the pill
- * reported a page the reader was not looking at.
- *
- * ### A page turn records the page's own first verse
- *
- * Turning to page 3 writes `placeAtPage(3).verse`, which is 2:6 - the first verse
- * *on page 3*. The previous implementation wrote the first verse of the reader's
- * surah, so turning from page 2 to page 3 recorded 2:1, and "continue reading"
- * pointed back at page 2 forever. That is the bug the whole `ReaderPosition` type
- * exists to make unrepresentable.
- *
- * ### No tap gutters
- *
- * The previous horizontal axis carried two 48dp invisible strips that turned the
- * page. They cost 2 x 48dp of the reading area, existed on the horizontal axis
- * only - so a screen-reader user had no route to the next page at all - and existed
- * because the alternative was a full-page tap handler that would have made turning
- * a page and selecting a verse mutually exclusive.
- *
- * Page turns are the pager's drag, and an accessibility action on the page itself.
- * That costs no reading space, works on both axes, and does not compete with the
- * tap that selects a verse.
  */
 @Composable
 internal fun MushafPager(

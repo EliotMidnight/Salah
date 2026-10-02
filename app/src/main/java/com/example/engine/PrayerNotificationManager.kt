@@ -21,21 +21,6 @@ object PrayerNotificationManager {
 
     /**
      * The reader's own strings.
-     *
-     * The one thing here that reaches into `ui.localization`, and the dependency is
-     * worth naming: `LocalizationManager.getStrings` is a plain function over a data
-     * class with no Compose in it, and this manager is the only other place in the app
-     * that has to speak the reader's language outside a composition. The alternative
-     * is a second copy of the language lookup, which would be one more fact in two
-     * places.
-     *
-     * Read from the same `pref_language` the UI reads, and **at notification time**
-     * rather than at scheduling time - a reader who changes the language while the app
-     * is not running gets the new one on the next prayer, with no re-arming.
-     *
-     * Defaults to English if the preference is missing or unreadable, which is what a
-     * notification has to do: it cannot afford to fail because a preference could not
-     * be read.
      */
     private fun strings(context: Context): UiStrings =
         LocalizationManager.getStrings(
@@ -50,37 +35,11 @@ object PrayerNotificationManager {
 
     /**
      * A bearing in whole degrees, as a reader reads it.
-     *
-     * One function because the number was rendered three ways on one screen: the
-     * header used `%.0f` and the readout directly below it used `toInt()`. Those
-     * are not the same operation - one rounds, one truncates - so a Qibla bearing of
-     * 95.7 printed **96°** at the top of the screen and **95°** below it, on the same
-     * reading, at the same moment.
-     *
-     * Rounded rather than truncated, because a bearing is a direction and a direction
-     * has no half-degree meaning: 95.7 *is* 96 degrees to the nearest degree, and
-     * printing 95 would be reporting a direction the reader is not facing.
      */
     fun formatBearing(degrees: Float): String = "${degrees.roundToInt()}°"
 
     /**
      * A carried prayer time, as the reader should see it.
-     *
-     * The one place a prayer time is rendered for a notification, and the reason it
-     * exists is that the *other* place used to be the alarm scheduler - which
-     * formatted at the moment the alarm was armed. Toggling 12h/24h in Settings then
-     * changed the app instantly and left every already-armed notification in the old
-     * format, because `setTimeFormat24h` was the only preference setter that did not
-     * re-arm the alarms. A reader who switched would see "Fajr - begins at 5:12 PM"
-     * beside an app reading 17:12, and it would stay wrong until a reboot.
-     *
-     * The alarm carries a [com.example.service.PRAYER_TIME_FORMAT] wall clock and the
-     * preference is read *here*, when the notification is built. So the format a
-     * reader chose is the format they get, with nothing to re-arm.
-     *
-     * Falls back to the carried string rather than to an empty one, so a malformed
-     * value degrades to a slightly odd time rather than to a notification claiming a
-     * prayer begins at nothing.
      */
     fun formatPrayerTime(context: Context, prayerTime: String): String {
         val is24h = context

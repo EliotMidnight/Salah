@@ -5,18 +5,6 @@ import com.example.data.model.Surah
 
 /**
  * The 114 surahs, curated.
- *
- * ### This is the only place surah names are written
- *
- * The reader, the index, the search and the sheets all read this list. It used
- * to be duplicated in spirit: the corpus metadata carries its own transliteration
- * and meaning, and the two were never compared, so a fix applied to one did not
- * reach the other. [assertMatchesCorpus] now checks the four facts the metadata
- * is authoritative for - verse count, start page, revelation place, and the
- * Arabic name - so the curated half can be curated and the factual half cannot
- * quietly go stale.
- *
- * Everything else the reader needs from the corpus is on [QuranBrowse].
  */
 object QuranDataSource {
 
@@ -141,7 +129,6 @@ object QuranDataSource {
         if (number in 1..SURAHS.size) SURAHS[number - 1] else null
 
     // -----------------------------------------------------------------------
-    // The bridge that used to be here is gone.
     //
     // Three `@Deprecated` forwarders lived here — `normalizeArabic`,
     // `toArabicDigits`, `searchAyahs` — and the block above them said they were
@@ -159,16 +146,6 @@ object QuranDataSource {
 
     /**
      * The curated surah list, checked against the bundled metadata.
-     *
-     * The names, meanings and revelation places are *curated*, not derived: the
-     * metadata spells them `Al-Baqara` and `The Cow`, which is not what a reader
-     * types or expects, and transliterating them properly is a human judgement
-     * about Arabic orthography rather than a transformation of a file.
-     *
-     * So the human data stays, and the machine-checkable facts in it are
-     * verified rather than trusted. [assertMatchesCorpus] is called from the
-     * corpus test, which means a wrong verse count or a wrong start page fails
-     * the build instead of producing a surah index that lies.
      */
     internal fun assertMatchesCorpus() {
         SURAHS.forEachIndexed { index, surah ->

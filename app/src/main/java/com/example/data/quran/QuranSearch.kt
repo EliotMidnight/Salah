@@ -13,11 +13,6 @@ import com.example.data.model.Surah
  * makes the reader read 6,236 verses to check the search worked. The range is
  * the answer to "why is this here", and it is free: the caller already knows
  * the index the term was found at.
- *
- * [field] matters as much as the range. A search for "mercy" can match the
- * Arabic, the English, or a surah's name, and those are three different things a
- * reader is looking for. The field says which one this result is, so the row can
- * show the Arabic and the English in the right places and say so.
  */
 data class QuranSearchHit(
     val ayah: Ayah,
@@ -32,9 +27,6 @@ data class QuranSearchHit(
 
     /**
      * The text this hit matched inside - what a row should highlight.
-     *
-     * Not stored: it is derivable from [matchedIn] and the hit, and a second
-     * copy of it is a second thing that can disagree.
      */
     val subject: String
         get() = when (matchedIn) {
@@ -47,9 +39,6 @@ data class QuranSearchHit(
 /**
  * Verse search, and the surah-name search that has to be kept separate from it.
  *
- * ### What the old search got wrong
- *
- * Three things, all of them visible to a reader:
  *
  * 1. **It was O(n) with regex compilation inside the loop.** Every keystroke
  *    normalised all 6,236 verses, allocating three compiled `Regex` objects per
@@ -61,47 +50,21 @@ data class QuranSearchHit(
  *    "97 verses found" and a reader tapping the first one landed in the middle
  *    of an unrelated search. Surah names are now their own result tier, above
  *    the verses, which is also where every serious reader puts them.
- * 3. **It took the first 50 and said nothing.** Fifty results with no "and 400
- *    more" reads as *all* of them — and it said "50 verses" when 143 verses
- *    contain the word, so the number on screen was not merely incomplete, it was
- *    **false**. Results are now paged, and both searches return the true total
- *    alongside the page: [VerseResults] and [SurahResults].
  *
  *    The total comes from the same scan that fills the page, so saying it costs
  *    nothing. A separate counting pass would double the work over 6,236 verses on
  *    every debounced keystroke to arrive at the same number.
- *
- * ### Ranking
- *
- * Best match first, and the order is deliberate: a surah whose *name* is what you
- * typed outranks a verse that happens to contain the word, and a verse that
- * begins with the word outranks one that mentions it mid-line. A reader who
- * types "Al-Kahf" wants the surah, and a reader who types "mercy" wants the
- * verses - so both get what they typed at the top.
  */
 object QuranSearch {
 
     /**
      * How many verses one keystroke returns.
      *
-     * One constant, because there were two. `SCAN_LIMIT` was documented as "how many
-     * verses one keystroke will scan before the caller should say so" and set to the
-     * same value, so the only difference between them was which sentence described it -
-     * and nothing read the one that implied a scan budget.
-     *
-     * The honest limit is not a scan budget at all: [searchVerses] reads every verse,
-     * because a match in the last surah is as real as one in the first and stopping
-     * early would make the answer depend on where in the book the reader happened to
-     * be looking. Fifty is a *result* limit, and the caller says so when it is reached.
      */
     const val PAGE_SIZE = 50
 
     /**
      * Surahs whose name matches, best first.
-     *
-     * Matched on the English name, the English meaning, the Arabic name and the
-     * surah number, because "how do I find it" is answered differently depending
-     * on which of those the reader knows.
      */
     fun searchSurahs(query: String, limit: Int = PAGE_SIZE): SurahResults {
         val trimmed = query.trim()
@@ -142,13 +105,6 @@ object QuranSearch {
 
     /**
      * Verses matching [query], best first, capped at [limit].
-     *
-     * Every whitespace-separated term must appear, in the Arabic or in the
-     * English - not all in one, because a reader searching `Allah light` wants
-     * the verses that have both, whichever language each is in.
-     *
-     * Returns at most [limit] results and nothing more. The caller is expected
-     * to say so when it hits the cap; see the note on [PAGE_SIZE].
      */
     fun searchVerses(query: String, limit: Int = PAGE_SIZE): VerseResults {
         val terms = QuranText.terms(query)
@@ -224,22 +180,6 @@ object QuranSearch {
 
     /**
      * The span **in the verse as the reader sees it** that [terms] matched.
-     *
-     * This is the whole reason [QuranText.arabicOrigins] exists, and getting it wrong
-     * was a live defect: the range used to be found in `QuranText.normalised`, which is
-     * the verse with every harakat, dagger alif and tatweel deleted - a nine-character
-     * word folded to six. So a match at offset 20 of the folded text was reported at
-     * offset 20 of a string that had lost a third of its characters, and the highlight
-     * landed on the wrong words, further off the further into the verse it was.
-     *
-     * The Arabic case maps through the fold. The English case does not need to, because
-     * lowercasing the bundled English translation preserves length -
-     * `QuranSearchRangeTest` proves that over all 6,236 verses rather than assuming it.
-     *
-     * The field matched decides which text is highlighted, so the emphasis and the
-     * ordering can never come from different strings. A verse that matches in *both*
-     * scripts reports [QuranSearchHit.Field.ARABIC], and its Arabic is what is shown
-     * emphasised.
      */
     private fun highlightRange(
         index: Int,
@@ -277,21 +217,6 @@ object QuranSearch {
 
 /**
  * One page of search results, and how many there really are.
- *
- * ### Why a pair and not a list
- *
- * Because the two numbers are answers to different questions and only one of them is a
- * list. The page is what the sheet draws; the total is what it *says*. Returning a bare
- * `List` invites the caller to use `size` for both, which is exactly what happened: the
- * sheet read "50 verses" off a page of fifty when **143** verses contain the word.
- *
- * That is a worse bug than showing too few results. A reader who searches "mercy" and is
- * told there are fifty is entitled to believe they have seen all of them, and they have
- * not — and nothing on the screen contradicts them. The cap is invisible, which makes the
- * number a lie rather than a truncation.
- *
- * [total] is the count **before** the page was taken, so `total >= hits.size` always, and
- * equality is what tells a caller there is nothing more to show.
  */
 data class VerseResults(
     /** The best [VerseResults.total] matches, capped at the requested limit. */

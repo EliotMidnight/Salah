@@ -72,12 +72,6 @@ import java.util.Locale
 /**
  * Prayer times for a chosen day, the night periods around them, and the month at
  * a glance.
- *
- * Order is deliberate: pick a day, read today's times, read the night periods,
- * then scan the month. The calculation method and madhhab are reachable but not
- * hoisted to the top - they are consulted occasionally, not on every visit, and
- * the previous layout led with a full-width "transparent calculation source"
- * banner that pushed the actual times below the fold.
  */
 @Composable
 fun PrayerScreen(
@@ -390,16 +384,6 @@ private fun PrayerTimeRow(
 
 /**
  * The month as a table.
- *
- * Uses the wider reading measure because a five-column time grid genuinely needs
- * the room, and drops the per-day card for a plain row: thirty bordered surfaces
- * with a coloured fill on the selected day was the loudest thing on a screen whose
- * job is to be scannable.
- *
- * The whole month is computed in one `remember` rather than one per row inside the
- * loop. Thirty separate computations meant thirty separate cache entries, each
- * re-evaluated whenever any input changed, which is what made switching months and
- * changing the calculation method feel heavy on a slow phone.
  */
 @Composable
 private fun MonthTable(

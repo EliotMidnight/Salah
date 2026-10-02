@@ -77,17 +77,6 @@ import java.util.Locale
 
 /**
  * Today: the prayer, its time, and how long until the next one.
- *
- * Ported from the athan-pwa home page. The layout is the webapp's - one
- * dominant prayer name, the countdown on a hairline rule, the day's times as a
- * dotted-leader list, and a tap anywhere that opens the whole day as a
- * 24-hour clock. What is *not* ported is the palette: this page reads from the
- * app's Material theme so it sits with every other screen, and the webapp's
- * nine accent themes stay where they are.
- *
- * The date is not switched here. It is switched on the Prayer tab and read from
- * [SalahUiState.selectedDate], so there is one answer to "which day am I
- * looking at" rather than one per screen.
  */
 @Composable
 fun TodayScreen(
@@ -306,10 +295,6 @@ fun TodayScreen(
 
 /**
  * The prayers in day order, which is the order the list below uses.
- *
- * Sunrise is in it even though it is not one of the five: the point of the list
- * is to be the whole day, and a row that came and went with the season would be
- * worse than one that does not pray.
  */
 private val PrayerListOrder = listOf(
     Prayer.FAJR,
@@ -530,10 +515,6 @@ private fun SimpleView(
 
 /**
  * A label, a dotted leader and an optional value, tappable.
- *
- * Deliberately not a card. These are the page's exits - the month calendar and
- * where you left off reading - and a bordered surface around each would make
- * them louder than the prayer times they sit under.
  */
 @Composable
 private fun LinkRow(
@@ -586,11 +567,6 @@ private fun LinkRow(
 
 /**
  * A hairline rule that fades out at both ends, with the countdown in the gap.
- *
- * The countdown is the one number that matters and the rule is the one thing
- * that separates it from the list below, so they are one component: drawn as
- * three siblings they only make sense together, and anyone who later inserts a
- * row between them breaks the composition silently.
  */
 @Composable
 private fun CountdownRule(accent: Color, countdown: String, modifier: Modifier = Modifier) {
@@ -672,10 +648,6 @@ private fun PrayerTimeRow(
 
 /**
  * A row of dots between a name and its time.
- *
- * Drawn rather than typed because a run of periods is a different length at
- * every text size and every language - and a leader that changes width shifts
- * the two columns it is supposed to be holding still.
  */
 @Composable
 private fun LeaderDots(colour: Color, modifier: Modifier = Modifier) {

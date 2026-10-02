@@ -152,11 +152,6 @@ class SalahRepository(
 
     /**
      * The stored location, read through [LocationStore].
-     *
-     * One reader for the whole app: the repository, and `PrayerAlarmScheduler` through
-     * the same object. They used to disagree - this read the preferences, that read a
-     * Room row first - so the screen could show one place while the adhan fired for
-     * another.
      */
     private fun loadLocation(): UserLocation = LocationStore.read(context)
 
@@ -348,10 +343,6 @@ class SalahRepository(
 
     /**
      * The reader's own immersive flag, kept apart from [QuranReadingOptions].
-     *
-     * Not a reading preference: it is a view state that [MainActivity] has to
-     * read from outside the Quran destination to hide the dock, so it lives
-     * beside the reader's state rather than inside the sheet-backed set.
      */
     var quranImmersive: Boolean
         get() = prefs.getBoolean(KEY_QURAN_IMMERSIVE, false)
@@ -426,17 +417,6 @@ class SalahRepository(
 
     /**
      * Saves a verse, or removes it if it is already saved.
-     *
-     * Returns nothing. It used to return a `Boolean` saying which happened, which no
-     * caller read - and which looked like the caller *should* use, since a UI that
-     * shows a filled or an empty bookmark would want it. It does not: the Saved list and
-     * the bookmark button both observe the table, so the state arrives on its own and a
-     * returned flag would be a second answer that could disagree with it.
-     *
-     * The insert is safe to repeat, because `bookmarks` has a unique index on
-     * `(surahNumber, ayahNumber)` - see [BookmarkEntity]. It did not, so two taps landing
-     * close together both read "not saved" and both inserted, and the verse appeared
-     * twice in Saved.
      */
     suspend fun toggleBookmark(
         surahNumber: Int,
@@ -493,10 +473,6 @@ class SalahRepository(
     /**
      * Whether the device currently has a connection.
      *
-     * Re-reads the platform's answer rather than tracking it, because the only
-     * caller is a diagnostics row and the `NetworkCallback` above already keeps
-     * the flow current for the cases that matter.
-     *
      * **It fetches nothing, and nothing here ever did.** This was called
      * `refreshOnlineDataSync` and its entire body was to write one of two
      * sentences into [lastCheckedFlow] - "Online · Synced at 14:32 (Verified
@@ -504,12 +480,6 @@ class SalahRepository(
      * no server. The app has no HTTP client; `grep` for one returns nothing. A
      * reader who pressed "Network Synchronization & Source" was told their prayer
      * times had been verified against a source that does not exist.
-     *
-     * Prayer times are computed on this device, by
-     * [com.example.engine.PrayerCalculationEngine], from the location and the
-     * settings - so there is nothing to synchronise, and no claim of verification
-     * to make. The honest row is connectivity, reported as connectivity, next to
-     * the one thing that actually uses it: streamed recitation audio.
      */
     fun refreshConnectivity() {
         _isOnlineFlow.value = checkIsOnline()

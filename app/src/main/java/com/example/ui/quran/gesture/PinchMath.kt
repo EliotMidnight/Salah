@@ -6,21 +6,6 @@ import kotlin.math.abs
 
 /**
  * The geometry of magnifying a reading surface, and moving it afterwards.
- *
- * ### Why this is arithmetic in a file of its own
- *
- * All of it is a few lines of arithmetic that the reader calls on every frame of a
- * pinch. Being in a composable meant none of it could be checked: a pan that is
- * too loose lets the reader drag the page into empty space, and a clamp that is
- * too tight makes a magnified page immovable. Neither is visible in a screenshot.
- *
- * ### What the scale is *not*
- *
- * Magnification is a property of the **view**, not of the reading, and it is
- * deliberately not persisted. Reopening the reader should show the text at the
- * size the reader chose, not at whatever magnification they happened to leave
- * behind. Changing layout resets it too: a magnification chosen for a page of
- * dense text makes no sense over one verse per screen.
  */
 object PinchMath {
 
@@ -36,13 +21,6 @@ object PinchMath {
 
     /**
      * Applies one event's relative [zoomChange] to [current].
-     *
-     * `detectTransformGestures` reports zoom **relative to the previous event**,
-     * not to the start of the gesture, so the only correct application is
-     * `current * zoomChange` with `current` read fresh each time. Capturing the
-     * scale in the lambda instead - the obvious version - makes every event
-     * multiply by a stale value, so a ten-finger splay lands about where a
-     * two-finger one did.
      *
      * [DEAD_ZONE] rejects the sub-percent wobble that every real pinch produces,
      * which otherwise nudges the reader's stored preference on a gesture they
@@ -98,9 +76,6 @@ object PinchMath {
      * point between the fingers where it was, and the reader looking at what they
      * were already reading - which is the reason a magnified mushaf so often feels
      * like it jumped.
-     *
-     * Nothing at 1x, because nothing has been displaced and a correction there
-     * would itself be a jump.
      */
     fun focalCorrection(
         centroid: Offset,

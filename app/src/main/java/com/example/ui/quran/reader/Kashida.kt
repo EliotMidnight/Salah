@@ -14,18 +14,11 @@ import androidx.compose.ui.unit.LayoutDirection
  *
  * ### Why this exists at all
  *
- * Justifying means filling a line to a fixed width without changing its content. In Latin
- * text the only thing that can move is the space between words, and a loose space is
- * unremarkable. Arabic has **two** levers and they do not look the same:
- *
  * - **Widen the word gaps.** Works with any font and any text. But an Arabic word is a
  *   connected block, so stretching between them leaves visible holes, and a page of it
  *   looks like a paragraph of stretched Arabic rather than a mushaf.
  * - **Elongate the letters** — insert the tatweel, U+0640. This is what a printed mushaf
  *   does, and it is what makes justified Arabic look *right* rather than merely full.
- *
- * This is the second one, with the first as the fallback for lines that have nowhere
- * legal to elongate.
  *
  * ### Why it needs a font check
  *
@@ -33,40 +26,17 @@ import androidx.compose.ui.unit.LayoutDirection
  * a face without the glyph renders a gap or a box instead. Every bundled face was checked
  * for U+0640 by `KashidaGlyphTest`; all five have it.
  *
- * The deeper reason a mushaf looks right and this does not is **page-glyph fonts**. KFGQ
- * and QCF ship every glyph pre-elongated at fixed widths and the typesetter picks a
- * variant, so a line is filled by the precision of the drawing rather than by inserting
- * characters. The five faces bundled here are general-purpose Arabic fonts — Amiri,
- * Harmattan, Lateef, Scheherazade New — so they cannot do that, and this module is the
- * next best thing: real elongation in real text, with the gaps as a fallback.
- *
  * ### Where a tatweel may go
  *
  * **Not everywhere.** A tatweel is a joining stroke, so it can only sit where two letters
  * actually join — immediately after a letter that connects *forward* and immediately
  * before one that connects *backward*.
  *
- * That rule is not a guess; it is read off Tanzil's own text, which carries 6,848
- * tatweels. Every base letter preceding one in that text is dual-joining: `ل ي ن م ه ت ص
- * س ب ح ع ك خ ظ` and the like, and never `ا د ذ ر ز و ة ى` — the letters that do not
- * connect onward. Letters that connect *backward* only, like `ا ذ و ر`, do appear
- * *after* one, which is right: elongation happens on the joint, not on the far letter.
- *
  * `KashidaEligibilityTest` checks this rule against all 6,848 of Tanzil's own placements,
  * so it is verified by the data rather than asserted by me.
- *
- * ### Why this costs a measure-adjust-measure loop
- *
- * Elongation changes a line's width, which can move where the *next* line breaks, which
- * invalidates the plan. So the only honest way is to measure, plan, apply, and measure
- * again — bounded, because each pass adds width and the fixed point is reached quickly in
- * practice. [JUSTIFY_PASSES] caps it; the result is memoised per page and width, because a
- * reader flipping back and forth between two pages must not pay for this on every frame.
  */
 /**
  * How a line is filled to its margin.
- *
- * Both options fill the line; they differ in what they move.
  */
 enum class Justification {
     /**
@@ -77,11 +47,6 @@ enum class Justification {
 
     /**
      * Widen the gaps between words and touch nothing else.
-     *
-     * Correct for Latin, and the only option available in a general-purpose face with no
-     * elongation rules. On Arabic it fills the line and leaves it looking stretched, so it
-     * is the fallback rather than the default — but it is the honest behaviour for a line
-     * whose words offer no joint at all, which is what [Kashida] falls back to per line.
      */
     WORD_GAPS
 }
@@ -93,18 +58,11 @@ object Kashida {
 
     /**
      * Letters that do **not** connect to the letter that follows.
-     *
-     * Alef and its variants, the four short letters whose tails point back, dal, thal, ra,
-     * zain, waw, hamza-on-waw, teh marbuta, alef maksura, and bare hamza. A tatweel
-     * cannot follow any of them, because there is no joint for it to occupy.
      */
     private const val NO_FORWARD_JOIN = "اأإآٱدذرزوؤةىء"
 
     /**
      * Characters that cannot receive a joining stroke on their right.
-     *
-     * In practice only the bare hamza, which joins nothing at all. Everything else in the
-     * corpus — including `ا ذ و ر` — connects backward and so may sit after a tatweel.
      */
     private const val NO_BACKWARD_JOIN = "ء"
 
@@ -113,10 +71,6 @@ object Kashida {
 
     /**
      * Slack below which a line is left alone.
-     *
-     * Not zero. A line can be within a pixel of full and adding a tatweel would *overshoot*
-     * it, which looks worse than a one-pixel gap — and `getLineWidth` returns floats, so
-     * "full enough" has to be a real threshold rather than `== 0`.
      */
     private const val SLACK_EPSILON = 1.5f
 
@@ -127,13 +81,6 @@ object Kashida {
 
     /**
      * The base letter at or before [index], skipping harakat and any tatweel already there.
-     *
-     * Starts **at** [index], not one before it: "insert after [index]" means the tatweel
-     * lands between [index] and [index] + 1, so [index] is the letter on the near side of
-     * the joint. Starting one earlier reads the far side, which asks the wrong question —
-     * in `باب` it checked the joint before the alef and answered for the one after it,
-     * and in `لبت` at index 0 it walked off the front of the word and found no letter at
-     * all, refusing a tatweel on the most ordinary joint in the language.
      */
     private fun baseBefore(text: String, index: Int): Char? {
         var j = index
@@ -150,11 +97,6 @@ object Kashida {
 
     /**
      * Whether a tatweel may be inserted **after** [index] in [text].
-     *
-     * `index` is a raw character offset, so harakat between the joint and the letter do not
-     * hide it — which is the whole reason this walks rather than testing `[index]` directly.
-     * In `ٱلرَّحْمَـٰنِ` the tatweel in the corpus already sits after a fatha, and a naive
-     * `text[index]` test would see the fatha and refuse.
      */
     fun canInsertAfter(text: String, index: Int): Boolean {
         if (index < 0 || index >= text.length - 1) return false
@@ -179,13 +121,6 @@ object Kashida {
 
     /**
      * Where to put [count] tatweels in `[from, until)`, spread as evenly as possible.
-     *
-     * Spread rather than left-packed, because a mushaf line is elongated across its whole
-     * length; piling every tatweel into the first two words leaves the rest of the line
-     * visibly short and the elongation obviously artificial.
-     *
-     * Returns fewer than [count] when there are not enough joints, which is the signal to
-     * fall back to widening the gaps for that line.
      */
     fun spread(text: String, from: Int, to: Int, count: Int): List<Int> {
         val eligible = eligibleIndices(text, from, to)
@@ -225,13 +160,6 @@ object Kashida {
 
     /**
      * Fill [text] to [widthPx] by elongating it.
-     *
-     * [centredRanges] are character ranges that must be left alone — the surah head is a
-     * centred heading, and elongating it would make a centred title with a stretched
-     * letter in it, which is worse than not justifying at all.
-     *
-     * The last line of the layout is left alone for the ordinary typographic reason: a
-     * paragraph's last line is short in every book ever set.
      */
     fun justify(
         text: AnnotatedString,
@@ -280,14 +208,6 @@ object Kashida {
 
     /**
      * The joints to elongate, as a set of offsets into [text].
-     *
-     * Each joint gets **exactly one** tatweel, and a line gets as many as it needs up to
-     * the number of joints it has. That is not a simplification: a line cannot take more
-     * elongations than it has joints, so "how many" collapses to "how many joints do I
-     * use" — and asking for more than the joints on the line is a request the data cannot
-     * fill, which is the case that needs the word gaps instead.
-     *
-     * Returns an empty set when there is nothing to do, so the caller stops early.
      */
     private fun plan(
         text: AnnotatedString,
@@ -347,13 +267,6 @@ object Kashida {
 
     /**
      * Insert tatweels and move every offset that referred to [text].
-     *
-     * The remapping is the part that is easy to get wrong and expensive to get wrong: the
-     * verse spans decide what a tap selects, and the span styles carry the selection
-     * highlight and the accent colour on the ayah markers. Both are character ranges into
-     * this string, so both have to move with the insertions or a tap selects the wrong
-     * verse — which is a bug this rebuild has already fixed once, in the opposite
-     * direction.
      */
     private fun applyInsertions(
         text: AnnotatedString,

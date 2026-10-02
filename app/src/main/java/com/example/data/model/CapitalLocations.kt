@@ -3,23 +3,6 @@ package com.example.data.model
 /**
  * Every sovereign state's capital, so a location can be chosen by name instead
  * of typed in as a pair of coordinates.
- *
- * The list is the 193 UN member states plus the two permanent observer states
- * (Vatican City and Palestine), which is the set of countries people actually
- * mean when they say "my country".
- *
- * ### On the accuracy of the coordinates
- *
- * These are capital city centres, given to two decimal places, which is roughly
- * a kilometre. That is well inside the tolerance prayer times need: a capital
- * spans far more than that, and the sun moves about a quarter of a degree in
- * four minutes, so being a kilometre off shifts a time by well under a minute.
- *
- * They are city centres, not the position of the city's mosque, so someone
- * living on the far side of a large city will still want the manual coordinate
- * entry that sits below this list. Where a state has no single agreed capital,
- * the seat of government is listed and the usual alternative appears in the
- * capital's own name where that is the only way to be clear about it.
  */
 object CapitalLocations {
 

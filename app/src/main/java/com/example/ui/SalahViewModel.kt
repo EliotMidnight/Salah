@@ -68,11 +68,6 @@ import kotlin.math.abs
 
 /**
  * How a location attempt ended.
- *
- * Facts, not a sentence - see [SalahUiState.locationStatus]. Kept beside the state that
- * holds it rather than in the location package because this is a *presentation* state:
- * the service reports [LocationFailure] and something between the two decides that a
- * failed attempt is worth showing at all.
  */
 sealed interface LocationStatus {
     /** Started, not finished. */
@@ -80,9 +75,6 @@ sealed interface LocationStatus {
 
     /**
      * Finished, with a place.
-     *
-     * [isFresh] false means this is the OS's last known fix rather than a reading taken
-     * just now, and the banner says so rather than claiming a GPS fix it did not get.
      */
     data class Resolved(
         val name: String,
@@ -103,43 +95,20 @@ data class SalahUiState(
 
     /**
      * The next prayer to come round, and the last one to have entered.
-     *
-     * The two halves of the live reading, and the page asks for both: the countdown
-     * alone cannot draw the day, because which row is highlighted depends on where
-     * between two prayers the reader is standing.
      */
     val nextPrayer: PrayerTime? = null,
     val previousPrayer: PrayerTime? = null,
     /**
      * The time left until [nextPrayer], as the Today page shows it.
-     *
-     * Maintained here by the one-second ticker rather than computed in the page:
-     * the page used to compute its own inside a `remember(day, isToday)`, and those
-     * keys do not change between seconds, so the number froze on the value that
-     * happened to be true when the screen was composed. Same for the headline
-     * prayer and the "next" row beside it.
      */
     val countdownString: String = "00h 00m",
 
     /**
      * The reader's Hijri adjustment, in days.
-     *
-     * The single source for "which Hijri date is it". Every surface applies this
-     * itself where it renders a date, because there is no one Hijri date in the app -
-     * only one Gregorian date and one adjustment, and a Hijri month that is a
-     * function of both.
      */
     val hijriAdjustment: Int = 0,
     /**
      * The day the Prayer times are being shown for, or null for today.
-     *
-     * Shared, and deliberately not per-screen: there is one date switcher in the
-     * app, on the Prayer tab, and the Today page follows it. Two switches meant
-     * two answers to "which day am I looking at", and they drifted apart the
-     * moment you used one and not the other.
-     *
-     * Null rather than a concrete date so an app left open overnight still calls
-     * today today - the ViewModel advances `todayPrayerTimes` at midnight.
      */
     val selectedDate: LocalDate? = null,
     val prayerLog: PrayerLogEntity = PrayerLogEntity(LocalDate.now().toString()),
@@ -154,16 +123,6 @@ data class SalahUiState(
 
     /**
      * Whether the device currently has a connection.
-     *
-     * Reported, never acted on. There is no data to fetch and no server to fetch
-     * it from; prayer times are computed on this device. The one network use is
-     * streamed recitation audio, which the player handles itself.
-     *
-     * It has three writers, all of which claimed something untrue: "Offline
-     * cached (GPS)" when a *city* was chosen from a list, "Online · Synced at
-     * 14:32 (Verified Ephemeris)" having contacted nothing, and "Recomputed at
-     * 14:32:11 · 365 Days Verified" for a code path that computed one day. It is
-     * one boolean from the platform, and that is all it can honestly be.
      */
     val isOnline: Boolean = false,
     // Expanded user preferences
@@ -191,24 +150,11 @@ data class SalahUiState(
 
     /**
      * Which way to turn to face the Kaaba, and by how much.
-     *
-     * This replaced two fields - a raw signed `relativeQiblaAngle` and an
-     * `isFacingQibla` boolean - because two fields carrying one fact is how they
-     * come to disagree. Everything that needs to know "am I aligned" reads
-     * [isFacingQibla] below, which is derived from this, and everything that needs
-     * to tell the reader which way to turn reads the direction and the magnitude.
      */
     val qiblaGuidance: QiblaGuidance = QiblaGuidance(QiblaGuidance.Direction.ON_TARGET, 0),
 
     /**
      * A sentence about how much the compass can be trusted, already chosen.
-     *
-     * Chosen here, in the ViewModel, because "which of the four accuracy states is
-     * this" is a decision and not a value. The raw `SENSOR_STATUS_*` integer used to
-     * live in this state beside it, and that is the exact shape this rebuild spent
-     * four bugs removing: a fact with a string for one reader and an integer for
-     * another, where the integer can be edited into disagreement and the string
-     * cannot. One representation, and it is the one the screens read.
      */
     val compassAccuracy: String = "HIGH ACCURACY",
     val magneticFieldMagnitude: Float = 46.0f, // uT
@@ -220,11 +166,6 @@ data class SalahUiState(
     val isLocating: Boolean = false,
     /**
      * How the location attempt is going, as facts.
-     *
-     * Was `locationStatusMessage: String?`, which held a finished English sentence
-     * ("GPS Location: Rabat, Morocco") in a field no UI could translate. The three
-     * states are now named, the place is carried as a place, and the banner composes
-     * the sentence from `UiStringsMore.location*`.
      */
     val locationStatus: LocationStatus? = null,
     // Quran reader state
@@ -248,11 +189,6 @@ data class SalahUiState(
 
     /**
      * A request to open the Quran at [QuranRef], or null.
-     *
-     * Set by [requestOpen] and read once by the Quran destination, which passes it
-     * to `ReaderPosition.goTo`. Null means "nothing has asked", which is the state a
-     * reader is in 99% of the time and the reason this is a *request* rather than a
-     * position.
      */
     val pendingOpen: QuranRef? = null,
 
@@ -270,33 +206,15 @@ data class SalahUiState(
     val currentAudioRef: QuranRef = QuranRef.Start,
     /**
      * The reader's own preferences, as one value.
-     *
-     * Held here rather than in `rememberSaveable` so the reader's layout, paper
-     * and typefaces survive process death the same way every other setting in
-     * this app does, and so the reading surface never briefly renders with last
-     * session's values before remembering the right ones.
      */
     val quranReadingOptions: QuranReadingOptions = QuranReadingOptions(),
     /**
      * Whether the reader has taken over the whole screen.
-     *
-     * Read by [MainActivity] to hide the dock, which lives outside the Quran
-     * destination. It is a view state rather than a reading preference, which
-     * is why it is not part of [quranReadingOptions].
      */
     val isQuranImmersive: Boolean = false
 ) {
     /**
      * True once the Kaaba is inside the alignment window.
-     *
-     * Derived rather than stored. It used to be a second field written in the same
-     * `copy()` as the raw angle, which is how a boolean and the number it claims
-     * to summarise come to disagree - and a reader who sees a green dial beside a
-     * banner that still says "turn 5°" has been told two things at once.
-     *
-     * It stays a named property rather than becoming `qiblaGuidance.isAligned` at
-     * every call site, because "am I facing it" and "which way do I turn" are two
-     * different questions and the screen asks both.
      */
     val isFacingQibla: Boolean get() = qiblaGuidance.isAligned
 }
@@ -338,10 +256,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     /**
      * Set once the stored reading position has been applied for this launch.
-     *
-     * The continue-reading flow re-emits every time the reader records
-     * progress, so without this the resume would fight the user - pulling them
-     * back to where they started every time they scrolled a line.
      */
     private var readingPositionRestored = false
 
@@ -594,18 +508,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     /**
      * Whether this device has a compass at all.
-     *
-     * For the Qibla tab to decide whether to offer itself. A phone with no
-     * magnetometer has no Qibla to show, so it should not be offered one: a dial
-     * that will never move, with no explanation, is worse than no tab. That is a
-     * change to navigation rather than to this class, and hiding a tab is a bigger
-     * call than adding a warning inside it, so it belongs to whoever owns the
-     * navigation rather than to a cleanup commit.
-     *
-     * It was a state field and nothing read it, which is how a Qibla tab came to be
-     * visible on a device that cannot serve it. The query is cheap and the answer
-     * is fixed for the life of the process, so a plain `val` on the ViewModel
-     * rather than a `StateFlow` a collector would hold open for nothing.
      */
     val hasCompass: Boolean get() = rotationSensor != null || magneticSensor != null
 
@@ -655,9 +557,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     /**
      * Keeps Today's checklist pointed at the current day's row.
-     *
-     * Cancelled and re-subscribed by [updateLiveTiming] when the calendar day
-     * changes, because the checklist is stored one row per date.
      */
     private fun observePrayerLog(date: LocalDate) {
         prayerLogJob?.cancel()
@@ -792,17 +691,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     /**
      * Find the reader's location and store it.
-     *
-     * The `onComplete` callback is gone. It was `(Boolean, String) -> Unit` with a
-     * no-op default, and both call sites - the permission launcher and the Settings
-     * button - called this with no argument at all, so the whole parameter was
-     * unreachable. It also returned the same English sentence it had just put in
-     * state, which is a second copy of a string the banner was already showing.
-     *
-     * `isFresh` is kept as a fact because it changes what the banner should say: a
-     * fresh fix and the OS's last known fix are genuinely different answers, and
-     * claiming "GPS location" for a fix that is minutes or hours old would be the same
-     * kind of false claim this rebuild has been removing.
      */
     fun fetchCurrentLocation() {
         viewModelScope.launch {
@@ -870,10 +758,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     /**
      * Sets the layout, and nothing else.
-     *
-     * This used to reach into the scroll axis to repair the combination, which is
-     * how choosing continuous quietly turned horizontal reading off. Layout and
-     * axis are independent answers now, so this writes one field.
      */
     fun setQuranLayout(layout: QuranReadingLayout) {
         setQuranReadingOptions(_uiState.value.quranReadingOptions.copy(layout = layout))
@@ -886,9 +770,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     /**
      * Breaks every verse out as its own selectable unit, in either layout.
-     *
-     * Not a third layout: it is a question about verse presentation, answerable
-     * on top of the per-page mushaf and on top of a continuous surah alike.
      */
     fun setQuranPerVerse(perVerse: Boolean) {
         setQuranReadingOptions(_uiState.value.quranReadingOptions.copy(perVerse = perVerse))
@@ -928,11 +809,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     /**
      * Takes the reader over the whole screen, or gives the screen back.
-     *
-     * Persisted, because the reason to want it - reading with the dock and the
-     * status bar out of the way - is not something people flip on once by
-     * accident. Returns the new value so the caller can react without waiting
-     * for the state to round-trip.
      */
     fun setQuranImmersive(immersive: Boolean) {
         repository.quranImmersive = immersive
@@ -969,11 +845,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     /**
      * Re-read connectivity, and re-derive today's times.
-     *
-     * Was "refresh data". There is no data to fetch - the app computes prayer
-     * times on this device and has no network client - so the honest name is
-     * `refreshConnectivity`, and the second half is not decoration: a reader who
-     * has just come back into range and wants their times re-derived gets them.
      */
     fun refreshConnectivity() {
         repository.refreshConnectivity()
@@ -1098,21 +969,11 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
     /**
      * Re-derive the schedule and re-arm the alarms.
      *
-     * Was `recomputeEphemerisCache`, and it wrote a third, differently-worded
-     * sentence into `lastChecked` - "Recomputed at 14:32:11 · 365 Days Verified" -
-     * on a code path that touched neither the cache nor 365 days.
-     *
      * **There is no cache.** `PrayerAlarmScheduler` computes today and tomorrow
      * from the engine every time it is asked and hands the result to
      * `AlarmManager`; nothing is stored, so nothing can go stale and there is
      * nothing to recompute. The engine runs in well under a millisecond for one
      * day. The button was reporting that it had verified a year of times.
-     *
-     * What it *should* do - and now does - is the one action with a visible
-     * effect: re-derive today's times and re-arm the alarms, so a reader whose
-     * notifications stopped after a reboot, a permission change or an
-     * uninstall of a battery-optimisation app can put them back without
-     * reinstalling.
      */
     fun reschedulePrayers() {
         recalculateAll()
@@ -1128,11 +989,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
      * reader cannot see coming and cannot undo: a reader who had silenced everything
      * and pressed "Reset all settings" was told they were back to defaults, and heard
      * a full adhan again on the next cold start.
-     *
-     * It is also the reason a "reset" is worth being complete about: a preference
-     * with no line here is one the button does not reset, silently. Each is spelled
-     * out rather than derived from a table, so adding a preference without a reset is
-     * a visible omission rather than an invisible one.
      */
     fun resetAllSettings() {
         // Prayer calculation.
@@ -1192,21 +1048,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     /**
      * Asks for the reader to be put at [ref].
-     *
-     * The one entry point for navigation into the book, and the only writer of
-     * [pendingOpen].
-     *
-     * The reference is resolved against the corpus here, so a request that names a
-     * verse which does not exist is dropped rather than seeding the reader with a
-     * position that resolves to nothing - which is what a bare `(surah, ayah)` pair
-     * from a stored row could do.
-     *
-     * It used to *be* the reader's place: `selectSurah` wrote `selectedSurah`,
-     * `currentSurahAyahs` and a `readingAyahHint` that the reader read only at first
-     * composition, while the reader wrote the same three back through a debounce.
-     * Two writers, a copy of a value owned by `ReaderPosition`, and no path from a
-     * request to the reader at all - so a surah picked from the index moved the pill
-     * and nothing else.
      */
     fun requestOpen(ref: QuranRef) {
         val resolved = QuranBrowse.ref(ref.surah, ref.ayah) ?: return
@@ -1231,12 +1072,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
      * only ever got read once - at first composition, long before this fired. Two
      * writers, neither of which could affect anything, in a rebuild whose subject is
      * that there must be one writer.
-     *
-     * The surah name is taken from [ayah], not from the selected surah: they are the
-     * same on every path today, and if they ever are not - a stale index sheet, a
-     * position restored from an older build - the name saved with a verse is the one
-     * that belongs to it. A Continue Reading row whose name contradicts its own
-     * reference is worse than one with no name.
      */
     fun onAyahViewed(ayah: Ayah) {
         viewModelScope.launch {
@@ -1255,10 +1090,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     /**
      * Show prayer times for [date], or for today when it is null.
-     *
-     * Purely a selection: the timetable is already computed on demand by
-     * [com.example.engine.PrayerCalculationEngine] for any date, so this changes
-     * what the screens ask for and nothing else.
      */
     fun setSelectedDate(date: LocalDate?) {
         _uiState.value = _uiState.value.copy(selectedDate = date)
@@ -1513,11 +1344,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     /**
      * The magnetometer's own accuracy report.
-     *
-     * Held privately, because the sentence built from it is the only representation
-     * any screen reads. It used to be a field in the UI state beside that sentence -
-     * two answers to one question, and the one with the raw `SENSOR_STATUS_*` constant
-     * in it is the one that invites being copied over on its own.
      */
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
         if (sensor?.type == Sensor.TYPE_MAGNETIC_FIELD ||
@@ -1541,8 +1367,5 @@ internal const val DEVICE_LEVEL_TOLERANCE_DEGREES = 18f
 
 /**
  * The alert *modes* the Settings screen offers to preview.
- *
- * Named here rather than spelled out at the call site, because the call site used to
- * spell them out and then had to notice that its own list of *sounds* was missing one.
  */
 private val ALERT_MODES = listOf("Full Adhan", "Takbeer Only", "Gentle Chime")

@@ -74,25 +74,6 @@ import com.example.ui.theme.layoutMetrics
 
 /**
  * Reading.
- *
- * The reader is the app's only full-screen surface, and it is built around one
- * idea: **the mushaf is the interface**. Everything that is not the page is a thin
- * pill that can be dismissed, because a reader that competes with its own text has
- * already lost.
- *
- * ### What is in here, and what is not
- *
- * This composable owns exactly three things: the paper, the chrome, and the choice
- * between the two reading surfaces. It does not own position - [ReaderPosition]
- * does, and the Quran *destination* owns that - and it does not own how a page is
- * fitted or how a verse is drawn. Each of those was three or four intertwined
- * copies of itself in the previous version, and each is now one thing with a test.
- *
- * ### What is deliberately absent
- *
- * No app bar with a title, no bottom dock inside the reader, no settings row, no
- * floating action buttons over the text. The control pill at the top, one circle
- * button beside it, and the immersive button in the corner are the entire chrome.
  */
 @Composable
 fun QuranReader(
@@ -100,11 +81,6 @@ fun QuranReader(
     /**
      * The reader's place, owned by the Quran destination.
      *
-     * A parameter, and not something created here. It used to be created here, which
-     * meant nothing outside this composable could move the reader: the index sheet
-     * sits above this surface, and the ViewModel's copy of the position could not
-     * reach it, so a surah chosen from the index changed the name in the pill and
-     * left the page where it was. See [com.example.ui.quran.QuranScreen].
      */
     position: ReaderPosition,
     onToggleBookmark: (Ayah) -> Unit,
@@ -130,10 +106,6 @@ fun QuranReader(
 
     val surah = QuranBrowse.surah(position.surah) ?: QuranBrowse.surahs.first()
     // The surah's verses, derived from the position.
-    //
-    // They used to come from the UI state, which held a copy of the reader's surah
-    // that the reader could not see - so the text under the reader and the page the
-    // pill reported were two different answers, and the index could not move either.
     val ayahs = remember(position.surah) { QuranBrowse.ayahsInSurah(position.surah) }
 
     // A layout change drops the magnification.
@@ -332,15 +304,6 @@ fun QuranReader(
 
 /**
  * The whole chrome: one pill and two circle buttons, in a single row.
- *
- * The pill is leading - top-left in LTR, top-right in RTL, without a single
- * conditional, because [androidx.compose.foundation.layout.Row] mirrors with the
- * layout direction. It carries the reader's location, so the one thing a reader
- * always wants is the thing that is always there, and it doubles as the way into
- * the index.
- *
- * The immersive control is deliberately **not** in this row. It lives in its own
- * corner, visible in both states - see [ImmersiveToggle].
  */
 @Composable
 private fun ReaderControls(
@@ -420,11 +383,6 @@ private fun ReaderControls(
 
 /**
  * The enter/exit control for immersive mode.
- *
- * One control, both directions, and it never leaves. Faint in immersive mode rather
- * than hidden: the point of immersive mode is that the chrome gets out of the way,
- * but "out of the way" and "no way back" are different things, and a reader who
- * cannot find the exit reads the absence as a bug.
  */
 @Composable
 private fun ImmersiveToggle(
@@ -471,19 +429,6 @@ private fun ImmersiveToggle(
 
 /**
  * The location, as one thin pill, and the way into the index.
- *
- * Thin because it sits over text: a full-height bar here would be a header again,
- * which is the thing this screen exists not to be. The surah name leads and the
- * page number follows, because the name is what a reader recognises and the number
- * is what they check.
- *
- * ### One number, and it is the page
- *
- * The previous pill showed the page in the mushaf and the *verse count* in the
- * continuous layouts, so the same number changed meaning with the layout. There is
- * one number now, and it is the page - which is the only figure a reader can lose
- * track of in either layout, and which [ReaderPosition] guarantees agrees with the
- * page under their eyes.
  */
 @Composable
 private fun LocationPill(
@@ -569,22 +514,11 @@ private fun CircleControl(
 
 /**
  * The recitation banner.
- *
- * Tinted onto whatever paper is behind it rather than using the app's own
- * container, because on a violet wash a `Surface` from the app scheme reads as a
- * grey box pasted onto coloured paper.
  */
 @Composable
 private fun AudioStrip(
     /**
      * The verse being recited, as a whole reference.
-     *
-     * Rendered, which it was not: the strip said only "Reciting Al-Kahf - Mishary
-     * Rashid Alafasy", so a reader who started playback, scrolled to another page and
-     * wanted to know where the recitation had reached had no way to find out - the
-     * playing mark only appears on the page holding the verse. Now the banner carries
-     * `surah:ayah`, which is also the only place the reader sees that the
-     * recitation's *surah* is the one playing rather than the one they are reading.
      */
     ref: QuranRef,
     reciter: String,

@@ -13,10 +13,6 @@ data class MoonPhaseInfo(
 /**
  * The sky at one instant, derived entirely from the sun's altitude and whether
  * it is rising or setting.
- *
- * Every field here is consumed by a renderer. There is no second, decorative
- * colour set: [sunColor] is the same ramp that tints the gradient, so the disc
- * and the sky it sits in can never disagree.
  */
 data class SkyColorPalette(
     val zenithColor: Color,
@@ -30,20 +26,6 @@ data class SkyColorPalette(
 
 /**
  * The sky, from one number.
- *
- * ### Why there is no `SkyPeriod` here any more
- *
- * There used to be an eight-case enum - Dawn, Sunrise, Morning, ... - each with its
- * own hand-picked gradient, and a `determineSkyPeriod` that chose one from the hour
- * of the day. It was a second answer to "what colour is the sky", and the wrong one
- * twice over: it stepped at boundaries where the real sky does not, and nothing
- * rendered it. The view has always used [calculateContinuousSkyColors], which takes
- * the sun's actual altitude, so the enum was a palette that looked considered and
- * was never consulted.
- *
- * There is one ramp now, continuous across the whole solar day, and every colour on
- * screen comes out of it - the disc's own colour included, which is why the sun
- * reddens at sunset for exactly the reason the horizon does.
  */
 object AstronomicalSky {
 
@@ -84,10 +66,6 @@ object AstronomicalSky {
     /**
      * Calculates smooth, continuous sky gradient and atmospheric colors
      * based on exact solar altitude and whether sun is rising or setting.
-     *
-     * The seven bands are contiguous: each one starts where the previous ended,
-     * so the gradient is continuous across the whole solar day rather than
-     * stepping at each boundary.
      */
     fun calculateContinuousSkyColors(altitude: Float, isSetting: Boolean = false): SkyColorPalette {
         return when {

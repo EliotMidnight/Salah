@@ -46,10 +46,6 @@ private const val ARC_MAX_X = 0.86f
 
 /**
  * Altitudes mapped across the body's height.
- *
- * The lower bound is below the horizon so a body that has only just set sinks
- * toward the bottom edge rather than stopping dead at it. The upper bound is
- * well short of the zenith so a disc at its highest never has its glow clipped.
  */
 private const val ALTITUDE_FLOOR = -15f
 private const val ALTITUDE_CEILING = 70f
@@ -59,26 +55,7 @@ private const val ALTITUDE_CEILING = 70f
  *
  * ## Position
  *
- * The sun's altitude and azimuth come from [com.example.engine.QiblaEngine] for
- * the user's location and time, so it rises on the side it actually rises on and
- * crosses at the actual solar noon. Scrub to another date and it shows that
- * day's arc.
- *
- * The moon's *position* is not computed by the app, and pretending otherwise
- * would be a lie in a prayer app. It is derived from the phase instead: a new
- * moon rides with the sun, a full moon is opposite it, and the two swap in
- * between. That is a real approximation - it ignores lunar declination, the
- * five degrees of orbital inclination, and the fifty minutes the moon gains each
- * day - so treat it as "roughly where it is", not as ephemeris. Its *phase* is
- * exact, because that comes from the lunar day.
- *
  * ## Colour
- *
- * The sun's colour is the same [AstronomicalSky.calculateContinuousSkyColors]
- * altitude ramp that tints the sky, so it reddens at sunset for the same reason
- * the horizon does. The glow is the body's own colour rather than one shared
- * accent: a gold bloom behind a white moon is two unrelated colours, and it made
- * every night look like a late afternoon.
  */
 @Composable
 fun CelestialBody(
@@ -206,10 +183,6 @@ private data class BodyPosition(val xFraction: Float, val yFraction: Float) {
 
 /**
  * Where the moon is, given where the sun is and how far through the cycle we are.
- *
- * The sun reflected through the moon's orbit: same altitude at new moon, opposite
- * at full, crossing in between, and a half-turn of azimuth for every half-turn
- * of phase. Crude, and cheaper and more honest than a fake ephemeris.
  */
 private fun moonPosition(
     sunAltitude: Float,
@@ -226,17 +199,6 @@ private fun moonPosition(
 
 /**
  * What a glowing body has to do on a page that is already bright.
- *
- * The engine's colours are glow colours: brighter than the sky behind them,
- * which is the whole point on a dark page. On a near-white page the same numbers
- * vanish - a cream sun on cream paper measured 1.1:1 - so on a light page the
- * disc is pushed toward ink.
- *
- * Warm for the sun specifically: the ramp goes salmon -> gold below 10° and then
- * cream, so above that there is no hue left to preserve. Mixing toward a neutral
- * grey turned a midday sun into a grey ball. Warm ink keeps it a *sun* at every
- * altitude and keeps the reddening at sunset, which is the part that carries
- * information.
  */
 private val SunInk = Color(0xFF7A4E00)
 private val MoonInk = Color(0xFF2A3644)
@@ -249,10 +211,6 @@ private val MoonLitLight = Color(0xFF64748B)
 
 /**
  * One soft disc of light.
- *
- * Three stops, because a two-stop gradient ends on a visible ring where the
- * alpha reaches zero, and a ring is the one thing that makes a glow look like a
- * shape instead of light.
  */
 private fun DrawScope.drawBloom(centre: Offset, radius: Float, color: Color, strength: Float) {
     if (strength <= 0.001f) return
@@ -274,10 +232,6 @@ private fun DrawScope.drawBloom(centre: Offset, radius: Float, color: Color, str
 
 /**
  * A halo in the body's own colour, brightest at the middle.
- *
- * Two stops rather than one, because a single-stop gradient ends on a visible
- * ring where the alpha hits zero; fading through a dimmer copy of the same hue
- * pushes that edge past the edge of the widget.
  */
 private fun DrawScope.halo(centre: Offset, radius: Float, color: Color, strength: Float) {
     drawCircle(
@@ -335,11 +289,6 @@ private fun DrawScope.drawSunBody(
 
 /**
  * The moon at its real phase.
- *
- * The lit shape is a real path with an elliptical terminator rather than a circle
- * with another circle subtracted: subtraction can only make crescents and
- * gibbous, so it fakes the quarter phases, which are the phases you actually
- * recognise.
  */
 private fun DrawScope.drawMoonBody(
     centre: Offset,
