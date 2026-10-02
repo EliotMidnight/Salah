@@ -14,6 +14,7 @@ import com.example.data.model.QuranReadingOptions
 import com.example.data.model.QuranRef
 import com.example.data.quran.ArabicDigits
 import com.example.data.quran.QuranBrowse
+import com.example.data.quran.QuranStructure
 import com.example.data.quran.QuranText
 
 /**
@@ -76,13 +77,19 @@ class VerseSpan internal constructor(
  *
  * Not an omission, and it is the single most consequential thing found in the
  * corpus during the rebuild. The bundled Tanzil text carries the basmalah
- * **inside verse 1** of every surah that has one - 111 of the 114 - rather than as
+ * **inside verse 1** of every surah that has one - **113 of the 114** - rather than as
  * a separate record. So a head that printed a basmalah of its own prints it
  * **twice**: once as furniture and once at the start of the first verse, immediately
- * below. The previous reader did exactly that on all 111 of them, and avoided it on
+ * below. The previous reader did exactly that on all 113 of them, and avoided it on
  * Al-Fatihah and At-Tawbah only because those two were hard-coded as exceptions - a
  * fact about two surahs remembered by someone, standing in for a fact about the data
  * that nobody had read.
+ *
+ * **113, not 114 and not 111.** Both other numbers were in this file's own comments,
+ * written from memory. At-Tawbah has no basmalah, which is the only reason it is not
+ * 114; and 111 was never right either. `QuranStructure` counts it now, from the data,
+ * and `QuranStructureTest` checks the count against every surah individually - so the
+ * number in this comment is kept honest by a test rather than by whoever edits next.
  *
  * ### Why the head is inside the string
  *
@@ -136,13 +143,15 @@ class MushafPageText private constructor(
          * Read from the corpus rather than from a list of surah numbers, and the
          * reason is the discovery that made this file's head logic wrong: the
          * Tanzil text carries the basmalah *inside* verse 1, not as a separate
-         * record. 111 of the 114 surahs open with it; At-Tawbah has none, and
-         * Al-Fatihah's is the whole of its verse 1.
+         * record. 113 of the 114 surahs open with it; At-Tawbah has none, and
+         * Al-Fatihah's is the whole of its verse 1. See [QuranStructure.BASMALAH_COUNT],
+         * which counts it rather than asserting it from memory.
          *
          * So a page head must not print a basmalah of its own: the text below it
          * already has one. This function exists so the *absence* is stated in one
          * place and checked against the data, rather than being a special case for
-         * two surahs someone remembered and the other 111 nobody did.
+         * two surahs someone remembered and the other 111 nobody did - a number that
+         * was itself wrong, and is now counted.
          */
         internal fun hasBasmalah(surah: Int): Boolean {
             val first = QuranBrowse.ayah(surah, 1)?.textArabic ?: return false

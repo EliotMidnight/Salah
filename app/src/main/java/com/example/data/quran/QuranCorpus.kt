@@ -128,6 +128,33 @@ internal object QuranCorpus {
     }
 
     /**
+     * The seven manzil, and the 556 ruku'.
+     *
+     * Both have been in Tanzil's metadata since the beginning and **neither was ever
+     * read** — the corpus served 604 pages, 30 juz' and 240 rub' al-hizb and had never
+     * counted the two partitions sitting between them in the same file. Nothing rendered
+     * wrong, which is exactly why it went unnoticed: an unread partition is not a visible
+     * defect, it is an unverified claim.
+     *
+     * `QuranStructure` now checks both, so a bundle that lost them fails the gate rather
+     * than passing it.
+     */
+    private val manzilPartitions by lazy {
+        partitions("manzil").also {
+            require(it.size == QuranStructure.MANZIL_COUNT) {
+                "expected ${QuranStructure.MANZIL_COUNT} manzil, found ${it.size}"
+            }
+        }
+    }
+    private val rukuPartitions by lazy {
+        partitions("ruku").also {
+            require(it.size == QuranStructure.RUKU_COUNT) {
+                "expected ${QuranStructure.RUKU_COUNT} ruku', found ${it.size}"
+            }
+        }
+    }
+
+    /**
      * Half-open verse-index ranges for a partition list.
      *
      * `bounds[i]` is the index of the first verse of partition `i`, and
@@ -344,6 +371,12 @@ internal object QuranCorpus {
     private val pageOfIndex: IntArray by lazy { lookupTable(pageBounds, PAGE_COUNT) }
     private val juzOfIndex: IntArray by lazy { lookupTable(juzBounds, JUZ_COUNT) }
     private val quarterOfIndex: IntArray by lazy { lookupTable(quarterBounds, QUARTER_COUNT) }
+    private val manzilOfIndex: IntArray by lazy {
+        lookupTable(boundsOf(manzilPartitions), QuranStructure.MANZIL_COUNT)
+    }
+    private val rukuOfIndex: IntArray by lazy {
+        lookupTable(boundsOf(rukuPartitions), QuranStructure.RUKU_COUNT)
+    }
 
     private fun lookupTable(bounds: IntArray, count: Int): IntArray {
         val table = IntArray(VERSE_COUNT)
@@ -359,10 +392,72 @@ internal object QuranCorpus {
         return table
     }
 
+    /**
+     * What the bundle actually contains, measured rather than assumed.
+     *
+     * Read from the data on every load rather than from a constant, because a check that
+     * compares a constant with itself is not a check. The counts are the ones
+     * [QuranStructure] asserts, gathered in one place.
+     *
+     * The basmalah is the one count that costs something to measure — it compares the
+     * folded opening of every surah against the folded Al-Fatihah — so it is done once,
+     * lazily, on the load path rather than per keystroke.
+     */
+    val structure: QuranStructure.StructureCounts by lazy {
+        QuranStructure.StructureCounts(
+            surahs = SURA_COUNT,
+            ayah = verseTexts.size,
+            juz = juzPartitions.size,
+            hizb = HIZB_COUNT,
+            rubAlHizb = quarterPartitions.size,
+            manzil = manzilPartitions.size,
+            ruku = rukuPartitions.size,
+            pages = pagePartitions.size,
+            prostrations = sajdaAfter.size,
+            basmalah = countBasmalahs()
+        )
+    }
+
+    /**
+     * How many surahs open with the basmalah.
+     *
+     * Counted by **folding**, because the opening is not one spelling. Al-Tin and Al-Qadr
+     * begin with a shadda on the ba where every other surah has a bare kasra — the same
+     * word in the same script, and a byte comparison against one spelling reports those
+     * two surahs as having none. `MushafPageText` already folds for the same reason and
+     * for the same two surahs.
+     *
+     * The answer is **113**, not 114: At-Tawbah has none.
+     */
+    private fun countBasmalahs(): Int {
+        val reference = QuranText.normalise(verseTexts[0].textArabic)
+        if (reference.isEmpty()) return 0
+        var count = 0
+        for (ayah in verseTexts) {
+            if (ayah.ayahNumber == 1 && QuranText.normalise(ayah.textArabic).startsWith(reference)) {
+                count++
+            }
+        }
+        return count
+    }
+
     // --- The public surface ----------------------------------------------
 
-    /** Every verse, in canonical order. Index-stable for the life of the process. */
+    /**
+     * Every verse, in canonical order. Index-stable for the life of the process.
+     *
+     * **This is also where the dataset is proved intact**, which is why the gate sits here
+     * rather than in a test or a constructor: this is the property everything else reads,
+     * so it is the last moment before a verse could be displayed and the first moment the
+     * counts are known. A failure names the structure that did not match instead of
+     * arriving as a reader looking at an empty screen.
+     *
+     * It runs once, because [ayahs] is a `lazy` — the check is not a per-frame cost, and
+     * the fact that it is a `lazy` at all is why it does not run on a cold start before the
+     * reader has asked for anything.
+     */
     val ayahs: List<Ayah> by lazy {
+        QuranStructure.requireIntact(structure)
         val pages = pageOfIndex
         val juzs = juzOfIndex
         val quarters = quarterOfIndex
@@ -422,6 +517,18 @@ internal object QuranCorpus {
     }
 
     fun hizbOf(surah: Int, ayah: Int): Int = (quarterOf(surah, ayah) - 1) / 4 + 1
+
+    /** Which of the seven manzil a verse falls in. */
+    fun manzilOf(surah: Int, ayah: Int): Int {
+        val index = indexOfReference(reference(surah, ayah))
+        return if (index < 0) 1 else manzilOfIndex[index]
+    }
+
+    /** Which of the 556 ruku' a verse falls in. */
+    fun rukuOf(surah: Int, ayah: Int): Int {
+        val index = indexOfReference(reference(surah, ayah))
+        return if (index < 0) 1 else rukuOfIndex[index]
+    }
 
     // --- Prostration ------------------------------------------------------
 
