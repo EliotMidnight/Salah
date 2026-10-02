@@ -168,6 +168,40 @@ It stays a copy rather than a corpus read because it is a Room entity's field in
 and reading the corpus there would parse 6,236 verses and verify three digests inside a UI
 state's defaults. Same reason `LocationStore` reads preferences in a field initialiser.
 
+### The sideways axes ran the wrong way, and the continuous one overflowed
+
+Two reports, and only one of them was visible in a screenshot.
+
+**The horizontal axes inherited the interface language.** A `HorizontalPager` takes its
+direction from the composition, so an Arabic reader swiped right-to-left and an English,
+French or Bengali reader swiped **left-to-right through an Arabic mushaf**. The text inside
+each page was already forced RTL, so the reading ran right-to-left inside a carousel that
+ran left-to-right — advancing a page moved the reader *backwards* through the Book.
+
+`MushafPager` now sets its own direction, scoped to the pager. Not to the reader: everything
+else in an English interface — settings, the index, navigation — genuinely should be
+left-to-right. Only this axis is reading order for the Book.
+
+**The continuous horizontal axis laid a verse out as one 720dp line.** It was a
+`horizontalScroll` around a column given a fixed wide measure, and the comment above it
+described the overflow as correct. It was not. A fixed width cannot be fixed by choosing a
+different fixed width: any measure wider than the screen puts text off the screen, and any
+measure equal to the screen leaves nothing to pan.
+
+So `HorizontalFlow` replaces it — content at the **viewport's width**, and the axis scrolls
+*through the text* rather than *within a line*. Swipe to move on, as the page axis does.
+The blocks are the same twelve-verse groups the vertical axis scrolls through, so
+`flowIndexOf`'s resume arithmetic keeps working and switching axes still lands on the same
+words. The surah heading sits above the pager rather than being a page of its own, so it
+stays put while the reader moves.
+
+**A screenshot cannot catch the first one.** The pager renders identically whichever way it
+runs, because the text inside forces its own direction — and a screenshot was checked and
+looked right while the axis was backwards. So `HorizontalAxisDirectionTest` asserts the
+gesture instead. Which gesture advances was **measured**, not assumed: page 1 sits rightmost,
+so reaching page 2 moves the content rightward. **The old behaviour was planted and watched
+fail**, reporting that a rightward drag went from page 42 to 41.
+
 ### Justified Arabic, by elongating it rather than by widening the gaps
 
 You were right that this is plain UTF-8 text with a custom font, and rendering a line of it

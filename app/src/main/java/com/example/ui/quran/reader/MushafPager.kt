@@ -24,6 +24,9 @@ import com.example.data.quran.QuranBrowse
 import kotlinx.coroutines.launch
 import com.example.ui.quran.VerseActions
 import com.example.ui.theme.Space
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 
 /**
  * The mushaf as a page turner: one canonical page at a time, on either axis.
@@ -136,13 +139,28 @@ internal fun MushafPager(
 
     Box(modifier = modifier.fillMaxSize()) {
         if (orientation == QuranScrollDirection.HORIZONTAL) {
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize(),
-                pageSpacing = space.lg,
-                contentPadding = PaddingValues(horizontal = space.sm)
-            ) { index ->
-                PageAt(index + 1, requestedScale, ink, accent, selected, onSelectVerse, topInset, turn)
+            // **Right-to-left because the text is, not because the interface is.**
+            //
+            // A `HorizontalPager` takes its direction from the composition, so it was
+            // doing what the *interface language* said: an Arabic reader swiped RTL and an
+            // English, French or Bengali reader swiped LTR — through a mushaf that is
+            // Arabic. The text inside each page was already forced RTL, so the reading ran
+            // right-to-left inside a carousel that ran left-to-right, and advancing a page
+            // moved the reader backwards.
+            //
+            // The override is scoped to the pager rather than applied to the reader, because
+            // everything else in an English interface — the settings list, the index rows,
+            // the navigation — genuinely should be left-to-right. Only this axis is reading
+            // order for the Book.
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    pageSpacing = space.lg,
+                    contentPadding = PaddingValues(horizontal = space.sm)
+                ) { index ->
+                    PageAt(index + 1, requestedScale, ink, accent, selected, onSelectVerse, topInset, turn)
+                }
             }
         } else {
             VerticalPager(

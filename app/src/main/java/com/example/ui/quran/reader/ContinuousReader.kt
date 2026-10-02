@@ -87,24 +87,20 @@ import kotlinx.coroutines.flow.first
  * the reader had to hold the whole surah in their head as a strip of disconnected
  * panels.
  *
- * So both axes render the same ordered column of verses. Horizontal gives the
- * surface a **wide measure** and a pan container around it: the mechanism is added
- * *around* the reading, never in place of it.
+ * So both axes render the same ordered column of verses, and the mechanism is added
+ * *around* the reading rather than in place of it.
  *
- * ### Why the horizontal measure is a real width
+ * ### The horizontal axis was a panning surface, and that was the bug
  *
- * The earlier version used `Modifier.fillMaxWidth()` inside a `horizontalScroll`.
- * A `horizontalScroll` measures its child with **infinite** max width, and
- * `fillMaxWidth` resolves to `constraints.minWidth` - which is 0 - when the width
- * is unbounded. So the measure was not "the width of the surface", as the
- * surrounding comment claimed; it was *infinite*, and each verse was set as one
- * unwrapped line. The committed screenshot for this mode shows exactly that: one
- * line running off both edges, cut mid-word, described as correct.
+ * It used to be a `horizontalScroll` around a column given a **fixed 720dp measure**,
+ * and the comment above it claimed the overflow was correct. It was not; it was the
+ * report this replaced: *the whole sentence on one line, exceeding the screen*.
  *
- * So the measure is an explicit [wideMeasure] and the child is measured with
- * `width(measure)`. Below that threshold the axis has nothing to pan across and
- * becomes a no-op, which is the right outcome - a gesture that silently does
- * nothing while appearing to would be worse.
+ * A fixed width cannot be fixed by choosing a different fixed width. Any measure wider
+ * than the screen puts text off the screen; any measure equal to the screen leaves
+ * nothing to pan. So the content is now the **viewport's width** and the axis scrolls
+ * *through the text* rather than *within a line* - swipe to move on, as the page axis
+ * does. See [HorizontalFlow].
  */
 @OptIn(FlowPreview::class)
 @Composable
@@ -357,27 +353,30 @@ internal fun ContinuousReader(
     }
 
     if (horizontal) {
-        // The scroll container has to be the **outer** node and the wide measure has
-        // to be on its child.
-        //
-        // Written the other way round - `width(wideMeasure).horizontalScroll(...)` -
-        // the width constraint lands on the scroll container itself, so the container
-        // is 720dp wide, the content inside it is 720dp wide, there is nothing to
-        // scroll, and the axis is a no-op that looks like it works. The measure
-        // belongs to the *content*, and the pan to the viewport.
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .horizontalScroll(rtlScrollState()),
-            contentAlignment = Alignment.TopStart
-        ) {
-            body(
-                Modifier
-                    .width(wideMeasure)
-                    .fillMaxHeight()
-                    .padding(horizontal = space.lg)
-            )
-        }
+        HorizontalFlow(
+            surah = surah,
+            blocks = blocks,
+            initialBlock = initialIndex.coerceIn(0, (blocks.size - 1).coerceAtLeast(0)),
+            selected = position.selection,
+            options = options,
+            ink = ink,
+            accent = accent,
+            muted = muted,
+            onSelectVerse = { ayah ->
+                position.toggleSelection(
+                    QuranRef(ayah.surahNumber, ayah.ayahNumber, ayah.pageNumber)
+                )
+            },
+            onSettled = { block ->
+                block.firstOrNull()?.let { ayah ->
+                    onPositionSettled(
+                        QuranRef(ayah.surahNumber, ayah.ayahNumber, ayah.pageNumber)
+                    )
+                }
+            },
+            topInset = PageInsets.top(controlsVisible) + space.md,
+            modifier = modifier.fillMaxSize()
+        )
         return
     }
 
@@ -680,44 +679,8 @@ internal const val FLOW_BLOCK_VERSES = 12
  */
 internal const val DEFAULT_RESUME_OVERSHOOT = 3
 
-/**
- * The measure of a horizontally-panned continuous surah.
- *
- * A real width, not `fillMaxWidth` - see the note on [ContinuousReader] for what
- * an unbounded measure does to a line of Arabic.
- */
-internal val wideMeasure = 720.dp
+// The horizontal axis was a `horizontalScroll` around a 720dp column, which laid a verse
+// out as one line running past both edges of the screen. `wideMeasure` and
+// `rtlScrollState` went with it: the surface is now the viewport's width and the axis
+// paginates, so there is no wide measure to name and no scroll offset to start at.
 
-/**
- * A horizontal scroll that *starts at the right edge*.
- *
- * ### Why
- *
- * Arabic is right-to-left. In a wide measure the first word of the surah is at the
- * **right** of the column and the text runs leftwards from there. A plain
- * `rememberScrollState()` starts at offset zero - the left edge - so opening a
- * surah on this axis landed the reader in the middle of a line, with the beginning
- * of the page off to the right and the end of the line off to the left.
- *
- * That is not a cosmetic default. On a wide measure the first screen a reader
- * should see is the first words of the text, exactly as the first screen of the
- * vertical axis is the first line of it.
- *
- * The scroll is otherwise untouched, so this decides only where the surface
- * *starts* and not how it moves.
- *
- * The move waits for a real `maxValue` rather than scrolling on the first frame,
- * because `maxValue` is 0 until the content has been measured - scrolling to it
- * then would jump to the wrong place and stay there.
- */
-@Composable
-private fun rtlScrollState(): ScrollState {
-    val state = rememberScrollState()
-    LaunchedEffect(state) {
-        snapshotFlow { state.maxValue }
-            .filter { it > 0 }
-            .first()
-            .let { state.scrollTo(it) }
-    }
-    return state
-}
