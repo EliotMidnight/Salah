@@ -83,6 +83,11 @@ internal enum class SurahFilter { ALL, MECCAN, MEDINAN }
 /**
  * The index.
  *
+ * One sheet with three faces - surahs, saved, search - because they are three ways
+ * of answering the same question, "where do I go next".
+ *
+ * It opens as a sheet over the reader rather than replacing it, so the text being
+ * read is still behind it when it closes.
  *
  *
  * [OptionListSheet] gives the lists a bounded viewport, so `items` composes what

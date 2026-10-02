@@ -218,6 +218,10 @@ internal fun LazyListScope.searchIndex(
 }
 /**
  * A verse that matched, with the match itself made visible.
+ *
+ * The highlight is the whole reason a result is trustworthy: a list that shows the
+ * whole verse and no hint *why* it matched makes a reader read 6,236 verses to
+ * check the search worked.
  */
 @Composable
 private fun VerseResultRow(hit: QuranSearchHit, onClick: () -> Unit) {

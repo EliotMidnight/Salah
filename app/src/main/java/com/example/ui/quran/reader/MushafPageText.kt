@@ -93,6 +93,12 @@ class MushafPageText private constructor(
      * reader who taps the circle means the verse beside it.
      *
      * ### Offsets that fall between or outside the verses
+     *
+     * The page's surah head and basmalah come before the first verse, and the
+     * trailing space comes after the last, so an offset can legitimately be inside
+     * the page and inside no verse at all. Both ends resolve to the nearest verse -
+     * the head to the *first*, because a tap on "Al-Fatihah" is a tap at the top of
+     * Al-Fatihah, and the tail to the last.
      */
     fun verseAt(offset: Int): VerseSpan? {
         if (spans.isEmpty()) return null

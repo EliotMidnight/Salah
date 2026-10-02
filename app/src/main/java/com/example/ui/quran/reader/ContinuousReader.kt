@@ -74,7 +74,9 @@ import kotlinx.coroutines.flow.first
  *
  * ### The axis is a mechanism, never a shape
  *
- *
+ * Turning the axis changes **which way the surface travels under the finger**
+ * and nothing else. The verses stay in the same order, down the page, the same way
+ * round, breaking at the same places.
  *
  * A fixed width cannot be fixed by choosing a different fixed width. Any measure wider
  * than the screen puts text off the screen; any measure equal to the screen leaves
