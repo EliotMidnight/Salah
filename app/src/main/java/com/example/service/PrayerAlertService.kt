@@ -13,6 +13,8 @@ import com.example.data.model.AdhanSound
 import com.example.data.model.Prayer
 import com.example.engine.AdhanAudioSynthesizer
 import com.example.engine.PrayerNotificationManager
+import com.example.ui.localization.LocalizationManager
+import com.example.ui.localization.UiStringsMore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -74,6 +76,25 @@ class PrayerAlertService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main)
     private var wakeLock: PowerManager.WakeLock? = null
     private var autoSilentRestoreJob: Job? = null
+
+    /**
+     * The reader's strings, read at the moment a notification is built.
+     *
+     * The same `pref_language` the UI and `PrayerNotificationManager` read, so the
+     * ongoing alert cannot disagree with the notification that launched it about which
+     * language the reader is using. A property rather than a field read once at
+     * construction, because a service can outlive a language change.
+     *
+     * English if the preference is missing. A notification cannot afford to fail
+     * because a preference could not be read.
+     */
+    private val strings: UiStringsMore
+        get() = LocalizationManager
+            .getStrings(
+                getSharedPreferences("salah_prefs", MODE_PRIVATE)
+                    .getString("pref_language", "English") ?: "English"
+            )
+            .more
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -259,8 +280,11 @@ class PrayerAlertService : Service() {
         )
         return NotificationCompat.Builder(this, PrayerNotificationManager.CHANNEL_SILENT)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle("Adhan in progress")
-            .setContentText("Prayer alert is playing")
+            // The ongoing notification for the alert itself. English until this stage:
+            // it is the one notification a reader cannot dismiss and so cannot avoid
+            // reading, in every prayer, in whatever language they chose.
+            .setContentTitle(strings.notifications.notifAdhanInProgress)
+            .setContentText(strings.notifications.notifAdhanInProgressBody)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(contentPi)

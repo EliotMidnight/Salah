@@ -109,6 +109,24 @@ internal object BorrowedWords {
         // A school of transmission. A proper noun in practice.
         "Riwayah" to setOf("French", "Indonesian", "Malay"),
 
+        // --- Prayer names -----------------------------------------------------
+        //
+        // Five of the six. French, German and Spanish keep *Fajr*, *Dhuhr*, *Asr*,
+        // *Maghrib* and *Isha* as the tradition's own names - they transliterate or
+        // keep them, and a reader in those languages would not recognise
+        // "Maghrib" spelled any other way. All three *do* translate sunrise
+        // ("Lever du soleil", "Sonnenaufgang", "Amanecer"), which is what shows these
+        // are a considered choice rather than an untranslated row.
+        //
+        // Indonesian and Malay keep only *Maghrib*; they have their own words for the
+        // rest (Subuh, Dzuhur, Ashar, Isya). The four non-Latin scripts and Russian
+        // have their own for all five and are not listed.
+        "Fajr" to setOf("French", "German", "Spanish"),
+        "Dhuhr" to setOf("French", "German", "Spanish"),
+        "Asr" to setOf("French", "German", "Spanish"),
+        "Maghrib" to setOf("French", "Indonesian", "Malay", "German", "Spanish"),
+        "Isha" to setOf("French", "German", "Spanish"),
+
         // --- Cognates ---------------------------------------------------------
         //
         // Not borrowings, just words that happen to be spelled the same. Listed per

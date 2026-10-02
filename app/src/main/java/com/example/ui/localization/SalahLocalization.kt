@@ -470,6 +470,87 @@ data class DateNavStrings(
     val nextMonth: String = "Next month"
 )
 
+/**
+ * Everything that is not reader-specific.
+ *
+ * **249 `String` fields, which is past a limit — see `RobolectricPackages.kt` in the
+ * test sources.**
+ *
+ * Robolectric's instrumenter emits a constructor with one parameter per field, and at
+ * this size that crosses the JVM's 64 KB method limit: the suite failed with
+ * `ClassFormatError: Too many arguments in method signature` before a single assertion
+ * ran. The test sources stop instrumenting this package, which is safe because every
+ * field here is an immutable `String` with nothing for the instrumenter to rewrite.
+ *
+ * **That is a mitigation, not a fix.** A data class with 249 constructor parameters is
+ * not a list of strings; it is a list of strings nobody has reviewed as a group, and it
+ * will cross a real limit on a lower one. The right shape is several nested classes —
+ * `ReaderStrings` is already one, at 52 — each covering a surface: notifications, the
+ * Hijri calendar, the sky. That is deliberate work over this whole file and every call
+ * site, and it is not smuggled in beside a bug fix. It is the next thing to do here.
+ */
+/**
+ * Everything a notification says.
+ *
+ * ### Why these are not fields on `UiStringsMore`
+ *
+ * `UiStringsMore` had reached 249 `String` fields, and adding these took its constructor
+ * past the JVM's 64 KB method limit. Robolectric's instrumenter emits a constructor with
+ * one parameter per field, so the test suite failed with
+ *
+ *     ClassFormatError: Too many arguments in method signature in class file
+ *     com/example/ui/localization/UiStringsMore
+ *
+ * **before a single assertion ran** — which meant no test involving the app's own
+ * strings could execute at all, and the failure named a bytecode limit rather than the
+ * design problem behind it.
+ *
+ * Splitting is the fix; the alternatives are not. Narrowing Robolectric's
+ * `instrumentedPackages` does not help, because a class-level `@Config` overrides the
+ * properties file and every test class here sets one. Suppressing instrumentation
+ * cannot even be expressed here — the annotation lives in Robolectric's annotations
+ * artifact, which is a *test* dependency, and this file is in `main`.
+ *
+ * And the size was a symptom anyway: a data class with 249 constructor parameters is not
+ * a list of strings, it is a list of strings nobody has reviewed as a group. These
+ * nineteen had a natural boundary all along — they are built in one place
+ * (`PrayerNotificationManager`), shown in one place, and read by a reader looking at a
+ * notification.
+ *
+ * The same shape will solve the next one: a surface with its own boundary becomes its
+ * own class rather than more fields on this one. `ReaderStrings` is already one, at 52.
+ * **The remaining ~230 fields on `UiStringsMore` are still the next thing to do to this
+ * file**, and they should be split the same way — settings, the Hijri calendar, the
+ * sky, search. That is deliberate work over every call site, not something to smuggle in
+ * beside a bug fix.
+ */
+data class NotificationStrings(
+    val notifChannelAdhan: String = "Adhan & Prayer Call Alerts",
+    val notifChannelAdhanDescription: String =
+        "Notifies when prayer time arrives with sound or adhan tone",
+    val notifChannelPrePrayer: String = "Pre-Prayer Reminders",
+    val notifChannelPrePrayerDescription: String =
+        "Gentle heads-up before upcoming prayer",
+    val notifChannelSilent: String = "Silent Prayer Notifications",
+    val notifChannelSilentDescription: String =
+        "Discreet notifications when silent mode or mute is active",
+    val notifGlobalSilent: String = "Silent Mode active \u00b7 Adhan muted",
+    val notifSilentFor: String = "Silent Mode active for %1\$s",
+    val notifVibrateAlert: String = "Vibrate alert \u00b7 %1\$s has entered",
+    val notifTakbeerAlert: String = "Takbeer alert \u00b7 Time for %1\$s",
+    val notifChimeAlert: String = "Gentle Chime alert \u00b7 Time for %1\$s",
+    val notifPrayerArrived: String = "Time for %1\$s prayer has arrived (%2\$s)",
+    val notifEnterPrayer: String =
+        "Enter prayer and turn towards the Holy Kaaba (%1\$s).",
+    val notifSilenceAction: String = "Silence",
+    val notifMarkPrayed: String = "Mark prayed",
+    val notifPrePrayerTitle: String = "%1\$s in %2\$d minutes",
+    val notifPrePrayerText: String =
+        "%1\$s begins at %2\$s \u00b7 Prepare for prayer",
+    val notifAdhanInProgress: String = "Adhan in progress",
+    val notifAdhanInProgressBody: String = "Prayer alert is playing",
+)
+
 data class UiStringsMore(
     val actionCancel: String = "Cancel",
     val actionSave: String = "Save",
@@ -659,6 +740,7 @@ data class UiStringsMore(
         String = "Location services are switched off on this device.",
     val locationErrorNoSignal:
         String = "Could not get a GPS signal. Your saved location is still in use.",
+
     val selectedCity: String = "Selected city",
     val coordinatesCachedOffline: String =
         "Coordinates cached offline. Calculations run entirely on this device.",
@@ -727,6 +809,11 @@ data class UiStringsMore(
      * the Robolectric screenshot tests, never in a build.
      */
     val reader: ReaderStrings = ReaderStrings(),
+    /**
+     * The notification texts. See [NotificationStrings] for why they are separate — the
+     * short version is that `UiStringsMore` ran out of method signature.
+     */
+    val notifications: NotificationStrings = NotificationStrings(),
     val layoutPerVerse: String = "Per verse",
     val layoutContinuous: String = "Continuous",
     val verseActionsLabel: String = "Verse actions",
@@ -1265,7 +1352,27 @@ reader = ReaderStrings(
         locationErrorNoPermission = "لم يُمنح إذن الوصول إلى الموقع.",
         locationErrorServicesOff = "خدمات الموقع معطّلة على هذا الجهاز.",
         locationErrorNoSignal = "تعذّر الحصول على إشارة GPS. لا يزال موقعك المحفوظ قيد الاستخدام.",
-    ),
+        notifications = NotificationStrings(
+            notifChannelAdhan = "تنبيهات الأذان ونداء الصلاة",
+            notifChannelAdhanDescription = "يخطرك عند دخول وقت الصلاة بصوت أو نغمة الأذان",
+            notifChannelPrePrayer = "تذكيرات ما قبل الصلاة",
+            notifChannelPrePrayerDescription = "تنبيه لطيف قبل دخول وقت الصلاة",
+            notifChannelSilent = "إشعارات الصلاة الصامتة",
+            notifChannelSilentDescription = "إشعارات هادئة عند تفعيل الوضع الصامت",
+            notifGlobalSilent = "الوضع الصامت مُفعّل · تم كتم الأذان",
+            notifSilentFor = "الوضع الصامت مُفعّل لـ %1\$s",
+            notifVibrateAlert = "تنبيه بالاهتزاز · دخل وقت %1\$s",
+            notifTakbeerAlert = "تنبيه التكبير · حان وقت %1\$s",
+            notifChimeAlert = "تنبيه الجرس اللطيف · حان وقت %1\$s",
+            notifPrayerArrived = "حان وقت صلاة %1\$s (%2\$s)",
+            notifEnterPrayer = "ادخل الصلاة واستقبل الكعبة المشرفة (%1\$s).",
+            notifSilenceAction = "كتم",
+            notifMarkPrayed = "تمّت الصلاة",
+            notifPrePrayerTitle = "%1\$s بعد %2\$d دقيقة",
+            notifPrePrayerText = "يبدأ %1\$s في %2\$s · استعد للصلاة",
+            notifAdhanInProgress = "جارٍ الأذان",
+            notifAdhanInProgressBody = "يتم تشغيل تنبيه الصلاة",
+        ),    ),
 )
 
 val FrenchStrings = UiStrings(
@@ -1672,7 +1779,27 @@ reader = ReaderStrings(
         locationErrorNoPermission = "L’autorisation de localisation n’est pas accordée.",
         locationErrorServicesOff = "Les services de localisation sont désactivés sur cet appareil.",
         locationErrorNoSignal = "Impossible d’obtenir un signal GPS. Votre position enregistrée reste utilisée.",
-    ),
+        notifications = NotificationStrings(
+            notifChannelAdhan = "Alertes d'adhan et d'appel à la prière",
+            notifChannelAdhanDescription = "Vous avertit à l'heure de la prière, avec le son ou la tonalité de l'adhan",
+            notifChannelPrePrayer = "Rappels avant la prière",
+            notifChannelPrePrayerDescription = "Une alerte discrète avant la prière à venir",
+            notifChannelSilent = "Notifications de prière silencieuses",
+            notifChannelSilentDescription = "Notifications discrètes lorsque le mode silencieux est actif",
+            notifGlobalSilent = "Mode silencieux actif · Adhan coupé",
+            notifSilentFor = "Mode silencieux actif pour %1\$s",
+            notifVibrateAlert = "Alerte vibreur · %1\$s est entré",
+            notifTakbeerAlert = "Alerte takbeer · C'est l'heure de %1\$s",
+            notifChimeAlert = "Alerte cloche douce · C'est l'heure de %1\$s",
+            notifPrayerArrived = "L'heure de la prière %1\$s est arrivée (%2\$s)",
+            notifEnterPrayer = "Entrez en prière et tournez-vous vers la Kaaba (%1\$s).",
+            notifSilenceAction = "Silence",
+            notifMarkPrayed = "Marquer comme prié",
+            notifPrePrayerTitle = "%1\$s dans %2\$d minutes",
+            notifPrePrayerText = "%1\$s commence à %2\$s · Préparez-vous à prier",
+            notifAdhanInProgress = "Adhan en cours",
+            notifAdhanInProgressBody = "L'alerte de prière est en cours de lecture",
+        ),    ),
 )
 
 val IndonesianStrings = UiStrings(
@@ -2079,7 +2206,27 @@ reader = ReaderStrings(
         locationErrorNoPermission = "Izin lokasi belum diberikan.",
         locationErrorServicesOff = "Layanan lokasi dimatikan di perangkat ini.",
         locationErrorNoSignal = "Sinyal GPS tidak diperoleh. Lokasi tersimpan Anda tetap digunakan.",
-    ),
+        notifications = NotificationStrings(
+            notifChannelAdhan = "Peringgatan Azan dan Panggilan Salat",
+            notifChannelAdhanDescription = "Memberi tahu saat waktu salat tiba, dengan suara atau nada adzan",
+            notifChannelPrePrayer = "Pengingat Salat",
+            notifChannelPrePrayerDescription = "Pengingat singkat sebelum waktu salat berikutnya",
+            notifChannelSilent = "Notifikasi Salat Senyap",
+            notifChannelSilentDescription = "Notifikasi halus saat mode senyap aktif",
+            notifGlobalSilent = "Mode Senyap aktif · Adzan dibisukan",
+            notifSilentFor = "Mode Senyap aktif untuk %1\$s",
+            notifVibrateAlert = "Peringatan getar · %1\$s telah masuk",
+            notifTakbeerAlert = "Peringatan takbir · Waktunya %1\$s",
+            notifChimeAlert = "Peringatan lonceng lembut · Waktunya %1\$s",
+            notifPrayerArrived = "Waktu salat %1\$s telah tiba (%2\$s)",
+            notifEnterPrayer = "Masuk salat dan menghadap Kaaba (%1\$s).",
+            notifSilenceAction = "Diam",
+            notifMarkPrayed = "Tandai sudah salat",
+            notifPrePrayerTitle = "%1\$s dalam %2\$d menit",
+            notifPrePrayerText = "%1\$s dimulai pukul %2\$s · Bersiap salat",
+            notifAdhanInProgress = "Adzan sedang berlangsung",
+            notifAdhanInProgressBody = "Peringatan salat sedang diputar",
+        ),    ),
 )
 
 val TurkishStrings = UiStrings(
@@ -2486,7 +2633,27 @@ reader = ReaderStrings(
         locationErrorNoPermission = "Konum izni verilmemiş.",
         locationErrorServicesOff = "Bu cihazda konum servisleri kapalı.",
         locationErrorNoSignal = "GPS sinyali alınamadı. Kayıtlı konumunuz kullanılmaya devam ediyor.",
-    ),
+        notifications = NotificationStrings(
+            notifChannelAdhan = "Ezan ve Namaz Çağrı Uyarıları",
+            notifChannelAdhanDescription = "Namaz vakti geldiğinde ses veya ezan tonuyla haber verir",
+            notifChannelPrePrayer = "Namaz Öncesi Hatırlatıcılar",
+            notifChannelPrePrayerDescription = "Yaklaşan namaz için kısa bir uyarı",
+            notifChannelSilent = "Sessiz Namaz Bildirimleri",
+            notifChannelSilentDescription = "Sessiz mod etkinken hafif bildirimler",
+            notifGlobalSilent = "Sessiz mod etkin · Ezan kapatıldı",
+            notifSilentFor = "%1\$s için sessiz mod etkin",
+            notifVibrateAlert = "Titreşim uyarısı · %1\$s girdi",
+            notifTakbeerAlert = "Tekbir uyarısı · %1\$s vakti",
+            notifChimeAlert = "Yumuşak zil uyarısı · %1\$s vakti",
+            notifPrayerArrived = "%1\$s namaz vakti geldi (%2\$s)",
+            notifEnterPrayer = "Namaza girip Kâ'be'ye yönelin (%1\$s).",
+            notifSilenceAction = "Sessiz",
+            notifMarkPrayed = "Namaz kılındı olarak işaretle",
+            notifPrePrayerTitle = "%2\$d dakika sonra %1\$s",
+            notifPrePrayerText = "%1\$s saat %2\$s'de başlıyor · Namaza hazırlanın",
+            notifAdhanInProgress = "Ezan çalıyor",
+            notifAdhanInProgressBody = "Namaz uyarısı çalıyor",
+        ),    ),
 )
 
 val UrduStrings = UiStrings(
@@ -2893,7 +3060,27 @@ reader = ReaderStrings(
         locationErrorNoPermission = "مقام کی اجازت نہیں دی گئی۔",
         locationErrorServicesOff = "اس آلے پر مقام کی سہولتیں بند ہیں۔",
         locationErrorNoSignal = "GPS سگنل نہیں مل سکا۔ آپ کا محفوظ مقام اب بھی استعمال ہو رہا ہے۔",
-    ),
+        notifications = NotificationStrings(
+            notifChannelAdhan = "اذان اور نماز کی اطلاعیہات",
+            notifChannelAdhanDescription = "نماز کے وقت آنے پر آواز یا اذان کے سُر میں خبر دیتا ہے",
+            notifChannelPrePrayer = "نماز سے پہلے یاد دہانیاں",
+            notifChannelPrePrayerDescription = "آنے والی نماز سے پہلے ہلکی اطلاع",
+            notifChannelSilent = "خاموش نماز اطلاعیہات",
+            notifChannelSilentDescription = "خاموش حالت فعال ہونے پر ہلکی اطلاعیہات",
+            notifGlobalSilent = "خاموش حالت فعال · اذان خاموش",
+            notifSilentFor = "%1\$s کے لیے خاموش حالت فعال",
+            notifVibrateAlert = "کانپن اطلاع · %1\$s داخل ہو گیا",
+            notifTakbeerAlert = "تکبیر اطلاع · %1\$s کا وقت",
+            notifChimeAlert = "نرم گھنٹی اطلاع · %1\$s کا وقت",
+            notifPrayerArrived = "%1\$s کے نماز کا وقت آ گیا (%2\$s)",
+            notifEnterPrayer = "نماز میں جائیں اور کعبہ کی طرف منہ کریں (%1\$s)۔",
+            notifSilenceAction = "خاموش",
+            notifMarkPrayed = "نماز ادا شدہ نشان زد کریں",
+            notifPrePrayerTitle = "%2\$d منٹ میں %1\$s",
+            notifPrePrayerText = "%1\$s کی نماز %2\$s پر شروع ہوگی · نماز کی تیاری کریں",
+            notifAdhanInProgress = "اذان جاری ہے",
+            notifAdhanInProgressBody = "نماز کی اطلاع چل رہی ہے",
+        ),    ),
 )
 
 val MalayStrings = UiStrings(
@@ -3300,7 +3487,27 @@ reader = ReaderStrings(
         locationErrorNoPermission = "Kebenaran lokasi tidak diberikan.",
         locationErrorServicesOff = "Perkhidmatan lokasi dimatikan pada peranti ini.",
         locationErrorNoSignal = "Isyarat GPS tidak diperoleh. Lokasi tersimpan anda masih digunakan.",
-    ),
+        notifications = NotificationStrings(
+            notifChannelAdhan = "Amaran Azan dan Panggilan Solat",
+            notifChannelAdhanDescription = "Memberitahu apabila waktu solat tiba, dengan bunyi atau nada azan",
+            notifChannelPrePrayer = "Peringatan Pra-Solat",
+            notifChannelPrePrayerDescription = "Amaran ringkas sebelum waktu solat akan tiba",
+            notifChannelSilent = "Notifikasi Solat Senyap",
+            notifChannelSilentDescription = "Notifikasi halus apabila mod senyap diaktifkan",
+            notifGlobalSilent = "Mod Senyap diaktifkan · Azan didiamkan",
+            notifSilentFor = "Mod senyap diaktifkan untuk %1\$s",
+            notifVibrateAlert = "Amaran getaran · %1\$s telah masuk",
+            notifTakbeerAlert = "Amaran takbir · Waktunya %1\$s",
+            notifChimeAlert = "Amaran loceng lembut · Waktunya %1\$s",
+            notifPrayerArrived = "Waktu solat %1\$s telah tiba (%2\$s)",
+            notifEnterPrayer = "Masuk solat dan menghadap Kaaba (%1\$s).",
+            notifSilenceAction = "Senyap",
+            notifMarkPrayed = "Tandakan sudah solat",
+            notifPrePrayerTitle = "%1\$s dalam %2\$d minit",
+            notifPrePrayerText = "%1\$s bermula pada %2\$s · Sediakan diri untuk solat",
+            notifAdhanInProgress = "Azan sedang berjalan",
+            notifAdhanInProgressBody = "Amaran solat sedang dimainkan",
+        ),    ),
 )
 
 val BengaliStrings = UiStrings(
@@ -3707,7 +3914,27 @@ reader = ReaderStrings(
         locationErrorNoPermission = "অবস্থানের অনুমতি দেওয়া হয়নি।",
         locationErrorServicesOff = "এই ডিভাইসে অবস্থান পরিষেবা বন্ধ আছে।",
         locationErrorNoSignal = "GPS সংকেত পাওয়া যায়নি। আপনার সংরক্ষিত অবস্থান ব্যবহৃত হচ্ছে।",
-    ),
+        notifications = NotificationStrings(
+            notifChannelAdhan = "আজান ও নামাজের ডাকের সতর্কতা",
+            notifChannelAdhanDescription = "নামাজের সময় এলে শব্দ বা আজানের সুরে জানায়",
+            notifChannelPrePrayer = "নামাজের আগের মনে করানো",
+            notifChannelPrePrayerDescription = "আসন্ন নামাজের আগে সংক্ষিপ্ত জানানো",
+            notifChannelSilent = "নীরব নামাজের বিজ্ঞপ্তি",
+            notifChannelSilentDescription = "নীরব মোড চালু থাকলে হালকা বিজ্ঞপ্তি",
+            notifGlobalSilent = "নীরব মোড চালু · আজান বন্ধ",
+            notifSilentFor = "%1\$s এর জন্য নীরব মোড চালু",
+            notifVibrateAlert = "কম্পন বিজ্ঞপ্তি · %1\$s শুরু হয়েছে",
+            notifTakbeerAlert = "তাকবীর বিজ্ঞপ্তি · %1\$s এর সময়",
+            notifChimeAlert = "নরম ঘণ্টা বিজ্ঞপ্তি · %1\$s এর সময়",
+            notifPrayerArrived = "%1\$s নামাজের সময় এসেছে (%2\$s)",
+            notifEnterPrayer = "নামাজে প্রবেশ করুন এবং কাবার দিকে মুখ করুন (%1\$s)।",
+            notifSilenceAction = "নীরব",
+            notifMarkPrayed = "নামাজ আদায় হয়েছে চিহ্নিত করুন",
+            notifPrePrayerTitle = "%2\$d মিনিটে %1\$s",
+            notifPrePrayerText = "%1\$s শুরু হবে %2\$s · নামাজের প্রস্তুতি নিন",
+            notifAdhanInProgress = "আজান চলছে",
+            notifAdhanInProgressBody = "নামাজের বিজ্ঞপ্তি বাজছে",
+        ),    ),
 )
 
 val RussianStrings = UiStrings(
@@ -4114,7 +4341,27 @@ reader = ReaderStrings(
         locationErrorNoPermission = "Доступ к местоположению не предоставлен.",
         locationErrorServicesOff = "Службы определения местоположения отключены на этом устройстве.",
         locationErrorNoSignal = "Не удалось получить сигнал GPS. Сохранённое местоположение по-прежнему используется.",
-    ),
+        notifications = NotificationStrings(
+            notifChannelAdhan = "Оповещения азана и намаза",
+            notifChannelAdhanDescription = "Сообщает о наступлении времени намаза — со звуком или тоном азана",
+            notifChannelPrePrayer = "Напоминания перед намазом",
+            notifChannelPrePrayerDescription = "Короткое уведомление перед приближающимся намазом",
+            notifChannelSilent = "Тихие уведомления о намазе",
+            notifChannelSilentDescription = "Ненавязчивые уведомления при включённом беззвучном режиме",
+            notifGlobalSilent = "Беззвучный режим включён · Азан приглушён",
+            notifSilentFor = "Беззвучный режим включён для %1\$s",
+            notifVibrateAlert = "Виброуведомление · %1\$s наступило",
+            notifTakbeerAlert = "Уведомление с такбиром · Время %1\$s",
+            notifChimeAlert = "Уведомление мягким звонком · Время %1\$s",
+            notifPrayerArrived = "Время намаза %1\$s наступило (%2\$s)",
+            notifEnterPrayer = "Встаньте на намаз и повернитесь к Каабе (%1\$s).",
+            notifSilenceAction = "Без звука",
+            notifMarkPrayed = "Отметить как прочитанный",
+            notifPrePrayerTitle = "%1\$s через %2\$d мин",
+            notifPrePrayerText = "%1\$s начнётся в %2\$s · Приготовьтесь к намазу",
+            notifAdhanInProgress = "Азан играет",
+            notifAdhanInProgressBody = "Звучит уведомление о намазе",
+        ),    ),
 )
 
 val GermanStrings = UiStrings(
@@ -4521,7 +4768,27 @@ reader = ReaderStrings(
         locationErrorNoPermission = "Die Standortberechtigung wurde nicht erteilt.",
         locationErrorServicesOff = "Die Standortdienste sind auf diesem Gerät ausgeschaltet.",
         locationErrorNoSignal = "Kein GPS-Signal erhalten. Dein gespeicherter Standort wird weiterhin verwendet.",
-    ),
+        notifications = NotificationStrings(
+            notifChannelAdhan = "Adhan- und Gebetsaufrufe",
+            notifChannelAdhanDescription = "Meldet den Gebetsbeginn mit Ton oder Adhan-Klang",
+            notifChannelPrePrayer = "Erinnerungen vor dem Gebet",
+            notifChannelPrePrayerDescription = "Ein sanfter Hinweis vor dem nächsten Gebet",
+            notifChannelSilent = "Stille Gebetsbenachrichtigungen",
+            notifChannelSilentDescription = "Unaufdringliche Hinweise im lautlosen Modus",
+            notifGlobalSilent = "Stiller Modus aktiv · Adhan stummgeschaltet",
+            notifSilentFor = "Stiller Modus aktiv für %1\$s",
+            notifVibrateAlert = "Vibrationshinweis · %1\$s ist eingetreten",
+            notifTakbeerAlert = "Takbeer-Hinweis · Zeit für %1\$s",
+            notifChimeAlert = "Sanfter Glockenhinweis · Zeit für %1\$s",
+            notifPrayerArrived = "Die Gebetszeit für %1\$s ist eingetreten (%2\$s)",
+            notifEnterPrayer = "Zieh das Gebet ein und wende dich der Kaaba zu (%1\$s).",
+            notifSilenceAction = "Stumm",
+            notifMarkPrayed = "Als gebetet markieren",
+            notifPrePrayerTitle = "%1\$s in %2\$d Minuten",
+            notifPrePrayerText = "%1\$s beginnt um %2\$s · Bereite dich auf das Gebet vor",
+            notifAdhanInProgress = "Adhan läuft",
+            notifAdhanInProgressBody = "Gebetshinweis wird abgespielt",
+        ),    ),
 )
 
 val SpanishStrings = UiStrings(
@@ -4928,7 +5195,27 @@ reader = ReaderStrings(
         locationErrorNoPermission = "No se ha concedido el permiso de ubicación.",
         locationErrorServicesOff = "Los servicios de ubicación están desactivados en este dispositivo.",
         locationErrorNoSignal = "No se ha podido obtener la señal GPS. Tu ubicación guardada sigue en uso.",
-    ),
+        notifications = NotificationStrings(
+            notifChannelAdhan = "Alertas de adhan y llamada a la salá",
+            notifChannelAdhanDescription = "Avisa al llegar la hora de la salá, con sonido o tono de adhan",
+            notifChannelPrePrayer = "Recordatorios previos a la salá",
+            notifChannelPrePrayerDescription = "Un aviso discreto antes de la próxima salá",
+            notifChannelSilent = "Notificaciones de salá silenciosas",
+            notifChannelSilentDescription = "Notificaciones discretas cuando está activo el modo silencioso",
+            notifGlobalSilent = "Modo silencioso activo · Adhan silenciado",
+            notifSilentFor = "Modo silencioso activo para %1\$s",
+            notifVibrateAlert = "Aviso por vibración · Ha entrado %1\$s",
+            notifTakbeerAlert = "Aviso de takbeer · Es hora de %1\$s",
+            notifChimeAlert = "Aviso de campana suave · Es hora de %1\$s",
+            notifPrayerArrived = "Ha llegado la hora de la salá de %1\$s (%2\$s)",
+            notifEnterPrayer = "Entra en la salá y orienta hacia la Kaaba (%1\$s).",
+            notifSilenceAction = "Silenciar",
+            notifMarkPrayed = "Marcar como rezada",
+            notifPrePrayerTitle = "%1\$s en %2\$d minutos",
+            notifPrePrayerText = "%1\$s comienza a las %2\$s · Prepárate para la salá",
+            notifAdhanInProgress = "El adhan está sonando",
+            notifAdhanInProgressBody = "El aviso de salá está sonando",
+        ),    ),
 )
 
 object LocalizationManager {

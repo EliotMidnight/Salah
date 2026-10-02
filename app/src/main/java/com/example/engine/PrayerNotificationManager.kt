@@ -9,12 +9,40 @@ import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import com.example.ui.localization.LocalizationManager
+import com.example.ui.localization.UiStrings
+import com.example.ui.localization.prayerName
 import com.example.MainActivity
 import com.example.data.model.Prayer
 import com.example.service.PrayerAlarmReceiver
 import kotlin.math.roundToInt
 
 object PrayerNotificationManager {
+
+    /**
+     * The reader's own strings.
+     *
+     * The one thing here that reaches into `ui.localization`, and the dependency is
+     * worth naming: `LocalizationManager.getStrings` is a plain function over a data
+     * class with no Compose in it, and this manager is the only other place in the app
+     * that has to speak the reader's language outside a composition. The alternative
+     * is a second copy of the language lookup, which would be one more fact in two
+     * places.
+     *
+     * Read from the same `pref_language` the UI reads, and **at notification time**
+     * rather than at scheduling time - a reader who changes the language while the app
+     * is not running gets the new one on the next prayer, with no re-arming.
+     *
+     * Defaults to English if the preference is missing or unreadable, which is what a
+     * notification has to do: it cannot afford to fail because a preference could not
+     * be read.
+     */
+    private fun strings(context: Context): UiStrings =
+        LocalizationManager.getStrings(
+            context.applicationContext
+                .getSharedPreferences("salah_prefs", Context.MODE_PRIVATE)
+                .getString("pref_language", "English") ?: "English"
+        )
 
     const val CHANNEL_ADHAN = "salah_adhan_channel"
     const val CHANNEL_PRE_PRAYER = "salah_pre_prayer_channel"
@@ -74,10 +102,10 @@ object PrayerNotificationManager {
             // High priority channel with sound & vibration
             val adhanChannel = NotificationChannel(
                 CHANNEL_ADHAN,
-                "Adhan & Prayer Call Alerts",
+                strings(context).more.notifications.notifChannelAdhan,
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Notifies when prayer time arrives with sound or adhan tone"
+                description = strings(context).more.notifications.notifChannelAdhanDescription
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 400, 250, 400, 250, 600)
                 setSound(
@@ -92,20 +120,20 @@ object PrayerNotificationManager {
             // Default priority channel for pre-prayer heads-up
             val preChannel = NotificationChannel(
                 CHANNEL_PRE_PRAYER,
-                "Pre-Prayer Reminders",
+                strings(context).more.notifications.notifChannelPrePrayer,
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Gentle heads-up before upcoming prayer"
+                description = strings(context).more.notifications.notifChannelPrePrayerDescription
                 enableVibration(true)
             }
 
             // Low priority channel for silent mode
             val silentChannel = NotificationChannel(
                 CHANNEL_SILENT,
-                "Silent Prayer Notifications",
+                strings(context).more.notifications.notifChannelSilent,
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Discreet notifications when silent mode or mute is active"
+                description = strings(context).more.notifications.notifChannelSilentDescription
                 enableVibration(false)
                 setSound(null, null)
             }
@@ -172,13 +200,23 @@ object PrayerNotificationManager {
         val isSilent = isGlobalSilent || alertMode.equals("Silent", ignoreCase = true)
         val channelId = if (isSilent) CHANNEL_SILENT else CHANNEL_ADHAN
 
+        // The prayer's *localised* name, not `prayer.englishName`. The title below
+        // still shows both scripts so a reader can recognise either, but the sentence
+        // is prose and prose should be in their language.
+        val spoken = strings(context).prayerName(prayer)
+        val status = strings(context).more.notifications
+
         val statusText = when {
-            isGlobalSilent -> "Silent Mode active · Adhan muted"
-            alertMode.equals("Silent", ignoreCase = true) -> "Silent Mode active for ${prayer.englishName}"
-            isVibrateOnly || alertMode.equals("Vibrate Only", ignoreCase = true) -> "Vibrate alert · ${prayer.englishName} has entered"
-            alertMode.equals("Takbeer Only", ignoreCase = true) -> "Takbeer alert · Time for ${prayer.englishName}"
-            alertMode.equals("Gentle Chime", ignoreCase = true) -> "Gentle Chime alert · Time for ${prayer.englishName}"
-            else -> "Time for ${prayer.englishName} prayer has arrived ($shown)"
+            isGlobalSilent -> status.notifGlobalSilent
+            alertMode.equals("Silent", ignoreCase = true) ->
+                status.notifSilentFor.format(spoken)
+            isVibrateOnly || alertMode.equals("Vibrate Only", ignoreCase = true) ->
+                status.notifVibrateAlert.format(spoken)
+            alertMode.equals("Takbeer Only", ignoreCase = true) ->
+                status.notifTakbeerAlert.format(spoken)
+            alertMode.equals("Gentle Chime", ignoreCase = true) ->
+                status.notifChimeAlert.format(spoken)
+            else -> status.notifPrayerArrived.format(spoken, shown)
         }
 
         val builder = NotificationCompat.Builder(context, channelId)
@@ -187,19 +225,22 @@ object PrayerNotificationManager {
             .setContentText(statusText)
             .setStyle(
                 NotificationCompat.BigTextStyle()
-                    .bigText("$statusText\nEnter prayer and turn towards the Holy Kaaba ($shown).")
+                    .bigText(
+                        "$statusText\n" +
+                            status.notifEnterPrayer.format(shown)
+                    )
             )
             .setPriority(if (isSilent) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(contentPendingIntent)
             .addAction(
                 android.R.drawable.ic_lock_silent_mode,
-                "Silence",
+                status.notifSilenceAction,
                 silencePendingIntent
             )
             .addAction(
                 android.R.drawable.checkbox_on_background,
-                "Mark Prayed",
+                status.notifMarkPrayed,
                 markPrayedPendingIntent
             )
 
@@ -239,8 +280,14 @@ object PrayerNotificationManager {
 
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.ic_menu_recent_history)
-            .setContentTitle("${prayer.englishName} in $offsetMinutes minutes")
-            .setContentText("${prayer.englishName} begins at $shown · Prepare for prayer")
+            .setContentTitle(
+                strings(context).more.notifications.notifPrePrayerTitle
+                    .format(strings(context).prayerName(prayer), offsetMinutes)
+            )
+            .setContentText(
+                strings(context).more.notifications.notifPrePrayerText
+                    .format(strings(context).prayerName(prayer), shown)
+            )
             .setPriority(if (isGlobalSilent) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)

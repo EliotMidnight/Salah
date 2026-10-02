@@ -9,7 +9,7 @@ Built with Kotlin and Jetpack Compose (Material 3). No account, no tracking, wor
 - **Prayer times** — 8 calculation methods (Morocco Ministry/Habous default, MWL, ISNA, Egypt, Umm Al-Qura, Karachi, Dubai, France 12°), Standard/Hanafi Asr jurisprudence, per-prayer minute adjustments, monthly calendar, Imsak / Islamic midnight / last-third-of-night vigils.
 - **Quran reader** — opens straight into the text at your last position (Al-Fatihah on a first run). Two layouts — the canonical 604-page mushaf, or continuous per-surah flow with optional per-verse blocks — each on either axis. Seven washed-out papers with light/dark treatment, independent Arabic and translation sizing, five bundled Quran faces, pinch as zoom or as text size, and immersive mode that clears the status bar and the dock. All 114 surahs with verified Uthmani Arabic and Saheeh International English, bundled offline (6,236 verses). Verse-level search in Arabic or English with page/juz'/hizb quick filters, bookmarks, copy/share, per-verse audio recitation (Mishary Alafasy via everyayah.com, streamed), whose banner names the verse being recited so a reader who has scrolled elsewhere can still find it. Page turns work by drag *and* by accessibility action, so a page is reachable without a finger; every page announces itself — reference, extent, surah range and page — in the reader's own language, and the text is kept out of a display cutout in landscape, where the outer column of a page is where a page *begins*.
 - **Qibla compass** — sensor-fused bearing with true/magnetic north, distance to the Kaaba, magnetic-interference diagnostics, device-level indicator, vibration on alignment. Graduated dial: tick every 2°, numerals every 30°, heading and Qibla bearing side by side, and a banner that names the turn — "turn right 12°" — rather than only reporting that you are not there yet.
-- **Adhan & alerts** — full Adhan, Takbeer-only, chime, vibration or silent per prayer; pre-prayer reminders; global silent and auto masjid-silence mode during prayer windows. Five adhan timbres, one decoder, and the Settings preview plays the sound the alarm will play. Prayer times are computed on this device and are never described as having been verified against anything.
+- **Adhan & alerts** — every word a notification shows is in the reader's own language, read from the same preference the interface uses: full Adhan, Takbeer-only, chime, vibration or silent per prayer; pre-prayer reminders; global silent and auto masjid-silence mode during prayer windows. Five adhan timbres, one decoder, and the Settings preview plays the sound the alarm will play. Prayer times are computed on this device and are never described as having been verified against anything.
 - **Localization** — full UI in 11 languages (English, Arabic, French, Indonesian, Turkish, Urdu, Malay, Bengali, Russian, German, Spanish) with RTL support.
 - **Offline-first & private** — prayer math runs on-device; location stays on the device in one store; the only network use is verse audio streaming. The app ships no HTTP client at all.
 
@@ -109,7 +109,7 @@ desktop session, a parallel Compose build gets OOM-killed, so it runs without
 parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
 JDK and memory for it.
 
-369 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
+375 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
 maths, search, prayer maths, Qibla bearing and guidance, localisation coverage,
 sky-text contrast) run on any host, including ARM64 Linux/Termux.
 
@@ -118,6 +118,40 @@ requires its native runtime, which has no ARM64 Linux build. `app/build.gradle.k
 detects the host and skips exactly the classes that use `RobolectricTestRunner` on
 ARM64 with a loud log line, so the suite stays green for the right reason instead
 of failing for a platform one.
+
+### The notification was the last English surface
+
+Sixteen strings in `PrayerNotificationManager` and the foreground service were
+hard-coded English, in an app that ships ten languages: three notification **channel**
+names and descriptions, **six** status sentences (one per alert mode), the expanded text,
+the "Silence" and "Mark Prayed" actions, the pre-prayer title and body, and "Adhan in
+progress". A notification is read at prayer time by a reader who chose this app *because*
+it speaks their language, and the ongoing one cannot be dismissed.
+
+The six status sentences also interpolated `prayer.englishName`, so even the prayer's own
+name was English in the sentence while the title above it showed both scripts. They now
+interpolate `UiStrings.prayerName`.
+
+Android **caches a channel's name at creation** and ignores later changes, so on an
+existing install those three channel names stay English whatever the app does. That is a
+platform limit, not something the code can work around; the strings are there so a fresh
+install is not the only one that reads correctly.
+
+### `UiStringsMore` was too big to test
+
+Adding those strings took `UiStringsMore` to **249 `String` fields**, and Robolectric's
+instrumenter emits a constructor with one parameter per field — past the JVM's 64 KB
+method limit. The suite failed with `ClassFormatError: Too many arguments in method
+signature` **before a single assertion ran**, so no test touching the app's own strings
+could execute. Narrowing `instrumentedPackages` does not help (a class-level `@Config`
+overrides the properties file), and `@DoNotInstrument` cannot even be written here — it
+lives in Robolectric's annotations artifact, which is a *test* dependency.
+
+So the nineteen notification strings became `NotificationStrings`, their own class with
+their own reason to exist: they are built in one place, shown in one place, and read by
+someone looking at a notification. `ReaderStrings` is already a nested class for the same
+reason. **The remaining ~230 fields are still the next thing to do to that file** — they
+should split the same way, by surface: settings, the Hijri calendar, the sky, search.
 
 Localisation is guarded rather than trusted. `StringCoverageTest` sweeps **every**
 `String` field of both `ReaderStrings` and `UiStringsMore` by reflection — about 2,000
