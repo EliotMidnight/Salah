@@ -129,7 +129,15 @@ internal fun MushafPage(
      * reserved the room unconditionally would lose it in immersive mode, where
      * nothing is floating over it.
      */
-    topInset: androidx.compose.ui.unit.Dp = 0.dp
+    topInset: androidx.compose.ui.unit.Dp = 0.dp,
+    /**
+     * How a line is filled to its margin. See [Justification].
+     *
+     * Elongating is the default because it is what a mushaf page does and what Arabic is
+     * set for; widening the gaps is the fallback for a line with nowhere to elongate, and
+     * is applied per line by [Kashida] rather than by choosing between two whole pages.
+     */
+    justification: Justification = Justification.ELONGATE
 ) {
     val space = Space.current
     val density = LocalDensity.current
@@ -245,7 +253,39 @@ internal fun MushafPage(
         )
     }
     val drawnStyle = remember(fitScale, typeface, ink) {
+        // `TextAlign.Start`, deliberately, and this is the whole reason [Kashida] exists.
+        //
+        // Compose's own `Justify` would fill the line by widening the gaps between words,
+        // which is the only lever it has. Arabic words are connected blocks, so a page
+        // justified that way is a page with holes in it - it looks full without looking
+        // like a mushaf. Leaving it `Start` and elongating by hand instead means the line
+        // is filled by making the letters longer, which is what a printed page does.
         typeface.arabicStyle(scale = fitScale, color = ink, align = TextAlign.Start)
+    }
+
+    /**
+     * The page's text, elongated so every line reaches the margin.
+     *
+     * Memoised on the viewport width because it costs a measure-adjust-measure loop, and
+     * because a reader turning between two pages must not pay for that on every frame.
+     * The width is the only thing about the viewport that changes the answer: growing the
+     * box and then typing shrinks it back to the same width and should not re-justify.
+     */
+    val justified = remember(drawn, drawnStyle, contentWidth, justification) {
+        if (justification == Justification.ELONGATE) {
+            Kashida.justify(
+                text = drawn.text,
+                style = drawnStyle,
+                widthPx = contentWidth,
+                spans = drawn.spans,
+                centredRanges = drawn.centredRanges,
+                measurer = measurer,
+                density = density,
+                layoutDirection = layoutDirection
+            )
+        } else {
+            Kashida.Justified(drawn.text, drawn.spans, 0)
+        }
     }
 
     // A `Box`, not a `BoxWithConstraints`: the size comes from `onSizeChanged` and
@@ -287,7 +327,7 @@ internal fun MushafPage(
 
             SelectionContainer {
                 BasicText(
-                    text = drawn.text,
+                    text = justified.text,
                     style = drawnStyle,
                     onTextLayout = { layout = it },
                     modifier = Modifier
@@ -463,7 +503,14 @@ private fun describePage(
  * there when the reader returns to it.
  */
 @Composable
-private fun rememberPageTextMeasurer(): TextMeasurer =
+/**
+ * One text measurer for the whole reader.
+ *
+ * `internal` rather than private because the continuous layout measures too, and a second
+ * `rememberTextMeasurer` would be a second cache of the same measurements — the fit
+ * algorithm and the justification pass both ask the same questions about the same strings.
+ */
+internal fun rememberPageTextMeasurer(): TextMeasurer =
     androidx.compose.ui.text.rememberTextMeasurer(
         cacheSize = MEASURE_CACHE_SIZE
     )

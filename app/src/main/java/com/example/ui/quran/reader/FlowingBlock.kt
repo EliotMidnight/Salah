@@ -31,6 +31,8 @@ import com.example.ui.localization.ReaderStrings
 import com.example.ui.theme.QuranFonts
 import com.example.ui.theme.Space
 import java.util.Locale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.LayoutDirection
 
 /**
  * A run of verses as one block of flowing text.
@@ -101,6 +103,8 @@ internal fun FlowingBlock(
         typeface.arabicStyle(
             scale = options.arabicScale,
             color = ink,
+            // `Start`, and elongating by hand instead - see `Kashida` for why widening the
+            // gaps is the wrong lever on Arabic.
             align = TextAlign.Start
         )
     }
@@ -116,13 +120,42 @@ internal fun FlowingBlock(
             .fillMaxWidth()
             .testTag("flowing_block")
     ) {
+        // Justified the same way the mushaf page is, so both layouts fill their measure.
+        //
+        // `onSizeChanged` rather than a constraints scope for the same reason `MushafPage`
+        // uses it: the block's width is known only after layout, and Kashida needs a pixel
+        // width to know how much a line is short by.
+        var textWidth by remember { mutableStateOf(0) }
+        val measurer = rememberPageTextMeasurer()
+        val layoutDirection = LayoutDirection.Rtl
+        val justified = remember(block, style, textWidth) {
+            if (textWidth > 0) {
+                Kashida.justify(
+                    text = block.text,
+                    style = style,
+                    widthPx = textWidth,
+                    spans = block.spans,
+                    // A continuous block sits under a surah heading already, so it has no
+                    // centred range of its own - which is exactly why `showSurahHead` is
+                    // false for it. See `MushafPageText`.
+                    centredRanges = emptyList(),
+                    measurer = measurer,
+                    density = density,
+                    layoutDirection = layoutDirection
+                )
+            } else {
+                Kashida.Justified(block.text, block.spans, 0)
+            }
+        }
+
         BasicText(
-            text = block.text,
+            text = justified.text,
             style = style,
             onTextLayout = { layout = it },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = gutter)
+                .onSizeChanged { textWidth = it.width }
                 .testTag("flowing_block_text")
                 .pointerInput(block, layout, gutter, density) {
                     detectTapGestures { tap ->

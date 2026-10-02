@@ -168,6 +168,49 @@ It stays a copy rather than a corpus read because it is a Room entity's field in
 and reading the corpus there would parse 6,236 verses and verify three digests inside a UI
 state's defaults. Same reason `LocationStore` reads preferences in a field initialiser.
 
+### Justified Arabic, by elongating it rather than by widening the gaps
+
+You were right that this is plain UTF-8 text with a custom font, and rendering a line of it
+is trivial. The hard part is one thing: **justification has to move something, and in
+Arabic the obvious thing to move is the wrong one.**
+
+Widen the gaps between words and the line fills — but an Arabic word is a connected block,
+so the result is a line with visible holes in it. A page of that is full without looking
+like a mushaf. Compose's own `TextAlign.Justify` does exactly this and there is no option
+to make it do anything else.
+
+So the line is filled by making the **letters longer** instead, which is what a printed
+mushaf does. A real Madani mushaf gets this from **page-glyph fonts** — KFGQ and QCF ship
+every glyph pre-elongated at fixed widths and the typesetter picks a variant. The five faces
+bundled here are general-purpose Arabic fonts and cannot do that, so `Kashida` inserts the
+tatweel (U+0640) into the real text and lets the shape engine connect it.
+
+**Where a tatweel may go is not a guess.** It can only sit where two letters actually join:
+after a letter that connects forward, before one that connects backward. That rule was read
+off Tanzil's own text, which carries **6,848 tatweels**, and `KashidaEligibilityTest` checks
+the rule against every one of them. Exactly one is refused — the divine name in 43:58, where
+the tatweel is part of how the word is *spelled* rather than an elongation, and where putting
+a joining stroke would float. That is enumerated rather than allowed for: a second one
+appearing would mean the rule changed.
+
+The rule found two bugs in itself. `baseBefore` walked back from one character too far, so it
+asked about the wrong side of every joint — which refused a tatweel on the most ordinary
+joint in the language. And `spread` asked "which joint is nearest slot *k*?" independently
+for each *k*, so every slot near the first word wanted the first joint and the line got one
+elongation three times and no wider.
+
+**Both layouts justify** — the 604-page mushaf and the continuous per-verse flow — through
+the same engine, and surah heads are excluded: a centred heading with a stretched letter in it
+looks like a mistake. The result costs a measure-adjust-measure loop, so it is memoised per
+page and width, and the two layouts share one `TextMeasurer` rather than keeping two caches
+of the same measurements.
+
+Looking at the output is the only real check here. The first render came back as a page of
+**stacked horizontal strokes**: the planner computed how much width a line was short by and
+that pixel count was passed to the inserter as a *number of tatweels*, so a line with 800px
+of slack asked for 800 of them. Every assertion passed while that was true — nothing about it
+throws. Reading the picture is what caught it.
+
 ### A search highlight that pointed at the wrong words
 
 Search matches in a *folded* copy of the text — the verse with every harakat, dagger alif,

@@ -100,7 +100,17 @@ class VerseSpan internal constructor(
  */
 class MushafPageText private constructor(
     val text: AnnotatedString,
-    val spans: List<VerseSpan>
+    val spans: List<VerseSpan>,
+    /**
+     * Character ranges that must not be justified - the surah heads.
+     *
+     * A head is a centred heading, and elongating a centred title produces a centred title
+     * with a stretched letter in it, which looks like a mistake rather than a decision.
+     * [Kashida] is told about these so it leaves them alone; it cannot work them out for
+     * itself, because "is this line centred" and "is this a heading" are different
+     * questions and only this one knows the answer.
+     */
+    val centredRanges: List<IntRange> = emptyList()
 ) {
     /**
      * The verse whose unit covers [offset].
@@ -243,6 +253,7 @@ class MushafPageText private constructor(
             showSurahHead: Boolean = true
         ): MushafPageText {
             val spans = ArrayList<VerseSpan>(ayahs.size)
+            val centred = ArrayList<IntRange>(2)
             val bodySize = QuranReadingOptions.ARABIC_BASE_SP * scale
             // The marker is set smaller than the body so it recedes. At full size
             // an ayah circle is as loud as a word, and a page of them reads as a
@@ -277,12 +288,14 @@ class MushafPageText private constructor(
                 // so it is read from the data and holds for every page rather than
                 // for the three a chosen example would cover.
                 if (showSurahHead && ayah.ayahNumber == 1) {
+                    val headStart = builder.length
                     builder.appendSurahHead(
                         surah = ayah.surahNumber,
                         scale = scale,
                         accent = accent,
                         lineHeight = bodyLineHeight
                     )
+                    centred += headStart until builder.length
                 }
 
                 // Taken *after* the head, so the head is inside this verse's span and
@@ -349,7 +362,7 @@ class MushafPageText private constructor(
             }
 
             builder.pop()
-            return MushafPageText(builder.toAnnotatedString(), spans)
+            return MushafPageText(builder.toAnnotatedString(), spans, centred)
         }
 
         /**
