@@ -87,6 +87,56 @@ app/src/main/resources/quran/  # Uthmani text, metadata, EN translation (see SOU
 app/src/test/                  # JVM + Robolectric suites, screenshot baselines
 ```
 
+### The only hand-typed copy of Quranic text in the app
+
+`ContinueReadingEntity` carried a `snippetAr` — the Arabic of 1:1 — written on every verse
+the reader viewed. **Nothing ever read it.** The Continue Reading card says `surahName` and
+`surahNumber:ayahNumber`, and no screen touched the rest.
+
+So the app had one field holding Quranic text that the corpus did not supply and the
+SHA-256 gate did not cover: a hand-typed copy of 1:1 in a Room entity, one `SELECT` from a
+reader's screen. **And it had already drifted.** The corpus spells الرحمن with a tatweel
+before the dagger alif — U+0640 then U+0670 — and the typed copy did not. Visually
+indistinguishable; not the same string; not the text of the Book.
+
+Rather than fix the copy, `MIGRATION_3_4` removes it and the unread `surahNameAr` beside it.
+That is a stronger guarantee than a test asserting the copy is currently right: there is no
+second copy of the Book anywhere in the app to drift. The test left behind asserts the
+*property* — no field of the row may be Quranic text — so the column cannot return under
+another name.
+
+It stays a copy rather than a corpus read because it is a Room entity's field initialiser,
+and reading the corpus there would parse 6,236 verses and verify three digests inside a UI
+state's defaults. Same reason `LocationStore` reads preferences in a field initialiser.
+
+### The migrations moved a reader's only data, untested
+
+The database holds the **only user-authored data this app has**: the reader's bookmarks and
+their Continue Reading position. That is why `MIGRATION_2_3` was hand-written rather than
+left to `fallbackToDestructiveMigration`, which was the previous behaviour and took the
+bookmarks with it to drop a table nothing read.
+
+**Neither migration had a test.** A hand-written migration over irreplaceable data, on a
+path that runs once per user, on hardware nobody runs CI on — if the SQL were wrong, the
+finding would be a crash report from someone who can no longer see verses they saved.
+
+`SalahMigrationTest` (9) opens a real SQLite database with the version-3 schema exactly as
+Room generated it, plants a reading position and three bookmarks, and runs both migrations:
+the position and the bookmarks survive, the unique index still refuses a duplicate save,
+the staging table is not left behind, and the migrated table matches the entity — the check
+Room would otherwise do on a user's device at open time. `MIGRATION_3_4` recreates the
+table rather than using `ALTER TABLE ... DROP COLUMN`, because that needs SQLite 3.35 and
+this app supports API 24; on Android 11 and below the statement is a syntax error and the
+migration would throw, taking the bookmarks with it.
+
+**A silently empty copy was planted and watched fail** — valid SQL that moves no rows,
+which no amount of SQL validity would catch: *"the reader's position was lost"*.
+
+`MigrationTestHelper` is deliberately not used. It needs `androidx.room:room-testing` and
+`exportSchema = true` with a configured schema directory, and adding a dependency and a
+codegen setting to test two statements is a poor trade when the thing worth testing is
+whether the SQL runs and keeps the rows.
+
 ### Juz' and hizb were never swept, and a reader navigates through them
 
 The mushaf's 604 pages have a full integrity walk: each page has verses, a turn from every
@@ -171,7 +221,7 @@ desktop session, a parallel Compose build gets OOM-killed, so it runs without
 parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
 JDK and memory for it.
 
-417 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
+431 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
 maths, search, prayer maths, Qibla bearing and guidance, localisation coverage,
 sky-text contrast) run on any host, including ARM64 Linux/Termux.
 

@@ -1246,9 +1246,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
                     surahNumber = ayah.surahNumber,
                     ayahNumber = ayah.ayahNumber,
                     surahName = surah?.englishName.orEmpty(),
-                    surahNameAr = surah?.arabicName.orEmpty(),
                     pageNumber = ayah.pageNumber,
-                    snippetAr = ayah.textArabic.take(60),
                     timestamp = System.currentTimeMillis()
                 )
             )

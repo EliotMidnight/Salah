@@ -18,11 +18,30 @@ data class PrayerLogEntity(
 /**
  * Where the reader was last left.
  *
- * The defaults are Al-Fatihah 1:1 rather than a mid-Baqarah placeholder,
- * because this row is what a first run has: with no row in the table the app
- * still has to answer "where was I?", and for someone who has never read in
- * this app the honest answer is the opening surah rather than a random spot
- * in the second one.
+ * The defaults are Al-Fatihah 1:1 rather than a mid-Baqarah placeholder, because this row
+ * is what a first run has: with no row in the table the app still has to answer "where
+ * was I?", and for someone who has never read in this app the honest answer is the
+ * opening surah rather than a random spot in the second one.
+ *
+ * ### Why there is no Quranic text in this row, and there used to be
+ *
+ * It had a `snippetAr` holding the Arabic of 1:1, and a `surahNameAr`. Both were written
+ * on every verse viewed. **Neither was ever read** - the Continue Reading card says
+ * `surahName` and `surahNumber:ayahNumber`, and nothing else on any screen touched them.
+ *
+ * So the row carried a hand-typed copy of Quranic text that had **already drifted** from
+ * the corpus: the corpus spells الرحمن with a tatweel before the dagger alif (U+0640
+ * then U+0670) and the typed copy did not. Visually indistinguishable, and not the text of
+ * the Book - in the one field in the entire app holding Quranic text the SHA-256 gate did
+ * not cover, one `SELECT` away from a reader's screen.
+ *
+ * Rather than fix the copy, both columns are gone (`MIGRATION_3_4`). There is now no second
+ * copy of the Book anywhere in the app to drift, which is a stronger guarantee than a test
+ * asserting the copy is currently right.
+ *
+ * The *surah name* stays, because a reader needs to recognise where they were and unlike
+ * verse text it is a label rather than the Book. `ContinueReadingDefaultsTest` pins it
+ * against `QuranBrowse` so it cannot drift either.
  */
 @Entity(tableName = "continue_reading")
 data class ContinueReadingEntity(
@@ -31,9 +50,7 @@ data class ContinueReadingEntity(
     val surahNumber: Int = 1,
     val ayahNumber: Int = 1,
     val surahName: String = "Al-Fatihah",
-    val surahNameAr: String = "الفاتحة",
     val pageNumber: Int = 1,
-    val snippetAr: String = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ",
     val timestamp: Long = System.currentTimeMillis()
 )
 
