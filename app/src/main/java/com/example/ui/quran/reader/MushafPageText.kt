@@ -59,9 +59,10 @@ class VerseSpan internal constructor(
  *
  * 1. Each verse, then its ayah marker, with the surah's name immediately before
  *    its own first verse - not only when the page happens to open a surah. A surah
- *    begins where its ayah 1 falls, which on 42 of the book's 604 pages is part-way
- *    down a page, and a head printed only at a page's top left those 42 surahs
- *    unnamed on the page where they start.
+ *    begins where its ayah 1 falls, which for 58 of the book's 114 surahs is
+ *    part-way down a page - 51 pages carry such a start - and a head printed only
+ *    at a page's top left those 58 surahs unnamed on the page where they start.
+ *    Only 56 surahs begin at a page boundary, so the old rule named 56 of 114.
  * 2. The prostration marker, where the metadata says a prostration follows.
  *
  * ### No basmalah in the head
