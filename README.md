@@ -3,6 +3,29 @@
 Offline-first Android companion for prayer times, Quran reading, and Qibla direction.
 Built with Kotlin and Jetpack Compose (Material 3). No account, no tracking, works fully offline.
 
+## Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Quick start](#quick-start)
+- [Building on-device (Termux, ARM64)](#building-on-device-termux-arm64)
+- [Project structure](#project-structure)
+- [What this rebuild changed](#what-this-rebuild-changed)
+- [Data sources & attribution](#data-sources--attribution)
+- [Tests](#tests)
+- [Configuration & environment](#configuration--environment)
+- [Privacy](#privacy)
+- [Production build & release](#production-build--release)
+- [Today](#today)
+- [Quran](#quran)
+- [Notes on the port](#notes-on-the-port)
+- [Qibla](#qibla)
+- [Known limitations](#known-limitations)
+- [Credits](#credits)
+- [License](#license)
+
+---
+
 ## Features
 
 - **Today dashboard** — next prayer countdown, live astronomical sky indicator, Hijri date, prayer checklist, continue-reading shortcut.
@@ -85,9 +108,45 @@ app/src/main/java/com/example/
     └── localization/          # 11 languages, one data class per group
 app/src/main/resources/quran/  # Uthmani text, metadata, EN translation (see SOURCES.md)
 app/src/test/                  # JVM + Robolectric suites, screenshot baselines
+app/src/test/screenshots/      # 32 Roborazzi baselines, one per rendered surface
+tools/
+├── build.sh                   # check / test / record / assembleDebug / lint
+└── prune_dead_strings.py      # lists, then safely removes, unread string fields
 ```
 
-### The only hand-typed copy of Quranic text in the app
+## What this rebuild changed
+
+The Quran module was rebuilt rather than patched, and the defects it turned up were
+overwhelmingly one shape: **a fact decided in two places.** A highlight range computed in
+folded text and applied to the original. A "50 verses" count that was really a page size.
+An index that matched a surah's Arabic name and then led with its romanisation. A
+hand-typed copy of 1:1 that had already drifted from the corpus. Giving each fact exactly
+one home is what made them findable.
+
+Each fix is paired with a test **verified by planting the old behaviour**, so the guard is
+known to be able to fail. Where a detector could not be made sound it was deleted rather
+than allowlisted — an allowlisted detector checks nothing while still costing a build.
+
+### The Quran text is verified, not trusted
+
+Every bundled resource — `uthmani.txt`, `en_sahihintl.txt`, `metadata.xml` — is checked
+against a SHA-256 digest on load, and a mismatch throws rather than warning. That is the
+one place in the app that refuses to run instead of guessing: a swapped or truncated
+corpus would put words in a reader's mouth that are not in the Quran, and no amount of
+correct pagination makes that acceptable.
+
+`QuranResourceIntegrityTest` checks the *declared digests against the shipped files*, so
+editing an asset and forgetting its constant is a red build rather than an empty reader on
+every device that installs it. The hex is formatted with `Locale.ROOT`: a digest is ASCII
+by definition, and the check should depend on the bytes rather than on a formatting
+decision — the failure mode otherwise is the whole corpus, thrown from the first lazy
+access.
+
+Every other number in the app follows the device locale on purpose. The ayah marker does
+not: it is a typographic unit of the mushaf rather than a number in a sentence, so it
+carries Eastern Arabic-Indic digits in every language — see `ArabicDigits`.
+
+### A hand-typed copy of Quranic text, which had already drifted
 
 `ContinueReadingEntity` carried a `snippetAr` — the Arabic of 1:1 — written on every verse
 the reader viewed. **Nothing ever read it.** The Continue Reading card says `surahName` and
@@ -109,7 +168,140 @@ It stays a copy rather than a corpus read because it is a Room entity's field in
 and reading the corpus there would parse 6,236 verses and verify three digests inside a UI
 state's defaults. Same reason `LocationStore` reads preferences in a field initialiser.
 
-### The migrations moved a reader's only data, untested
+### A search highlight that pointed at the wrong words
+
+Search matches in a *folded* copy of the text — the verse with every harakat, dagger alif,
+small high mark and tatweel deleted and four letters folded onto others — so that a search
+for `الرحمن` finds `ٱلرَّحْمَٰنِ`. That is what makes it diacritic-insensitive, and it is the
+right thing to match against.
+
+It is **not** the right thing to take an offset from. `ٱلرَّحْمَٰنِ` is nine characters and
+`الرحمن` is six, so a match at offset 20 of the folded text is not at offset 20 of the verse
+a reader is looking at. The search result's highlight was computed that way and applied to
+the original — so the emphasis landed on the wrong words, further off the further into the
+verse it was. It was also **rendered by nothing**: `QuranSearchHit.range` was computed on
+every keystroke, described in six lines of KDoc as the answer to "why is this here", and
+read only by its own test.
+
+Both are fixed at the root. `QuranText.fold` emits the folded text *and* an offset map in
+the **same pass**, so a match's position is carried out of the fold rather than guessed at
+afterwards — recovering it by searching the original for the folded text would put the
+second occurrence of a repeated word in the wrong place. `normalised` and the offsets are
+two views of that one pass, so they cannot disagree.
+
+The English path needs no map, because lowercasing the bundled translation preserves
+length — which is *proved over all 6,236 verses* by a test rather than assumed.
+
+`QuranSearchRangeTest` (11) checks the property that makes this falsifiable: fold the span
+the highlight covers and it must equal the term that matched, for every verse and every
+term. **The old offsets were planted and the test watched fail**, reporting that in 1:1 a
+search for الرحمن highlighted `لَّهِ`. `SearchHighlightRenderTest` (5) then checks the
+half a range test cannot see — that anything *uses* it — by reading the styled spans back
+out of the semantics tree, so "the emphasis covers exactly the matched term, in the field
+that matched, and changes nothing but colour" is an equality rather than a look at a
+picture. **The highlight was removed and it was watched fail too.**
+
+### A results count that was false rather than truncated
+
+`searchVerses` takes the best fifty matches and the sheet counted that page with `size`
+and printed it. A search for "mercy" — **143** verses — was reported as **"50 verses"**.
+
+That is worse than showing too few results. Fifty rows with no admission reads as *all* of
+them, and nothing on screen contradicts the reader, so the number was not a truncation but
+a false claim about the book: someone looking for every verse containing "mercy" had been
+told they had seen them. The surah-name heading had the same bug.
+
+`QuranSearch`'s KDoc claimed it was already fixed — "It took the first 50 and said
+nothing. Results are now paged honestly" — which is the second half of the problem: the
+documentation described the fix while the code kept the bug.
+
+Both searches now return the page *and* the true total (`VerseResults`, `SurahResults`),
+and the header reads **"143 verses · showing the first 50"**. The total comes from the same
+scan that fills the page, so saying it costs nothing — a separate counting pass would
+double the work over 6,236 verses on every debounced keystroke to reach the same number.
+There is deliberately **no `size`** on either type: an ambiguity that caused this cannot
+be reintroduced as a convenience.
+
+`QuranSearchCountTest` (6) pins it, including a count taken **straight off the bundled
+translation** so the search cannot agree with itself. **The old behaviour was planted and
+the test watched fail**: `expected:<143> but was:<50>`.
+
+The emphasis is colour and nothing else, deliberately: a result row is scanned, so the
+match must be findable at a glance, but changing weight or size would reflow the row on
+every keystroke as results re-rank — and in a Quranic face a synthetic bold is either
+absent or a different typeface.
+
+The library has no top bar and no tab row, and there is no library screen
+at all: opening Quran opens the text, at the last place it was left. The browse
+affordances - surahs, saved verses, search, page/juz'/hizb - live in one sheet
+that is a tap away from the reading surface and dismisses back onto it, rather
+than being a screen you have to pass *through* to reach the book.
+
+- `ui/quran/QuranReader.kt` - the reader's chrome, the surface switch, and the
+  gesture layer. It used to be 2,261 lines holding every layout inline.
+- `ui/quran/reader/MushafPager.kt`, `MushafPage.kt`, `MushafPageText.kt` - the
+  604-page surface: pager, page, and the Arabic set on it.
+- `ui/quran/reader/ContinuousReader.kt`, `FlowingBlock.kt` - continuous flow, in
+  blocks of twelve verses so neither the measure nor memory cost is proportional to
+  the surah.
+- `ui/quran/reader/ReaderPosition.kt` - position, selection and magnification as
+  one value.
+- `ui/quran/reader/PageFit.kt` - chooses the type size a page is actually measured
+  to fit.
+- `ui/quran/reader/PageActionBar.kt`, `PageInsets.kt` - the per-page action row and
+  the chrome the page must not draw under.
+- `ui/quran/QuranIndexSheet.kt` - surahs / saved / search in one sheet.
+- `ui/quran/ReadingOptionsSheet.kt` - layout, axis, paper, typeface, pinch.
+- `ui/quran/VerseCards.kt` - the verse block, translation card and inspector.
+- `ui/quran/gesture/PinchMath.kt`, `ReaderPinch.kt` - the pinch arithmetic,
+  separated from the modifier so it can be tested without a device.
+- `ui/theme/QuranFonts.kt`, `ui/theme/QuranPaper.kt` - typeface registry and the
+  seven-colour mushaf paper, both contrast-checked in `QuranPaperContrastTest`.
+
+### An index that led with the romanisation
+
+Every row in the surah index showed the **English** name as its prominent line and the
+surah's Arabic name on the far side, small and quiet — in every language. In an Arabic
+interface that made "Al-Fatihah" the headline of الفاتحة.
+
+It was not only which line was loudest. **`QuranSearch.searchSurahs` matches the Arabic
+name**, so a reader who searched الفاتحة was handed a row whose largest text was not the
+thing they had typed: search and result disagreed about which name a surah has.
+
+The row now shows both names whichever way round they are, and the prominent one follows
+the interface. Urdu does **not** promote the Arabic name — its interface is in
+Perso-Arabic script, but the surah names this app carries are in Arabic, and promoting
+them for an Urdu reader would be a claim about a language the row cannot render. The
+English *meaning* ("The Opener") has no equivalent in the bundle and stays where it is
+rather than being invented.
+
+Deciding it needed a new CompositionLocal. `LocalStrings` cannot answer "which language is
+this interface in?" — by the time a composable reads it the strings have been produced
+and the bundle they came from is gone. The question is real *because* the interface
+language is not the only language on screen, so `LocalLanguage` sits beside
+`LocalStrings` and `LocalLayoutDirection` as the third answer to the same question.
+
+### Juz' and hizb, never swept
+
+The mushaf's 604 pages have a full integrity walk: each page has verses, a turn from every
+page lands on that page, the pages tile the book, and the 51 that cross a surah boundary
+are the ones that do. **The 30 juz' and 60 hizb had no equivalent** — nothing checked that
+any partition has a verse in it, that they cover the book, that they do not overlap, or
+that `juzOf` agrees with the partition a verse actually lands in.
+
+That matters because `QuranBrowse.placeAtJuz` and `placeAtHizb` take `.first()` of a
+partition. An empty one is not an empty list, it is a crash — and those are exactly the
+functions the index sheet's juz' and hizb filters call. So a bad bound would have taken
+the reader's sheet down instead of showing nothing.
+
+`QuranPartitionIntegrityTest` (10) is that walk applied to both: every partition non-empty,
+the two partitions tiling all 6,236 verses exactly once, each contiguous in corpus order,
+each juz' exactly two hizb, `juzOf`/`hizbOf` agreeing with the partitions **verse by verse
+across the whole book**, and the first juz' beginning with 1:1 and the last ending at 114:6.
+**A hizb grouped by two quarters instead of four was planted and watched fail**: *2:44 is in
+hizb 1 but hizbOf says 2*.
+
+### The migrations guarding the reader's only data, untested
 
 The database holds the **only user-authored data this app has**: the reader's bookmarks and
 their Continue Reading position. That is why `MIGRATION_2_3` was hand-written rather than
@@ -136,137 +328,6 @@ which no amount of SQL validity would catch: *"the reader's position was lost"*.
 `exportSchema = true` with a configured schema directory, and adding a dependency and a
 codegen setting to test two statements is a poor trade when the thing worth testing is
 whether the SQL runs and keeps the rows.
-
-### Juz' and hizb were never swept, and a reader navigates through them
-
-The mushaf's 604 pages have a full integrity walk: each page has verses, a turn from every
-page lands on that page, the pages tile the book, and the 51 that cross a surah boundary
-are the ones that do. **The 30 juz' and 60 hizb had no equivalent** — nothing checked that
-any partition has a verse in it, that they cover the book, that they do not overlap, or
-that `juzOf` agrees with the partition a verse actually lands in.
-
-That matters because `QuranBrowse.placeAtJuz` and `placeAtHizb` take `.first()` of a
-partition. An empty one is not an empty list, it is a crash — and those are exactly the
-functions the index sheet's juz' and hizb filters call. So a bad bound would have taken
-the reader's sheet down instead of showing nothing.
-
-`QuranPartitionIntegrityTest` (10) is that walk applied to both: every partition non-empty,
-the two partitions tiling all 6,236 verses exactly once, each contiguous in corpus order,
-each juz' exactly two hizb, `juzOf`/`hizbOf` agreeing with the partitions **verse by verse
-across the whole book**, and the first juz' beginning with 1:1 and the last ending at 114:6.
-**A hizb grouped by two quarters instead of four was planted and watched fail**: *2:44 is in
-hizb 1 but hizbOf says 2*.
-
-### The surah index led with the romanisation, in every language
-
-Every row in the surah index showed the **English** name as its prominent line and the
-surah's Arabic name on the far side, small and quiet — in every language. In an Arabic
-interface that made "Al-Fatihah" the headline of الفاتحة.
-
-It was not only which line was loudest. **`QuranSearch.searchSurahs` matches the Arabic
-name**, so a reader who searched الفاتحة was handed a row whose largest text was not the
-thing they had typed: search and result disagreed about which name a surah has.
-
-The row now shows both names whichever way round they are, and the prominent one follows
-the interface. Urdu does **not** promote the Arabic name — its interface is in
-Perso-Arabic script, but the surah names this app carries are in Arabic, and promoting
-them for an Urdu reader would be a claim about a language the row cannot render. The
-English *meaning* ("The Opener") has no equivalent in the bundle and stays where it is
-rather than being invented.
-
-Deciding it needed a new CompositionLocal. `LocalStrings` cannot answer "which language is
-this interface in?" — by the time a composable reads it the strings have been produced
-and the bundle they came from is gone. The question is real *because* the interface
-language is not the only language on screen, so `LocalLanguage` sits beside
-`LocalStrings` and `LocalLayoutDirection` as the third answer to the same question.
-
-### The Quran text is verified, not trusted
-
-Every bundled resource — `uthmani.txt`, `en_sahihintl.txt`, `metadata.xml` — is checked
-against a SHA-256 digest on load, and a mismatch throws rather than warning. That is the
-one place in the app that refuses to run instead of guessing: a swapped or truncated
-corpus would put words in a reader's mouth that are not in the Quran, and no amount of
-correct pagination makes that acceptable.
-
-`QuranResourceIntegrityTest` checks the *declared digests against the shipped files*, so
-editing an asset and forgetting its constant is a red build rather than an empty reader on
-every device that installs it. The hex is formatted with `Locale.ROOT`: a digest is ASCII
-by definition, and the check should depend on the bytes rather than on a formatting
-decision — the failure mode otherwise is the whole corpus, thrown from the first lazy
-access.
-
-Every other number in the app follows the device locale on purpose. The ayah marker does
-not: it is a typographic unit of the mushaf rather than a number in a sentence, so it
-carries Eastern Arabic-Indic digits in every language — see `ArabicDigits`.
-
-## Data sources & attribution
-
-- Quran Arabic (Uthmani 1.1) and partition metadata: **Tanzil Project** (CC BY 3.0) — https://tanzil.net — see `app/src/main/resources/quran/SOURCES.md` for hashes and notices.
-- English translation: **Saheeh International**, shown in-app as “English — Saheeh International”.
-- Verse audio: **everyayah.com** (Mishary Alafasy, 128 kbps), streamed on demand.
-
-## Tests
-
-```bash
-./tools/build.sh test     # the JVM test suite
-./tools/build.sh check    # assembleDebug + the test suite
-./tools/build.sh record   # re-record the screenshot baselines (x86_64 only)
-```
-
-`tools/build.sh` exists because of two facts about this particular machine, both
-local to it and neither in `gradle.properties` where they would break a build
-anywhere else: the default `java` on PATH is a JRE with no `javac`, so the build is
-pointed at an installed JDK 21; and with 4 cores and ~3.8 GB of RAM alongside a
-desktop session, a parallel Compose build gets OOM-killed, so it runs without
-parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
-JDK and memory for it.
-
-431 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
-maths, search, prayer maths, Qibla bearing and guidance, localisation coverage,
-sky-text contrast) run on any host, including ARM64 Linux/Termux.
-
-The Robolectric classes need an **x86_64 Linux or macOS** host: Robolectric 4.15+
-requires its native runtime, which has no ARM64 Linux build. `app/build.gradle.kts`
-detects the host and skips exactly the classes that use `RobolectricTestRunner` on
-ARM64 with a loud log line, so the suite stays green for the right reason instead
-of failing for a platform one.
-
-### The notification was the last English surface
-
-Sixteen strings in `PrayerNotificationManager` and the foreground service were
-hard-coded English, in an app that ships ten languages: three notification **channel**
-names and descriptions, **six** status sentences (one per alert mode), the expanded text,
-the "Silence" and "Mark Prayed" actions, the pre-prayer title and body, and "Adhan in
-progress". A notification is read at prayer time by a reader who chose this app *because*
-it speaks their language, and the ongoing one cannot be dismissed.
-
-The six status sentences also interpolated `prayer.englishName`, so even the prayer's own
-name was English in the sentence while the title above it showed both scripts. They now
-interpolate `UiStrings.prayerName`.
-
-Android **caches a channel's name at creation** and ignores later changes, so on an
-existing install those three channel names stay English whatever the app does. That is a
-platform limit, not something the code can work around; the strings are there so a fresh
-install is not the only one that reads correctly.
-
-### `UiStringsMore` was too big to test
-
-Adding those strings took `UiStringsMore` to **249 `String` fields**, and Robolectric's
-instrumenter emits a constructor with one parameter per field — past the JVM's 64 KB
-method limit. The suite failed with `ClassFormatError: Too many arguments in method
-signature` **before a single assertion ran**, so no test touching the app's own strings
-could execute. Narrowing `instrumentedPackages` does not help (a class-level `@Config`
-overrides the properties file), and `@DoNotInstrument` cannot even be written here — it
-lives in Robolectric's annotations artifact, which is a *test* dependency.
-
-So the nineteen notification strings became `NotificationStrings`, their own class with
-their own reason to exist: they are built in one place, shown in one place, and read by
-someone looking at a notification. `ReaderStrings` is already a nested class for the same
-reason. **The remaining ~230 fields are still the next thing to do to that file** — they
-should split the same way, by surface: settings, the Hijri calendar, the sky, search.
-
-Localisation is guarded on the *translated* axis and on the *used* axis, which are
-different questions.
 
 ### 133 strings nobody read
 
@@ -317,6 +378,75 @@ every screen they cover is fed state rather than reading the wall clock: the Tod
 page reads its countdown and its current prayer from the state the one-second ticker
 maintains, which is what a page should have been doing anyway. Two consecutive
 `record` runs produce byte-identical baselines.
+
+### `UiStringsMore` was too big to test
+
+Adding those strings took `UiStringsMore` to **249 `String` fields**, and Robolectric's
+instrumenter emits a constructor with one parameter per field — past the JVM's 64 KB
+method limit. The suite failed with `ClassFormatError: Too many arguments in method
+signature` **before a single assertion ran**, so no test touching the app's own strings
+could execute. Narrowing `instrumentedPackages` does not help (a class-level `@Config`
+overrides the properties file), and `@DoNotInstrument` cannot even be written here — it
+lives in Robolectric's annotations artifact, which is a *test* dependency.
+
+So the nineteen notification strings became `NotificationStrings`, their own class with
+their own reason to exist: they are built in one place, shown in one place, and read by
+someone looking at a notification. `ReaderStrings` is already a nested class for the same
+reason. **The remaining ~230 fields are still the next thing to do to that file** — they
+should split the same way, by surface: settings, the Hijri calendar, the sky, search.
+
+Localisation is guarded on the *translated* axis and on the *used* axis, which are
+different questions.
+
+### The notification was the last English surface
+
+Sixteen strings in `PrayerNotificationManager` and the foreground service were
+hard-coded English, in an app that ships ten languages: three notification **channel**
+names and descriptions, **six** status sentences (one per alert mode), the expanded text,
+the "Silence" and "Mark Prayed" actions, the pre-prayer title and body, and "Adhan in
+progress". A notification is read at prayer time by a reader who chose this app *because*
+it speaks their language, and the ongoing one cannot be dismissed.
+
+The six status sentences also interpolated `prayer.englishName`, so even the prayer's own
+name was English in the sentence while the title above it showed both scripts. They now
+interpolate `UiStrings.prayerName`.
+
+Android **caches a channel's name at creation** and ignores later changes, so on an
+existing install those three channel names stay English whatever the app does. That is a
+platform limit, not something the code can work around; the strings are there so a fresh
+install is not the only one that reads correctly.
+
+## Data sources & attribution
+
+- Quran Arabic (Uthmani 1.1) and partition metadata: **Tanzil Project** (CC BY 3.0) — https://tanzil.net — see `app/src/main/resources/quran/SOURCES.md` for hashes and notices.
+- English translation: **Saheeh International**, shown in-app as “English — Saheeh International”.
+- Verse audio: **everyayah.com** (Mishary Alafasy, 128 kbps), streamed on demand.
+
+## Tests
+
+```bash
+./tools/build.sh test     # the JVM test suite
+./tools/build.sh check    # assembleDebug + the test suite
+./tools/build.sh record   # re-record the screenshot baselines (x86_64 only)
+```
+
+`tools/build.sh` exists because of two facts about this particular machine, both
+local to it and neither in `gradle.properties` where they would break a build
+anywhere else: the default `java` on PATH is a JRE with no `javac`, so the build is
+pointed at an installed JDK 21; and with 4 cores and ~3.8 GB of RAM alongside a
+desktop session, a parallel Compose build gets OOM-killed, so it runs without
+parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
+JDK and memory for it.
+
+431 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
+maths, search, prayer maths, Qibla bearing and guidance, localisation coverage,
+sky-text contrast) run on any host, including ARM64 Linux/Termux.
+
+The Robolectric classes need an **x86_64 Linux or macOS** host: Robolectric 4.15+
+requires its native runtime, which has no ARM64 Linux build. `app/build.gradle.kts`
+detects the host and skips exactly the classes that use `RobolectricTestRunner` on
+ARM64 with a loud log line, so the suite stays green for the right reason instead
+of failing for a platform one.
 
 ### The third thing about this machine
 
@@ -448,96 +578,6 @@ engine where each day lands rather than stepping 29 or 30 days - either of those
 drifts, and lands in the wrong month within a year.
 
 ## Quran
-
-### Search, and the offset that came with it
-
-Search matches in a *folded* copy of the text — the verse with every harakat, dagger alif,
-small high mark and tatweel deleted and four letters folded onto others — so that a search
-for `الرحمن` finds `ٱلرَّحْمَٰنِ`. That is what makes it diacritic-insensitive, and it is the
-right thing to match against.
-
-It is **not** the right thing to take an offset from. `ٱلرَّحْمَٰنِ` is nine characters and
-`الرحمن` is six, so a match at offset 20 of the folded text is not at offset 20 of the verse
-a reader is looking at. The search result's highlight was computed that way and applied to
-the original — so the emphasis landed on the wrong words, further off the further into the
-verse it was. It was also **rendered by nothing**: `QuranSearchHit.range` was computed on
-every keystroke, described in six lines of KDoc as the answer to "why is this here", and
-read only by its own test.
-
-Both are fixed at the root. `QuranText.fold` emits the folded text *and* an offset map in
-the **same pass**, so a match's position is carried out of the fold rather than guessed at
-afterwards — recovering it by searching the original for the folded text would put the
-second occurrence of a repeated word in the wrong place. `normalised` and the offsets are
-two views of that one pass, so they cannot disagree.
-
-The English path needs no map, because lowercasing the bundled translation preserves
-length — which is *proved over all 6,236 verses* by a test rather than assumed.
-
-`QuranSearchRangeTest` (11) checks the property that makes this falsifiable: fold the span
-the highlight covers and it must equal the term that matched, for every verse and every
-term. **The old offsets were planted and the test watched fail**, reporting that in 1:1 a
-search for الرحمن highlighted `لَّهِ`. `SearchHighlightRenderTest` (5) then checks the
-half a range test cannot see — that anything *uses* it — by reading the styled spans back
-out of the semantics tree, so "the emphasis covers exactly the matched term, in the field
-that matched, and changes nothing but colour" is an equality rather than a look at a
-picture. **The highlight was removed and it was watched fail too.**
-
-### The count on the results header was a false statement
-
-`searchVerses` takes the best fifty matches and the sheet counted that page with `size`
-and printed it. A search for "mercy" — **143** verses — was reported as **"50 verses"**.
-
-That is worse than showing too few results. Fifty rows with no admission reads as *all* of
-them, and nothing on screen contradicts the reader, so the number was not a truncation but
-a false claim about the book: someone looking for every verse containing "mercy" had been
-told they had seen them. The surah-name heading had the same bug.
-
-`QuranSearch`'s KDoc claimed it was already fixed — "It took the first 50 and said
-nothing. Results are now paged honestly" — which is the second half of the problem: the
-documentation described the fix while the code kept the bug.
-
-Both searches now return the page *and* the true total (`VerseResults`, `SurahResults`),
-and the header reads **"143 verses · showing the first 50"**. The total comes from the same
-scan that fills the page, so saying it costs nothing — a separate counting pass would
-double the work over 6,236 verses on every debounced keystroke to reach the same number.
-There is deliberately **no `size`** on either type: an ambiguity that caused this cannot
-be reintroduced as a convenience.
-
-`QuranSearchCountTest` (6) pins it, including a count taken **straight off the bundled
-translation** so the search cannot agree with itself. **The old behaviour was planted and
-the test watched fail**: `expected:<143> but was:<50>`.
-
-The emphasis is colour and nothing else, deliberately: a result row is scanned, so the
-match must be findable at a glance, but changing weight or size would reflow the row on
-every keystroke as results re-rank — and in a Quranic face a synthetic bold is either
-absent or a different typeface.
-
-The library has no top bar and no tab row, and there is no library screen
-at all: opening Quran opens the text, at the last place it was left. The browse
-affordances - surahs, saved verses, search, page/juz'/hizb - live in one sheet
-that is a tap away from the reading surface and dismisses back onto it, rather
-than being a screen you have to pass *through* to reach the book.
-
-- `ui/quran/QuranReader.kt` - the reader's chrome, the surface switch, and the
-  gesture layer. It used to be 2,261 lines holding every layout inline.
-- `ui/quran/reader/MushafPager.kt`, `MushafPage.kt`, `MushafPageText.kt` - the
-  604-page surface: pager, page, and the Arabic set on it.
-- `ui/quran/reader/ContinuousReader.kt`, `FlowingBlock.kt` - continuous flow, in
-  blocks of twelve verses so neither the measure nor memory cost is proportional to
-  the surah.
-- `ui/quran/reader/ReaderPosition.kt` - position, selection and magnification as
-  one value.
-- `ui/quran/reader/PageFit.kt` - chooses the type size a page is actually measured
-  to fit.
-- `ui/quran/reader/PageActionBar.kt`, `PageInsets.kt` - the per-page action row and
-  the chrome the page must not draw under.
-- `ui/quran/QuranIndexSheet.kt` - surahs / saved / search in one sheet.
-- `ui/quran/ReadingOptionsSheet.kt` - layout, axis, paper, typeface, pinch.
-- `ui/quran/VerseCards.kt` - the verse block, translation card and inspector.
-- `ui/quran/gesture/PinchMath.kt`, `ReaderPinch.kt` - the pinch arithmetic,
-  separated from the modifier so it can be tested without a device.
-- `ui/theme/QuranFonts.kt`, `ui/theme/QuranPaper.kt` - typeface registry and the
-  seven-colour mushaf paper, both contrast-checked in `QuranPaperContrastTest`.
 
 ### The one thing worth knowing about the reader
 
@@ -819,6 +859,17 @@ instrument rather than a spinning image.
   local mosque timetable.
 - Qibla accuracy depends on the device magnetometer; the app shows
   interference diagnostics when the field looks unreliable.
+- On an **existing** install, the three notification channel names stay English.
+  Android caches a channel's name when the channel is created and ignores later
+  changes, so a fresh install is the only one that reads them correctly; the
+  strings are localized so that at least a new install is right.
+- Verse counts use one/many rather than full plural rules, so Russian shows "2"
+  where "2 аята" and Arabic "3 آيات" would be correct. The range separator is
+  likewise a bare dash rather than a locale-appropriate form.
+- Search reads all 6,236 verses and returns the best 50, because a match in the
+  last surah is as real as one in the first. The count above the results is the
+  **true total**, with "showing the first 50" beside it, so the cap is visible
+  rather than implied.
 - Mushaf justification is typographic, not print-exact. Only the KFGQ/QCF-style
   page-glyph fonts can reproduce the Uthmani justification rule, because the glyph
   itself carries the kashida; with a general-purpose face the line is justified by
