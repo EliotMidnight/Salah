@@ -61,6 +61,10 @@ import com.example.ui.theme.QuranShape
 import com.example.ui.theme.Space
 import com.example.ui.theme.Spacing
 import com.example.ui.theme.layoutMetrics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import kotlinx.coroutines.delay
 
 /** What the index is showing. */
@@ -660,6 +664,16 @@ private fun LazyListScope.searchIndex(
  * The highlight is the whole reason a result is trustworthy: a list that shows the
  * whole verse and no hint *why* it matched makes a reader read 6,236 verses to
  * check the search worked.
+ *
+ * **It was documented and never rendered.** `QuranSearchHit.range` was computed on
+ * every search, described in six lines of KDoc as the answer to "why is this here", and
+ * read by nothing but its own test — so the row showed the whole verse, in both
+ * scripts, with nothing distinguished. It would also have been *wrong* had it been
+ * rendered: the range was found in the **folded** text, where every harakat, dagger
+ * alif and tatweel has been deleted, and applied to the original — a nine-character word
+ * folded to six, so the highlight landed on the wrong words, further off the further
+ * into the verse it was. Both are fixed in `QuranText.fold`, which carries the offsets
+ * out of the fold in the same pass.
  */
 @Composable
 private fun VerseResultRow(hit: QuranSearchHit, onClick: () -> Unit) {
@@ -690,7 +704,7 @@ private fun VerseResultRow(hit: QuranSearchHit, onClick: () -> Unit) {
             Spacer(Modifier.height(space.xs))
             if (hit.matchedIn == QuranSearchHit.Field.ARABIC) {
                 Text(
-                    text = ayah.textArabic,
+                    text = emphasise(ayah.textArabic, hit.range),
                     style = MaterialTheme.typography.bodyLarge,
                     fontFamily = ArabicFamily,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -702,7 +716,12 @@ private fun VerseResultRow(hit: QuranSearchHit, onClick: () -> Unit) {
                 Spacer(Modifier.height(space.xs))
             }
             Text(
-                text = ayah.textEnglish,
+                // Only the field that matched is emphasised, which is why the range
+                // travels with `matchedIn` rather than being applied to both rows.
+                text = emphasise(
+                    ayah.textEnglish,
+                    if (hit.matchedIn == QuranSearchHit.Field.ENGLISH) hit.range else null
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 3,
@@ -875,3 +894,33 @@ private fun browseNumbers(kind: ReferenceKind?, query: String): List<Int> {
     val trimmed = query.trim()
     return (1..count).filter { trimmed.isEmpty() || it.toString().contains(trimmed) }
 }
+
+/**
+ * [text] with [range] emphasised, or plain [text] when there is no range.
+ *
+ * **Colour, and nothing else.** A search row is read by scanning, so the match has to
+ * be findable at a glance; but changing weight or size would reflow the row on every
+ * keystroke as results re-rank, and in a Quranic face a synthetic bold is either absent
+ * or a different typeface. Colour moves nothing.
+ *
+ * The emphasis is the app's primary — the same treatment the reader's verse selection
+ * uses, so a highlighted search result and a selected verse read as the same kind of
+ * thing rather than as two unrelated highlights.
+ *
+ * A range that does not fit [text] is ignored rather than thrown. [text] and [range]
+ * are two fields of one object, so they should always agree; a future caller pairing
+ * them wrongly should cost a row its highlight, not the whole results list.
+ */
+@Composable
+private fun emphasise(text: String, range: IntRange?): AnnotatedString =
+    buildAnnotatedString {
+        if (range == null || range.first < 0 || range.last >= text.length) {
+            append(text)
+            return@buildAnnotatedString
+        }
+        append(text.substring(0, range.first))
+        withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) {
+            append(text.substring(range.first, range.last + 1))
+        }
+        append(text.substring(range.last + 1))
+    }

@@ -158,12 +158,17 @@ object QuranSearch {
                 inArabic -> QuranText.rank(arabic[index], terms)
                 else -> QuranText.rank(english[index], terms) + 1
             }
+            val field = if (inArabic) {
+                QuranSearchHit.Field.ARABIC
+            } else {
+                QuranSearchHit.Field.ENGLISH
+            }
             results += QuranSearchHit(
                 ayah = ayah,
                 surah = surah,
                 ref = QuranRef(ayah.surahNumber, ayah.ayahNumber, ayah.pageNumber),
-                matchedIn = if (inArabic) QuranSearchHit.Field.ARABIC else QuranSearchHit.Field.ENGLISH,
-                range = firstMatchRange(arabic[index], english[index], terms)
+                matchedIn = field,
+                range = highlightRange(index, field, terms)
             )
         }
 
@@ -197,21 +202,51 @@ object QuranSearch {
         hit.ayah.ayahNumber
     )
 
-    /** The range of the first term found, preferring the field that matched. */
-    private fun firstMatchRange(
-        arabic: String,
-        english: String,
+    /**
+     * The span **in the verse as the reader sees it** that [terms] matched.
+     *
+     * This is the whole reason [QuranText.arabicOrigins] exists, and getting it wrong
+     * was a live defect: the range used to be found in `QuranText.normalised`, which is
+     * the verse with every harakat, dagger alif and tatweel deleted - a nine-character
+     * word folded to six. So a match at offset 20 of the folded text was reported at
+     * offset 20 of a string that had lost a third of its characters, and the highlight
+     * landed on the wrong words, further off the further into the verse it was.
+     *
+     * The Arabic case maps through the fold. The English case does not need to, because
+     * lowercasing the bundled English translation preserves length -
+     * `QuranSearchRangeTest` proves that over all 6,236 verses rather than assuming it.
+     *
+     * The field matched decides which text is highlighted, so the emphasis and the
+     * ordering can never come from different strings. A verse that matches in *both*
+     * scripts reports [QuranSearchHit.Field.ARABIC], and its Arabic is what is shown
+     * emphasised.
+     */
+    private fun highlightRange(
+        index: Int,
+        field: QuranSearchHit.Field,
         terms: List<String>
     ): IntRange? {
-        for (term in terms) {
-            val inArabic = arabic.indexOf(term)
-            if (inArabic >= 0) return inArabic until (inArabic + term.length)
+        return when (field) {
+            QuranSearchHit.Field.ARABIC -> {
+                val fold = QuranText.arabicFolds[index]
+                for (term in terms) {
+                    val range = fold.originalRangeOf(term)
+                    if (range != null) return range
+                }
+                null
+            }
+
+            QuranSearchHit.Field.ENGLISH -> {
+                val english = QuranText.lowerEnglish[index]
+                for (term in terms) {
+                    val at = english.indexOf(term)
+                    if (at >= 0) return at until (at + term.length)
+                }
+                null
+            }
+
+            QuranSearchHit.Field.SURAH_NAME -> null
         }
-        for (term in terms) {
-            val inEnglish = english.indexOf(term)
-            if (inEnglish >= 0) return inEnglish until (inEnglish + term.length)
-        }
-        return null
     }
 
     private fun allPresent(haystack: String, terms: List<String>): Boolean {

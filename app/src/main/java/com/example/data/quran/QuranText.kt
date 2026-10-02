@@ -31,20 +31,71 @@ package com.example.data.quran
 object QuranText {
 
     /**
-     * [normalise] applied to a whole corpus once, lazily.
+     * The corpus folded for Arabic matching, with the offsets back to the original.
      *
-     * Built on the first search rather than at startup, because a reader who
-     * never searches should not pay for an index they never use. Once built it
-     * is held for the life of the process, which is the right trade: the second
-     * search is free.
+     * Built on the first search rather than at startup, because a reader who never
+     * searches should not pay for an index they never use. Once built it is held for
+     * the life of the process, which is the right trade: the second search is free.
+     *
+     * **[normalised] and [arabicOrigins] are two views of this one pass**, so they
+     * cannot disagree about where a letter went. That is the whole reason this is a
+     * `Folded` rather than two independent lists. `QuranSearch` reads it directly, so
+     * a highlight and a ranking are always positioned against the same fold.
      */
-    val normalised: List<String> by lazy {
-        QuranCorpus.ayahs.map { normalise(it.textArabic) }
+    val arabicFolds: List<Folded> by lazy {
+        QuranCorpus.ayahs.map { fold(it.textArabic) }
     }
+
+    /** Folded Arabic, for matching. See [arabicFolds]. */
+    val normalised: List<String> by lazy { arabicFolds.map { it.text } }
+
+    /**
+     * For each verse, where each folded character came from in the original.
+     *
+     * Parallel to [normalised]. See [Folded.originalRangeOf] for why a highlight
+     * cannot be positioned without this.
+     */
+    val arabicOrigins: List<IntArray> by lazy { arabicFolds.map { it.origin } }
 
     /** Lowercased English, for the same reason and the same laziness. */
     val lowerEnglish: List<String> by lazy {
         QuranCorpus.ayahs.map { it.textEnglish.lowercase() }
+    }
+
+    /**
+     * Folds [text] for matching and remembers where every character came from.
+     *
+     * **Why the origin map exists.** Folding *deletes*: the harakat, the dagger alif,
+     * the small high marks and the tatweel all go, and four letters fold onto others.
+     * `ٱلرَّحْمَٰنِ` (nine characters) becomes `الرحمن` (six). So a match found at offset
+     * 20 of the folded text is at nothing like offset 20 of the text a reader is
+     * looking at, and a highlight computed in folded space lands on the wrong words -
+     * further off the further into the verse it is.
+     *
+     * Carrying the map through the same pass as the folding is what makes the
+     * conversion exact. Recovering the offsets afterwards, by searching the original
+     * for the folded text, would not be: a repeated word makes the second occurrence
+     * look like the first.
+     */
+    fun fold(text: String): Folded {
+        val out = StringBuilder(text.length)
+        val origin = IntArray(text.length)
+        var written = 0
+        for (at in text.indices) {
+            val ch = text[at]
+            val kept = when (ch) {
+                in '\u064B'..'\u065F', '\u0670', in '\u06D6'..'\u06ED', '\u0640' -> null
+                '\u0622', '\u0623', '\u0625', '\u0671' -> '\u0627'
+                '\u0624', '\u0626' -> '\u0621'
+                '\u0629' -> '\u0647'
+                '\u0649' -> '\u064A'
+                ' ', '\t', '\n', '\r' -> ' '
+                else -> ch
+            } ?: continue
+            out.append(kept)
+            origin[written++] = at
+        }
+        return Folded(out.toString(), origin.copyOf(written))
     }
 
     /**
@@ -68,21 +119,7 @@ object QuranText {
      * It deliberately does **not** remove hamza from a bare `ا` (U+0627) to
      * `أ`, which would collapse `الله` and `لله` in a way no reader expects.
      */
-    fun normalise(text: String): String {
-        val out = StringBuilder(text.length)
-        for (ch in text) {
-            when (ch) {
-                in '\u064B'..'\u065F', '\u0670', in '\u06D6'..'\u06ED', '\u0640' -> Unit
-                '\u0622', '\u0623', '\u0625', '\u0671' -> out.append('\u0627')
-                '\u0624', '\u0626' -> out.append('\u0621')
-                '\u0629' -> out.append('\u0647')
-                '\u0649' -> out.append('\u064A')
-                ' ', '\t', '\n', '\r' -> out.append(' ')
-                else -> out.append(ch)
-            }
-        }
-        return out.toString()
-    }
+    fun normalise(text: String): String = fold(text).text
 
     /**
      * The search form of a query: normalised, lowercased, whitespace-collapsed.
@@ -103,30 +140,6 @@ object QuranText {
      */
     fun terms(query: String): List<String> =
         normaliseQuery(query).split(' ').filter { it.isNotBlank() }
-
-    /**
-     * The character range in [haystack] that [needle] matched, for highlighting.
-     *
-     * Returns null when there is no match, so the caller can fall back to
-     * showing the verse unhighlighted rather than highlighting nothing
-     * convincingly.
-     */
-    fun matchRange(haystack: String, needle: String): IntRange? {
-        if (needle.isEmpty()) return null
-        val at = haystack.indexOf(needle)
-        if (at < 0) return null
-        return at until (at + needle.length)
-    }
-
-    /**
-     * True when [haystack] contains every term.
-     *
-     * A term that appears at the start of a word is preferred over one buried
-     * mid-word by [rank], so "mercy" ranks `mercy` above `merciful` even though
-     * both are matches.
-     */
-    fun containsAllTerms(haystack: String, terms: List<String>): Boolean =
-        terms.all { haystack.contains(it) }
 
     /**
      * How good a match this is: lower is better.
@@ -163,4 +176,45 @@ object QuranText {
 
     /** The score a text gets when it does not contain the query at all. */
     const val NO_MATCH = Int.MAX_VALUE
+
+    /**
+     * Folded text, and where each folded character came from.
+     *
+     * [origin] has one entry per character of [text], holding that character's index
+     * in the string that was folded. See [fold] for why a highlight needs it.
+     */
+    class Folded(val text: String, val origin: IntArray) {
+
+        /**
+         * The span **in the original text** that [foldedStart]..[foldedStart] +
+         * [foldedLength] covers, or null when the fold is empty.
+         *
+         * The span is widened to the end of the last folded character's own codepoint
+         * run, so the marks that belong to the highlighted letter come with it - a
+         * highlight that stopped before a letter's shadda would cut the word in half
+         * on screen.
+         *
+         * A length longer than what remains is clamped rather than rejected: a term can
+         * match at the very end of the folded text, and that is a real match, not a
+         * malformed request.
+         */
+        fun originalRangeOf(foldedStart: Int, foldedLength: Int): IntRange? {
+            if (foldedStart < 0 || foldedStart >= origin.size || foldedLength <= 0) return null
+            val lastFolded = (foldedStart + foldedLength - 1).coerceAtMost(origin.size - 1)
+            return origin[foldedStart] until (origin[lastFolded] + 1)
+        }
+
+        /**
+         * The span in the original text that [term] matches, or null.
+         *
+         * The first occurrence, which is the same occurrence [rank] scores - so the
+         * thing emphasised is the thing the ordering was decided by.
+         */
+        fun originalRangeOf(term: String): IntRange? {
+            if (term.isEmpty()) return null
+            val at = text.indexOf(term)
+            if (at < 0) return null
+            return originalRangeOf(at, term.length)
+        }
+    }
 }

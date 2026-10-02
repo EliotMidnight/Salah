@@ -7,7 +7,7 @@ Built with Kotlin and Jetpack Compose (Material 3). No account, no tracking, wor
 
 - **Today dashboard** — next prayer countdown, live astronomical sky indicator, Hijri date, prayer checklist, continue-reading shortcut.
 - **Prayer times** — 8 calculation methods (Morocco Ministry/Habous default, MWL, ISNA, Egypt, Umm Al-Qura, Karachi, Dubai, France 12°), Standard/Hanafi Asr jurisprudence, per-prayer minute adjustments, monthly calendar, Imsak / Islamic midnight / last-third-of-night vigils.
-- **Quran reader** — opens straight into the text at your last position (Al-Fatihah on a first run). Two layouts — the canonical 604-page mushaf, or continuous per-surah flow with optional per-verse blocks — each on either axis. Seven washed-out papers with light/dark treatment, independent Arabic and translation sizing, five bundled Quran faces, pinch as zoom or as text size, and immersive mode that clears the status bar and the dock. All 114 surahs with verified Uthmani Arabic and Saheeh International English, bundled offline (6,236 verses). Verse-level search in Arabic or English with page/juz'/hizb quick filters, bookmarks, copy/share, per-verse audio recitation (Mishary Alafasy via everyayah.com, streamed), whose banner names the verse being recited so a reader who has scrolled elsewhere can still find it. Page turns work by drag *and* by accessibility action, so a page is reachable without a finger; every page announces itself — reference, extent, surah range and page — in the reader's own language, and the text is kept out of a display cutout in landscape, where the outer column of a page is where a page *begins*.
+- **Quran reader** — opens straight into the text at your last position (Al-Fatihah on a first run). Two layouts — the canonical 604-page mushaf, or continuous per-surah flow with optional per-verse blocks — each on either axis. Seven washed-out papers with light/dark treatment, independent Arabic and translation sizing, five bundled Quran faces, pinch as zoom or as text size, and immersive mode that clears the status bar and the dock. All 114 surahs with verified Uthmani Arabic and Saheeh International English, bundled offline (6,236 verses). Verse-level search in Arabic or English with the matched words emphasised, and page/juz'/hizb quick filters, bookmarks, copy/share, per-verse audio recitation (Mishary Alafasy via everyayah.com, streamed), whose banner names the verse being recited so a reader who has scrolled elsewhere can still find it. Page turns work by drag *and* by accessibility action, so a page is reachable without a finger; every page announces itself — reference, extent, surah range and page — in the reader's own language, and the text is kept out of a display cutout in landscape, where the outer column of a page is where a page *begins*.
 - **Qibla compass** — sensor-fused bearing with true/magnetic north, distance to the Kaaba, magnetic-interference diagnostics, device-level indicator, vibration on alignment. Graduated dial: tick every 2°, numerals every 30°, heading and Qibla bearing side by side, and a banner that names the turn — "turn right 12°" — rather than only reporting that you are not there yet.
 - **Adhan & alerts** — every word a notification shows is in the reader's own language, read from the same preference the interface uses: full Adhan, Takbeer-only, chime, vibration or silent per prayer; pre-prayer reminders; global silent and auto masjid-silence mode during prayer windows. Five adhan timbres, one decoder, and the Settings preview plays the sound the alarm will play. Prayer times are computed on this device and are never described as having been verified against anything.
 - **Localization** — full UI in 11 languages (English, Arabic, French, Indonesian, Turkish, Urdu, Malay, Bengali, Russian, German, Spanish) with RTL support.
@@ -109,7 +109,7 @@ desktop session, a parallel Compose build gets OOM-killed, so it runs without
 parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
 JDK and memory for it.
 
-375 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
+390 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
 maths, search, prayer maths, Qibla bearing and guidance, localisation coverage,
 sky-text contrast) run on any host, including ARM64 Linux/Termux.
 
@@ -301,6 +301,44 @@ engine where each day lands rather than stepping 29 or 30 days - either of those
 drifts, and lands in the wrong month within a year.
 
 ## Quran
+
+### Search, and the offset that came with it
+
+Search matches in a *folded* copy of the text — the verse with every harakat, dagger alif,
+small high mark and tatweel deleted and four letters folded onto others — so that a search
+for `الرحمن` finds `ٱلرَّحْمَٰنِ`. That is what makes it diacritic-insensitive, and it is the
+right thing to match against.
+
+It is **not** the right thing to take an offset from. `ٱلرَّحْمَٰنِ` is nine characters and
+`الرحمن` is six, so a match at offset 20 of the folded text is not at offset 20 of the verse
+a reader is looking at. The search result's highlight was computed that way and applied to
+the original — so the emphasis landed on the wrong words, further off the further into the
+verse it was. It was also **rendered by nothing**: `QuranSearchHit.range` was computed on
+every keystroke, described in six lines of KDoc as the answer to "why is this here", and
+read only by its own test.
+
+Both are fixed at the root. `QuranText.fold` emits the folded text *and* an offset map in
+the **same pass**, so a match's position is carried out of the fold rather than guessed at
+afterwards — recovering it by searching the original for the folded text would put the
+second occurrence of a repeated word in the wrong place. `normalised` and the offsets are
+two views of that one pass, so they cannot disagree.
+
+The English path needs no map, because lowercasing the bundled translation preserves
+length — which is *proved over all 6,236 verses* by a test rather than assumed.
+
+`QuranSearchRangeTest` (11) checks the property that makes this falsifiable: fold the span
+the highlight covers and it must equal the term that matched, for every verse and every
+term. **The old offsets were planted and the test watched fail**, reporting that in 1:1 a
+search for الرحمن highlighted `لَّهِ`. `SearchHighlightRenderTest` (5) then checks the
+half a range test cannot see — that anything *uses* it — by reading the styled spans back
+out of the semantics tree, so "the emphasis covers exactly the matched term, in the field
+that matched, and changes nothing but colour" is an equality rather than a look at a
+picture. **The highlight was removed and it was watched fail too.**
+
+The emphasis is colour and nothing else, deliberately: a result row is scanned, so the
+match must be findable at a glance, but changing weight or size would reflow the row on
+every keystroke as results re-rank — and in a Quranic face a synthetic bold is either
+absent or a different typeface.
 
 The library has no top bar and no tab row, and there is no library screen
 at all: opening Quran opens the text, at the last place it was left. The browse

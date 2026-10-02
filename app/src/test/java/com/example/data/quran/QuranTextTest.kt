@@ -182,15 +182,20 @@ class QuranTextTest {
         assertTrue(one < two)
     }
 
-    @Test
-    fun `a match range is reported for highlighting`() {
-        val text = "the mercy of the lord"
-        val range = QuranText.matchRange(text, "mercy")
-        assertNotNull(range)
-        assertEquals("mercy", text.substring(range!!.first, range.last + 1))
-        assertNull(QuranText.matchRange(text, "absent"))
-        assertNull(QuranText.matchRange(text, ""))
-    }
+    /**
+     * `matchRange` is gone, and this is where it went.
+     *
+     * It searched a *haystack* for a *needle* and returned offsets, which is correct for
+     * ASCII and wrong for everything this app actually searches. The one call site
+     * passed `QuranText.normalised` — the verse with every harakat deleted — and applied
+     * the answer to the original text, so the offsets were wrong by however many marks
+     * preceded the match.
+     *
+     * `QuranText.Folded.originalRangeOf` replaces it and carries the offsets out of the
+     * fold in the same pass that does the folding, so there is no representation to
+     * convert between. `QuranSearchRangeTest` checks the property over all 6,236
+     * verses; this test had checked that `indexOf` works.
+     */
 
     // --- Against the real corpus -----------------------------------------
 
