@@ -1,6 +1,7 @@
 package com.example.ui.quran.reader
 
 import com.example.data.quran.QuranBrowse
+import com.example.data.quran.QuranCorpus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -37,7 +38,7 @@ class SelectionBarPlacementTest {
     @Test
     fun `every verse is located in the block its own list was built from`() {
         var checked = 0
-        for (surah in 1..QuranBrowse.TOTAL_SURAHS) {
+        for (surah in 1..QuranCorpus.SURA_COUNT) {
             val ayahs = QuranBrowse.ayahsInSurah(surah)
             val blocks = ayahs.chunked(FLOW_BLOCK_VERSES)
 
@@ -73,7 +74,7 @@ class SelectionBarPlacementTest {
         // surah's first block, "under the containing block" and "under the first block"
         // would draw the same picture and the sweep above would be checking nothing.
         var outsideTheFirstBlock = 0
-        for (surah in 1..QuranBrowse.TOTAL_SURAHS) {
+        for (surah in 1..QuranCorpus.SURA_COUNT) {
             val ayahs = QuranBrowse.ayahsInSurah(surah)
             outsideTheFirstBlock += (ayahs.size - FLOW_BLOCK_VERSES).coerceAtLeast(0)
         }
@@ -82,7 +83,7 @@ class SelectionBarPlacementTest {
             "only $outsideTheFirstBlock of the book's verses have a bar seat other " +
                 "than the surah's first block, so a lookup that answered 0 could pass " +
                 "for most of the book",
-            outsideTheFirstBlock * 4 > QuranBrowse.TOTAL_VERSES * 3
+            outsideTheFirstBlock * 4 > QuranCorpus.VERSE_COUNT * 3
         )
     }
 

@@ -427,16 +427,21 @@ private fun describePage(
 
 
 /**
- * The measurer, and the cache size it is given.
+ * The measurer a laid-out text draws with, remembered while it is composed.
+ *
+ * One per call site, not one for the reader: `rememberTextMeasurer` is scoped to
+ * where it is called, so every composed page and every flow block has its own, and
+ * it is dropped with the text it measured. What the cache is for is the repeat
+ * question - the fit asking after a page, then the kashida pass asking again - and
+ * it is keyed by the text it measured, so one text's answers are not another's.
+ *
+ * `internal` rather than private because the continuous layout measures too.
  */
 @Composable
-/**
- * One text measurer for the whole reader.
- */
 internal fun rememberPageTextMeasurer(): TextMeasurer =
     androidx.compose.ui.text.rememberTextMeasurer(
         cacheSize = MEASURE_CACHE_SIZE
     )
 
-/** How many laid-out pages a reader can have measured at once. */
+/** How many of one measurer's recent measurements are kept before the oldest is evicted. */
 private const val MEASURE_CACHE_SIZE = 16

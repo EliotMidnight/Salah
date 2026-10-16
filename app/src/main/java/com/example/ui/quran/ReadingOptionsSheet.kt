@@ -55,7 +55,6 @@ import com.example.ui.theme.layoutMetrics
 
 /** The translations this build ships. */
 private data class Translation(
-    val edition: String,
     val label: String
 )
 
@@ -63,7 +62,7 @@ private data class Translation(
  * The translations on offer.
  */
 private val Translations = listOf(
-    Translation("English (Saheeh International)", "English — Saheeh International")
+    Translation("English — Saheeh International")
 )
 
 /**

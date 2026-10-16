@@ -44,7 +44,7 @@ class QuranBrowseTest {
     @Test
     fun `every verse appears on exactly one page and the pages partition the corpus`() {
         val total = (1..QuranBrowse.TOTAL_PAGES).sumOf { QuranBrowse.ayahsOnPage(it).size }
-        assertEquals(QuranBrowse.TOTAL_VERSES, total)
+        assertEquals(QuranCorpus.VERSE_COUNT, total)
     }
 
     @Test
@@ -84,7 +84,7 @@ class QuranBrowseTest {
         var hizbsPerJuz = IntArray(QuranBrowse.TOTAL_JUZ + 1)
         for (hizb in 1..QuranBrowse.TOTAL_HIZB) {
             val place = QuranBrowse.placeAtHizb(hizb)
-            hizbsPerJuz[place.verse.let { QuranBrowse.juzOf(it.surah, it.ayah) }]++
+            hizbsPerJuz[place.verse.let { QuranCorpus.juzOf(it.surah, it.ayah) }]++
         }
         assertEquals(QuranBrowse.TOTAL_HIZB, hizbsPerJuz.sum())
         // 60 hizb over 30 juz' is exactly 2 per juz' in the standard partition.
@@ -105,7 +105,7 @@ class QuranBrowseTest {
         val refs = (1..QuranCorpus.QUARTER_COUNT).map { quarter ->
             val index = QuranCorpus.quarterBounds[quarter]
             val ayah = QuranCorpus.ayahAt(index)!!
-            assertEquals(quarter, QuranBrowse.quarterOf(ayah.surahNumber, ayah.ayahNumber))
+            assertEquals(quarter, QuranCorpus.quarterOf(ayah.surahNumber, ayah.ayahNumber))
         }
         assertEquals(QuranCorpus.QUARTER_COUNT, refs.size)
     }
@@ -143,15 +143,6 @@ class QuranBrowseTest {
         assertNull(QuranBrowse.ref(115, 1))
         assertNull(QuranBrowse.ref(0, 1))
         assertNull(QuranBrowse.ref(2, 0))
-    }
-
-    @Test
-    fun `an unknown reference clamps to the opening rather than throwing`() {
-        // The reader must always have somewhere to be. A crash on open is worse
-        // than landing on Al-Fatihah.
-        assertEquals(QuranRefStart, QuranBrowse.refOrStart(1, 8))
-        assertEquals(QuranRefStart, QuranBrowse.refOrStart(999, 999))
-        assertEquals(QuranRefStart, QuranBrowse.refOrStart(0, 0))
     }
 
     @Test
@@ -198,7 +189,7 @@ class QuranBrowseTest {
     @Test
     fun `the last page's juz is the last juz`() {
         val last = QuranBrowse.placeAtPage(604).verse
-        assertEquals(30, QuranBrowse.juzOf(last.surah, last.ayah))
+        assertEquals(30, QuranCorpus.juzOf(last.surah, last.ayah))
     }
 
     // --- Prostrations -----------------------------------------------------
@@ -225,7 +216,7 @@ class QuranBrowseTest {
     @Test
     fun `the obligatory prostrations are the ones the metadata marks obligatory`() {
         // Counted through the public surface, which is where the reader reads it.
-        val obligatory = (1..QuranBrowse.TOTAL_SURAHS).flatMap { surah ->
+        val obligatory = (1..QuranCorpus.SURA_COUNT).flatMap { surah ->
             (1..QuranCorpus.surahVerseCount[surah])
                 .filter { QuranBrowse.sajdaAfter(surah, it) == QuranBrowse.SajdaKind.OBLIGATORY }
                 .map { surah to it }
@@ -253,9 +244,5 @@ class QuranBrowseTest {
             QuranBrowse.sajdaAfter(7, 206)
         )
         assertNull(QuranBrowse.sajdaAfter(2, 255))
-    }
-
-    private companion object {
-        val QuranRefStart = com.example.data.model.QuranRef.Start
     }
 }

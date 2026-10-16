@@ -286,8 +286,7 @@ fun StatusBanner(
     modifier: Modifier = Modifier,
     tone: BannerTone = BannerTone.Neutral,
     icon: ImageVector? = null,
-    action: (@Composable () -> Unit)? = null,
-    onDismiss: (() -> Unit)? = null
+    action: (@Composable () -> Unit)? = null
 ) {
     val space = Space.current
     val semantic = Tonal.colors

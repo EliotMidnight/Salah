@@ -11,7 +11,6 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.example.data.model.QuranReadingLayout
 import com.example.data.model.QuranReadingOptions
@@ -141,21 +140,26 @@ class QuranNavigationTest {
     }
 
     /**
-     * The page the control pill is reporting.
+     * What the control pill reads, as a reader sees it.
      *
      * Read from the text a reader sees, not from the accessibility label: the two are
-     * built from the same `page` here, and a test that reached past the rendered text
+     * built from the same values here, and a test that reached past the rendered text
      * would go on passing if the label drifted from it. Read from *the pill*, not by
      * searching all the text on screen: the flowing layout prints page rules among
      * the verses, and a global search finds those first.
      */
-    private fun pillPage(): Int {
+    private fun pillText(): String {
         val pill = compose.onNodeWithTag("reader_index")
             .assertIsDisplayed()
             .fetchSemanticsNode()
-        val text = pill.config.getOrNull(SemanticsProperties.Text)
+        return pill.config.getOrNull(SemanticsProperties.Text)
             ?.joinToString(" ") { it.text }
             ?: "the control pill's page label has no text"
+    }
+
+    /** The page the control pill is reporting. */
+    private fun pillPage(): Int {
+        val text = pillText()
         return Regex("Page (\\d+)").find(text)?.groupValues?.get(1)?.toInt()
             ?: error("the control pill reports no page number; it shows \"$text\"")
     }
@@ -193,7 +197,15 @@ class QuranNavigationTest {
             293,
             pillPage()
         )
-        compose.onNodeWithText("Al-Kahf").assertIsDisplayed()
+        // The surah's name is on the pill, which is where the reader reads it: the
+        // mushaf page itself is Arabic and says nothing in English. The page begins
+        // inside Al-Isra, so the pill names the page's two surahs, the requested one
+        // last.
+        assertEquals(
+            "the pill should name the page the reader was sent to",
+            "Al-Isra to Al-Kahf Page 293",
+            pillText()
+        )
     }
 
     @Test
@@ -241,7 +253,45 @@ class QuranNavigationTest {
         deliver(ref)
 
         assertEquals("the reader was asked for the last page", 604, pillPage())
-        compose.onNodeWithText("An-Nas").assertIsDisplayed()
+        // Al-Ikhlas, Al-Falaq and An-Nas; the pill names the page's range - both its
+        // ends, the requested surah among them.
+        assertEquals(
+            "the last page's pill should name the page's surahs",
+            "Al-Ikhlas to An-Nas Page 604",
+            pillText()
+        )
+    }
+
+    @Test
+    fun `the pill names the surahs the page holds, not the one the reader is standing in`() {
+        // The pill sits beside the page number, where one name reads as the page's own
+        // name - and a page is not inside one surah. Page 106 ends An-Nisa and carries
+        // the start of Al-Ma'idah, and the pill named whichever of the two the reader's
+        // verse happened to be in, so the page's name changed as they scrolled.
+        val ref = QuranBrowse.ref(4, 176)!!
+        assertEquals(
+            "fixture: 4:176 is no longer on page 106, so this is not the case that " +
+                "was broken",
+            106,
+            ref.page
+        )
+
+        mount()
+        // A page inside one surah is named once: a range against itself is not what a
+        // reader wants to read.
+        assertEquals(
+            "the first page's pill should read its one surah",
+            "Al-Fatihah Page 1",
+            pillText()
+        )
+
+        deliver(ref)
+
+        assertEquals(
+            "page 106 holds An-Nisa and Al-Ma'idah",
+            "An-Nisa to Al-Ma'idah Page 106",
+            pillText()
+        )
     }
 
     @Test

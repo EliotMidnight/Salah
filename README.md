@@ -235,9 +235,10 @@ elongation three times and no wider.
 
 **Both layouts justify** — the 604-page mushaf and the continuous per-verse flow — through
 the same engine, and surah heads are excluded: a centred heading with a stretched letter in it
-looks like a mistake. The result costs a measure-adjust-measure loop, so it is memoised per
-page and width, and the two layouts share one `TextMeasurer` rather than keeping two caches
-of the same measurements.
+looks like a mistake. The result costs a measure-adjust-measure loop, so it is memoised — per
+page and width on the mushaf, per block and width in the flow — and each laid-out page or block
+measures through its own `TextMeasurer`, remembered while that text is composed: the cache is
+keyed by the text it measured, so a page's measurements are not a block's.
 
 Looking at the output is the only real check here. The first render came back as a page of
 **stacked horizontal strokes**: the planner computed how much width a line was short by and

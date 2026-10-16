@@ -53,6 +53,7 @@ import com.example.data.model.Ayah
 import com.example.data.model.QuranReadingLayout
 import com.example.data.model.QuranReadingOptions
 import com.example.data.model.QuranRef
+import com.example.data.model.Surah
 import com.example.data.quran.QuranBrowse
 import com.example.ui.components.SafeArea
 import com.example.ui.components.isDarkSurface
@@ -61,6 +62,7 @@ import com.example.ui.components.EmptyState
 import com.example.ui.components.StatusBanner
 import com.example.ui.components.BannerTone
 import com.example.ui.localization.LocalStrings
+import com.example.ui.localization.ReaderStrings
 import com.example.ui.quran.gesture.readerPinch
 import com.example.ui.quran.reader.ContinuousReader
 import com.example.ui.quran.reader.MushafPager
@@ -96,7 +98,6 @@ fun QuranReader(
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
-    val strings = LocalStrings.current
     val isDark = MaterialTheme.colorScheme.background.isDarkSurface()
 
     // The paper. Everything else on this surface is read against it.
@@ -108,6 +109,10 @@ fun QuranReader(
     val surah = QuranBrowse.surah(position.surah) ?: QuranBrowse.surahs.first()
     // The surah's verses, derived from the position.
     val ayahs = remember(position.surah) { QuranBrowse.ayahsInSurah(position.surah) }
+
+    // The surahs the *page* holds. The pill sits beside the page number and names
+    // the page; 51 of the 604 hold more than one. See [pageSurahLabel].
+    val pageSurahs = remember(position.page) { QuranBrowse.surahsOnPage(position.page) }
 
     // One set per bookmark list, not one scan per verse.
     //
@@ -259,6 +264,7 @@ fun QuranReader(
             // in immersive mode it does not take any.
             ReaderControls(
                 surah = surah,
+                pageSurahs = pageSurahs,
                 page = position.page,
                 ink = ink,
                 muted = muted,
@@ -326,7 +332,8 @@ fun QuranReader(
  */
 @Composable
 private fun ReaderControls(
-    surah: com.example.data.model.Surah,
+    surah: Surah,
+    pageSurahs: List<Surah>,
     page: Int,
     ink: Color,
     muted: Color,
@@ -373,7 +380,7 @@ private fun ReaderControls(
                 horizontalArrangement = Arrangement.spacedBy(space.xs)
             ) {
                 LocationPill(
-                    surah = surah,
+                    pageSurahs = pageSurahs,
                     page = page,
                     ink = ink,
                     muted = muted,
@@ -447,11 +454,33 @@ private fun ImmersiveToggle(
 }
 
 /**
- * The location, as one thin pill, and the way into the index.
+ * The surahs a page holds, as the pill names them: the one name, or the range's two ends.
+ *
+ * The pill sits beside the page number, where a single name reads as the page's own
+ * name - and a page is not required to sit inside one surah. Page 106 ends An-Nisa
+ * and carries the start of Al-Ma'idah; a pill that named the surah the reader's verse
+ * happened to be in changed the page's name as the reader scrolled within it, and
+ * answered a question the pill was not asking.
+ *
+ * The ends are joined with this language's own range mark, the same one the page
+ * announcement ranges surah numbers with, so the reader looking at the page and the
+ * reader hearing it are told the same thing. [ReaderStrings.range] owns the single
+ * case: a range whose ends are the same is one end.
+ *
+ * An empty page - which the corpus does not have - names nothing rather than throwing
+ * on a surface a reader is looking at.
+ */
+internal fun pageSurahLabel(reader: ReaderStrings, surahs: List<Surah>): String =
+    surahs.firstOrNull()
+        ?.let { reader.range(it.englishName, surahs.last().englishName) }
+        .orEmpty()
+
+/**
+ * The location, as one pill, and the way into the index.
  */
 @Composable
 private fun LocationPill(
-    surah: com.example.data.model.Surah,
+    pageSurahs: List<Surah>,
     page: Int,
     ink: Color,
     muted: Color,
@@ -461,6 +490,7 @@ private fun LocationPill(
     val space = Space.current
     val strings = LocalStrings.current
     val pageLabel = "${strings.more.pageWord} $page"
+    val surahLabel = pageSurahLabel(strings.more.reader, pageSurahs)
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
@@ -477,10 +507,16 @@ private fun LocationPill(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = surah.englishName,
+                text = surahLabel,
                 style = MaterialTheme.typography.titleSmall,
                 color = ink,
-                maxLines = 1,
+                // Two lines, because a range does not fit on one: "An-Nisa to
+                // Al-Ma'idah" is 21 characters, and the pill's share of the row asks
+                // one to be dropped - the clipped "Al-Ma…" was the first attempt at
+                // this. The room is already reserved: `PageInsets.top` allows the
+                // controls `minTouchTarget + space.sm`, which is exactly two
+                // `titleSmall` lines plus the pill's vertical padding.
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false)
             )

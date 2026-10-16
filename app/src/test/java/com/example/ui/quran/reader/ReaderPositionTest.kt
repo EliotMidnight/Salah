@@ -38,7 +38,7 @@ class ReaderPositionTest {
     private fun position(
         surah: Int = 2,
         ayah: Int = 1
-    ) = ReaderPosition(QuranBrowse.refOrStart(surah, ayah))
+    ) = ReaderPosition(QuranBrowse.ref(surah, ayah)!!)
 
     // --- One value -------------------------------------------------------
 
@@ -113,7 +113,7 @@ class ReaderPositionTest {
         // got a selected verse any more, and must not be left with one - especially
         // not one from the surah they left.
         val start = position(2, 255)
-        val selected = QuranBrowse.refOrStart(2, 255)
+        val selected = QuranBrowse.ref(2, 255)!!
         start.select(selected)
         assertEquals("the fixture did not take", selected, start.selection)
 
@@ -131,7 +131,7 @@ class ReaderPositionTest {
     fun `a selection survives a turn only while the new page still contains it`() {
         // 2:255 is on page 42. Turn to 43 and the selection is meaningless there.
         val start = position(2, 255)
-        start.select(QuranBrowse.refOrStart(2, 255))
+        start.select(QuranBrowse.ref(2, 255)!!)
         assertTrue(start.turnPage(1))
         assertNull(
             "2:255 was carried onto page 43, which does not contain it",
@@ -142,7 +142,7 @@ class ReaderPositionTest {
     @Test
     fun `a selection on the same page is kept across a re-seat`() {
         val start = position(2, 255)
-        val selected = QuranBrowse.refOrStart(2, 255)
+        val selected = QuranBrowse.ref(2, 255)!!
         start.select(selected)
         // A re-seat on the same page - a layout change, say - must not throw away a
         // selection the reader just made and can still see.
@@ -153,7 +153,7 @@ class ReaderPositionTest {
     @Test
     fun `tapping the same verse clears the selection`() {
         val start = position(2, 1)
-        val verse = QuranBrowse.refOrStart(2, 255)
+        val verse = QuranBrowse.ref(2, 255)!!
         start.toggleSelection(verse)
         assertEquals(verse, start.selection)
         start.toggleSelection(verse)
@@ -163,8 +163,8 @@ class ReaderPositionTest {
     @Test
     fun `tapping a different verse moves the selection`() {
         val start = position(2, 1)
-        start.toggleSelection(QuranBrowse.refOrStart(2, 255))
-        start.toggleSelection(QuranBrowse.refOrStart(2, 256))
+        start.toggleSelection(QuranBrowse.ref(2, 255)!!)
+        start.toggleSelection(QuranBrowse.ref(2, 256)!!)
         assertEquals(256, start.selection?.ayah)
     }
 
@@ -173,7 +173,7 @@ class ReaderPositionTest {
         // What a tap in the margin, or on the page furniture, resolves to. It must
         // not be read as "keep whatever was selected".
         val start = position(2, 1)
-        start.select(QuranBrowse.refOrStart(2, 255))
+        start.select(QuranBrowse.ref(2, 255)!!)
         start.toggleSelection(null)
         assertNull(start.selection)
     }
@@ -186,7 +186,7 @@ class ReaderPositionTest {
         // process death. A verse highlighted on a page the reader has not returned
         // to is a state they cannot explain.
         val position = position(2, 255)
-        position.select(QuranBrowse.refOrStart(2, 256))
+        position.select(QuranBrowse.ref(2, 256)!!)
         val refFields = position.ref.let { listOf(it.surah, it.ayah, it.page) }
         assertEquals(listOf(2, 255, 42), refFields)
         assertEquals(256, position.selection?.ayah)
@@ -201,13 +201,13 @@ class ReaderPositionTest {
         // three, and the bookmark and copy actions would fire on whichever came
         // first in the list.
         val last = ReaderPosition(QuranBrowse.placeAtPage(604).verse)
-        val fatiha = QuranBrowse.refOrStart(112, 1)
+        val fatiha = QuranBrowse.ref(112, 1)!!
         last.toggleSelection(fatiha)
         assertEquals(112, last.selection?.surah)
 
         // Selecting the identical ayah number in a different surah is a different
         // selection, and must not be treated as a toggle-off.
-        val falaq = QuranBrowse.refOrStart(113, 1)
+        val falaq = QuranBrowse.ref(113, 1)!!
         last.toggleSelection(falaq)
         assertEquals(
             "selecting 113:1 while 112:1 was selected must move the selection, not clear it",

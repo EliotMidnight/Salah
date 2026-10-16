@@ -67,7 +67,7 @@ class ReaderInteractionTest {
     private val portrait = IntSize(1080, 2399)
     private val landscape = IntSize(2399, 1080)
 
-    private fun position(ref: QuranRef = QuranBrowse.refOrStart(2, 255)) =
+    private fun position(ref: QuranRef = QuranBrowse.ref(2, 255)!!) =
         ReaderPosition(ref)
 
     // --- Layout change vs. magnification ----------------------------------
@@ -127,7 +127,7 @@ class ReaderInteractionTest {
         // The two are separate on purpose: magnification is the view, the position is
         // the reading. A reset that moved the reader would be the reader losing their
         // place by pinching, which is the opposite of what pinching is for.
-        val ref = QuranBrowse.refOrStart(2, 255)
+        val ref = QuranBrowse.ref(2, 255)!!
         val start = position(ref)
         start.surfaceMeasured(portrait)
         start.magnifyBy(2f)
@@ -146,7 +146,7 @@ class ReaderInteractionTest {
         // Dropping it on a layout change would throw away the verse the reader had
         // just acted on, for a reason that has nothing to do with the verse.
         val start = position()
-        val selected = QuranBrowse.refOrStart(2, 255)
+        val selected = QuranBrowse.ref(2, 255)!!
         start.select(selected)
         start.magnifyBy(2f)
 

@@ -380,12 +380,10 @@ internal object QuranCorpus {
         QuranStructure.requireIntact(structure)
         val pages = pageOfIndex
         val juzs = juzOfIndex
-        val quarters = quarterOfIndex
         verseTexts.mapIndexed { index, ayah ->
             ayah.copy(
                 pageNumber = pages[index],
-                juzNumber = juzs[index],
-                hizbQuarter = quarters[index]
+                juzNumber = juzs[index]
             )
         }
     }

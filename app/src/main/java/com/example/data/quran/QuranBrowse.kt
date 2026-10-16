@@ -26,8 +26,6 @@ object QuranBrowse {
     const val TOTAL_PAGES = QuranCorpus.PAGE_COUNT
     const val TOTAL_JUZ = QuranCorpus.JUZ_COUNT
     const val TOTAL_HIZB = QuranCorpus.HIZB_COUNT
-    const val TOTAL_SURAHS = QuranCorpus.SURA_COUNT
-    const val TOTAL_VERSES = QuranCorpus.VERSE_COUNT
 
     /**
      * The translation every verse's English text comes from.
@@ -43,9 +41,6 @@ object QuranBrowse {
      * The script every verse's Arabic text is written in.
      */
     const val TEXT_SCRIPT = QuranCorpus.TEXT_SCRIPT
-
-    /** Every verse, in canonical order. */
-    val ayahs: List<Ayah> get() = QuranCorpus.ayahs
 
     val surahs: List<Surah> get() = QuranDataSource.SURAHS
 
@@ -78,12 +73,6 @@ object QuranBrowse {
         val verse = ayah(surah, ayah) ?: return null
         return QuranRef(surah = surah, ayah = ayah, page = verse.pageNumber)
     }
-
-    /**
-     * A verse as a reference, never null.
-     */
-    fun refOrStart(surah: Int, ayah: Int): QuranRef =
-        ref(surah, ayah) ?: QuranRef.Start
 
     // --- Places -----------------------------------------------------------
 
@@ -128,7 +117,7 @@ object QuranBrowse {
      * Every surah a page touches, in reading order.
      *
      * A page is not required to be inside one surah: page 604 holds the last
-     * three, and page 285 crosses Al-Isra into Al-Kahf. A running head that
+     * three, and page 293 crosses Al-Isra into Al-Kahf. A running head that
      * named only the surah the page *opens* in would be misleading on exactly
      * the pages where a reader most wants to know they have crossed over.
      */
@@ -167,13 +156,4 @@ object QuranBrowse {
             QuranCorpus.SajdaKind.RECOMMENDED -> SajdaKind.RECOMMENDED
             null -> null
         }
-
-    /** The hizb-quarter (rub') a verse falls in, 1..240. */
-    fun quarterOf(surah: Int, ayah: Int): Int = QuranCorpus.quarterOf(surah, ayah)
-
-    /** The juz' a verse falls in, 1..30. */
-    fun juzOf(surah: Int, ayah: Int): Int = QuranCorpus.juzOf(surah, ayah)
-
-    /** The hizb a verse falls in, 1..60. */
-    fun hizbOf(surah: Int, ayah: Int): Int = QuranCorpus.hizbOf(surah, ayah)
 }

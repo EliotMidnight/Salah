@@ -21,8 +21,7 @@ data class Ayah(
     val textArabic: String,
     val textEnglish: String = "",
     val pageNumber: Int = 1,
-    val juzNumber: Int = 1,
-    val hizbQuarter: Int = 1
+    val juzNumber: Int = 1
 ) {
     /**
      * This verse as a [QuranRef].

@@ -356,14 +356,19 @@ data class ReaderStrings(
     }
 
     /**
-     * A range of surah numbers as this language writes one, e.g. "2 to 3".
+     * A range as this language writes one: its two ends, joined by [rangeTo].
      *
-     * A single number when the two ends are the same, because "surah 2 to 2" is a
-     * range nobody meant to write - and a page that does not cross a boundary is 51
-     * fewer pages where the question arises.
+     * One end when the two are the same, because "An-Nisa to An-Nisa" is a range
+     * nobody meant to write. 553 of the 604 pages want that single end; the other
+     * 51 cross a surah boundary and want both.
      */
-    fun range(from: Int, to: Int): String =
-        if (from == to) from.toString() else "$from$rangeTo$to"
+    fun range(from: String, to: String): String =
+        if (from == to) from else "$from$rangeTo$to"
+
+    /**
+     * A range of surah numbers as the page announcement writes one, e.g. "2 to 3".
+     */
+    fun range(from: Int, to: Int): String = range(from.toString(), to.toString())
 
     /** A verse as `surah:ayah` for an announcement. Never locale-formatted. */
     fun reference(surah: Int, ayah: Int): String = "$surah:$ayah"
