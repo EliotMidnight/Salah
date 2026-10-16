@@ -389,14 +389,14 @@ bookmarks with it to drop a table nothing read.
 path that runs once per user, on hardware nobody runs CI on — if the SQL were wrong, the
 finding would be a crash report from someone who can no longer see verses they saved.
 
-`SalahMigrationTest` (9) opens a real SQLite database with the version-3 schema exactly as
-Room generated it, plants a reading position and three bookmarks, and runs both migrations:
-the position and the bookmarks survive, the unique index still refuses a duplicate save,
-the staging table is not left behind, and the migrated table matches the entity — the check
-Room would otherwise do on a user's device at open time. `MIGRATION_3_4` recreates the
-table rather than using `ALTER TABLE ... DROP COLUMN`, because that needs SQLite 3.35 and
-this app supports API 24; on Android 11 and below the statement is a syntax error and the
-migration would throw, taking the bookmarks with it.
+`SalahMigrationTest` (14) opens a real SQLite database with the version-3 schema exactly as
+Room generated it, plants a reading position and three bookmarks, and walks the upgrade
+path: the position and the bookmarks survive every step, the unique index still refuses a
+duplicate save, no staging table is left behind, and each migrated table matches its
+entity — the check Room would otherwise do on a user's device at open time. `MIGRATION_3_4`
+and `MIGRATION_4_5` recreate their tables rather than using `ALTER TABLE ... DROP COLUMN`,
+because that needs SQLite 3.35 and this app supports API 24; on Android 11 and below the
+statement is a syntax error and the migration would throw, taking the bookmarks with it.
 
 **A silently empty copy was planted and watched fail** — valid SQL that moves no rows,
 which no amount of SQL validity would catch: *"the reader's position was lost"*.

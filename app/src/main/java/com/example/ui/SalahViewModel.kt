@@ -1188,16 +1188,9 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     fun toggleBookmark(ayah: Ayah) {
         viewModelScope.launch {
-            // The name comes from the verse, not from whatever surah the reader
-            // happens to have open. They are the same today; if they ever are not, a
-            // bookmark whose name contradicts its own reference is worse than one
-            // with no name.
-            val surah = QuranBrowse.surah(ayah.surahNumber)
             repository.toggleBookmark(
                 surahNumber = ayah.surahNumber,
-                ayahNumber = ayah.ayahNumber,
-                surahName = surah?.englishName.orEmpty(),
-                snippet = ayah.textArabic
+                ayahNumber = ayah.ayahNumber
             )
         }
     }

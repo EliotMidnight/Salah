@@ -394,21 +394,14 @@ class SalahRepository(
     /**
      * Saves a verse, or removes it if it is already saved.
      */
-    suspend fun toggleBookmark(
-        surahNumber: Int,
-        ayahNumber: Int,
-        surahName: String,
-        snippet: String
-    ) {
+    suspend fun toggleBookmark(surahNumber: Int, ayahNumber: Int) {
         if (dao.isBookmarked(surahNumber, ayahNumber) > 0) {
             dao.deleteBookmark(surahNumber, ayahNumber)
         } else {
             dao.insertBookmark(
                 BookmarkEntity(
                     surahNumber = surahNumber,
-                    ayahNumber = ayahNumber,
-                    surahName = surahName,
-                    ayahSnippet = snippet
+                    ayahNumber = ayahNumber
                 )
             )
         }

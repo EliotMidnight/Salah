@@ -70,7 +70,9 @@ class SalahMigrationTest {
         db = helper.writableDatabase
 
         // The schema exactly as version 3 generated it, including the two columns that
-        // version 4 removes and the unique index that version 3 added.
+        // version 4 removes and the unique index that version 3 added. Version 4 did not
+        // touch `bookmarks`, so this is also the table version 5 starts from - the two
+        // columns it drops included.
         db.execSQL(
             """
             CREATE TABLE IF NOT EXISTS `continue_reading` (
@@ -92,7 +94,9 @@ class SalahMigrationTest {
                 `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                 `surahNumber` INTEGER NOT NULL,
                 `ayahNumber` INTEGER NOT NULL,
-                `createdAt` INTEGER NOT NULL
+                `surahName` TEXT NOT NULL,
+                `ayahSnippet` TEXT NOT NULL,
+                `timestamp` INTEGER NOT NULL
             )
             """.trimIndent()
         )
@@ -117,8 +121,11 @@ class SalahMigrationTest {
                 "(1, 112, 4, 'Al-Ikhlas', 'الإخلاص', 604, 'قُلْ هُوَ ٱللَّهُ أَحَدٌ', 1700000000000)"
         )
         db.execSQL(
-            "INSERT INTO bookmarks (surahNumber, ayahNumber, createdAt) VALUES " +
-                "(2, 255, 1690000000000), (112, 1, 1690000000001), (114, 6, 1690000000002)"
+            "INSERT INTO bookmarks (surahNumber, ayahNumber, surahName, ayahSnippet, " +
+                "timestamp) VALUES " +
+                "(2, 255, 'Al-Baqarah', 'planted', 1690000000000), " +
+                "(112, 1, 'Al-Ikhlas', 'planted', 1690000000001), " +
+                "(114, 6, 'An-Nas', 'planted', 1690000000002)"
         )
     }
 
@@ -179,8 +186,8 @@ class SalahMigrationTest {
         // which is the whole point of the index, so the proof is that it throws.
         val refused = runCatching {
             db.execSQL(
-                "INSERT INTO bookmarks (surahNumber, ayahNumber, createdAt) " +
-                    "VALUES (2, 255, 1700000000000)"
+                "INSERT INTO bookmarks (surahNumber, ayahNumber, surahName, ayahSnippet, " +
+                    "timestamp) VALUES (2, 255, 'Al-Baqarah', 'planted', 1700000000000)"
             )
         }.isFailure
         assertTrue(
@@ -275,6 +282,126 @@ class SalahMigrationTest {
         assertEquals(1, defaults.ayahNumber)
     }
 
+    // --- 4 to 5 ---------------------------------------------------------------
+
+    /**
+     * A database at version 4: the version-3 plant plus the 3-to-4 migration.
+     *
+     * The bookmarks table was untouched by 3 to 4, so this is the only way the chain
+     * differs from the plant - which is the point: the 4-to-5 tests run on the table a
+     * reader who installed every version since 3 actually has.
+     */
+    private fun reachVersion4() {
+        plantReaderData()
+        SalahDatabase.MIGRATION_3_4.migrate(db)
+    }
+
+    @Test
+    fun `the bookmarks survive the 4 to 5 migration with their timestamps`() {
+        reachVersion4()
+        SalahDatabase.MIGRATION_4_5.migrate(db)
+
+        val saved = mutableListOf<Triple<Int, Int, Long>>()
+        db.query("SELECT surahNumber, ayahNumber, timestamp FROM bookmarks ORDER BY id")
+            .use { c ->
+                while (c.moveToNext()) {
+                    saved += Triple(c.getInt(0), c.getInt(1), c.getLong(2))
+                }
+            }
+        assertEquals(
+            "the reader's bookmarks were lost or their timestamps rewritten by the " +
+                "migration",
+            listOf(
+                Triple(2, 255, 1690000000000L),
+                Triple(112, 1, 1690000000001L),
+                Triple(114, 6, 1690000000002L)
+            ),
+            saved
+        )
+    }
+
+    @Test
+    fun `the two columns that were never read are gone from bookmarks`() {
+        reachVersion4()
+        SalahDatabase.MIGRATION_4_5.migrate(db)
+
+        val columns = columnsOf("bookmarks")
+        assertFalse(
+            "surahName is still a column: it was written on every save and read by " +
+                "nothing, and the Saved list resolves the name from the corpus",
+            columns.contains("surahName")
+        )
+        assertFalse(
+            "ayahSnippet is still a column: it held a copy of the verse that nothing " +
+                "read and nothing gated against the corpus",
+            columns.contains("ayahSnippet")
+        )
+    }
+
+    @Test
+    fun `the migrated bookmarks table is exactly the one the entity describes`() {
+        // The reason the column list is spelled out in the migration: Room validates the
+        // schema when the database is opened, on the user's device. A mismatch here is
+        // that crash, moved into a test.
+        reachVersion4()
+        SalahDatabase.MIGRATION_4_5.migrate(db)
+
+        assertEquals(
+            "the migrated bookmarks table does not match BookmarkEntity. Room would " +
+                "refuse to open the database on a user's device.",
+            listOf("id", "surahNumber", "ayahNumber", "timestamp"),
+            columnsOf("bookmarks")
+        )
+    }
+
+    @Test
+    fun `the unique bookmark index survives the 4 to 5 migration`() {
+        reachVersion4()
+        SalahDatabase.MIGRATION_4_5.migrate(db)
+
+        // The index is a separate SQLite object and dies with the table it indexes, so a
+        // recreated table that does not recreate the index leaves the entity's declared
+        // index missing - which fails the database open on the reader's device. Saving
+        // 2:255 again must be *refused*.
+        val refused = runCatching {
+            db.execSQL(
+                "INSERT INTO bookmarks (surahNumber, ayahNumber, timestamp) " +
+                    "VALUES (2, 255, 1700000000000)"
+            )
+        }.isFailure
+        assertTrue(
+            "a verse was saved twice after the 4 to 5 migration, so the unique index " +
+                "the recreated table needs is not there",
+            refused
+        )
+        val count = db.query("SELECT COUNT(*) FROM bookmarks").use { c ->
+            c.moveToFirst()
+            c.getInt(0)
+        }
+        assertEquals("the refused insert still added a row", 3, count)
+    }
+
+    @Test
+    fun `the 4 to 5 migration leaves no staging table behind`() {
+        // A recreated table whose rename failed leaves `_new` sitting next to the real
+        // one, and the next migration would then find two of everything.
+        reachVersion4()
+        SalahDatabase.MIGRATION_4_5.migrate(db)
+
+        val tables = mutableListOf<String>()
+        db.query("SELECT name FROM sqlite_master WHERE type = 'table'").use { c ->
+            while (c.moveToNext()) tables += c.getString(0)
+        }
+        assertFalse(
+            "the migration left a staging table behind: $tables",
+            tables.any { it.contains("bookmarks_new") }
+        )
+        assertTrue(
+            "the migration lost the bookmarks table: $tables",
+            tables.contains("bookmarks")
+        )
+    }
+
     // --- 2 to 3, which also had no test ---------------------------------------
 
     @Test
@@ -290,15 +417,18 @@ class SalahMigrationTest {
                 `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                 `surahNumber` INTEGER NOT NULL,
                 `ayahNumber` INTEGER NOT NULL,
-                `createdAt` INTEGER NOT NULL
+                `surahName` TEXT NOT NULL,
+                `ayahSnippet` TEXT NOT NULL,
+                `timestamp` INTEGER NOT NULL
             )
             """.trimIndent()
         )
         db.execSQL(
-            "INSERT INTO bookmarks (id, surahNumber, ayahNumber, createdAt) VALUES " +
-                "(1, 2, 255, 1690000000000), " +
-                "(2, 2, 255, 1690000009999), " +
-                "(3, 112, 1, 1690000000001)"
+            "INSERT INTO bookmarks (id, surahNumber, ayahNumber, surahName, ayahSnippet, " +
+                "timestamp) VALUES " +
+                "(1, 2, 255, 'Al-Baqarah', 'planted', 1690000000000), " +
+                "(2, 2, 255, 'Al-Baqarah', 'planted', 1690000009999), " +
+                "(3, 112, 1, 'Al-Ikhlas', 'planted', 1690000000001)"
         )
 
         SalahDatabase.MIGRATION_2_3.migrate(db)
@@ -319,8 +449,8 @@ class SalahMigrationTest {
         // version 2 permitted must now be refused.
         val refused = runCatching {
             db.execSQL(
-                "INSERT INTO bookmarks (surahNumber, ayahNumber, createdAt) " +
-                    "VALUES (2, 255, 1700000000000)"
+                "INSERT INTO bookmarks (surahNumber, ayahNumber, surahName, ayahSnippet, " +
+                    "timestamp) VALUES (2, 255, 'Al-Baqarah', 'planted', 1700000000000)"
             )
         }.isFailure
         assertTrue(

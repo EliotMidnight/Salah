@@ -42,6 +42,11 @@ data class ContinueReadingEntity(
  *
  * A verse is `(surah, ayah)` and not the ayah alone, for the same reason `QuranRef`
  * carries a page: page 604 holds three ayah-1s.
+ *
+ * And a row is only the reference. `surahName` and `ayahSnippet` used to sit beside it,
+ * written on every save and read by nothing - the Saved list resolves both through the
+ * corpus - so `MIGRATION_4_5` drops them. Verse text kept beside the reference is text
+ * that can disagree with the corpus while nothing gated or checked it.
  */
 @Entity(
     tableName = "bookmarks",
@@ -52,8 +57,6 @@ data class BookmarkEntity(
     val id: Long = 0,
     val surahNumber: Int,
     val ayahNumber: Int,
-    val surahName: String,
-    val ayahSnippet: String,
     val timestamp: Long = System.currentTimeMillis()
 )
 

@@ -13,7 +13,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ContinueReadingEntity::class,
         BookmarkEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class SalahDatabase : RoomDatabase() {
@@ -89,6 +89,49 @@ abstract class SalahDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * **4 to 5.** Drops `bookmarks.surahName` and `bookmarks.ayahSnippet`.
+         *
+         * Both were written on every save and read by nothing: the Saved list resolves the
+         * surah's name and the verse's text through the corpus from the row's reference. A
+         * copy of the verse kept beside the reference could only drift from the corpus,
+         * while nothing gated or checked it.
+         *
+         * The table is recreated rather than columns dropped for the reason spelled out on
+         * [MIGRATION_3_4] - `DROP COLUMN` needs SQLite 3.35, which is Android 12. The
+         * unique index dies with the table it indexes, so it is recreated by name here
+         * too: it is declared on `BookmarkEntity`, and Room refuses to open a database
+         * whose schema is missing it.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `bookmarks_new` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `surahNumber` INTEGER NOT NULL,
+                        `ayahNumber` INTEGER NOT NULL,
+                        `timestamp` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `bookmarks_new`
+                        (`id`, `surahNumber`, `ayahNumber`, `timestamp`)
+                    SELECT `id`, `surahNumber`, `ayahNumber`, `timestamp`
+                    FROM `bookmarks`
+                    """.trimIndent()
+                )
+                db.execSQL("DROP TABLE `bookmarks`")
+                db.execSQL("ALTER TABLE `bookmarks_new` RENAME TO `bookmarks`")
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS " +
+                        "index_bookmarks_reference ON bookmarks (surahNumber, ayahNumber)"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): SalahDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -96,7 +139,7 @@ abstract class SalahDatabase : RoomDatabase() {
                     SalahDatabase::class.java,
                     "salah_quiet.db"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     // Only reached when there is no path from the installed version -
                     // which for a shipped app means a downgrade or a version nobody
                     // wrote a migration for. It is still destructive, and that is now a
