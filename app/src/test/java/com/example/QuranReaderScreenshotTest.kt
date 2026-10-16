@@ -218,7 +218,7 @@ class QuranReaderScreenshotTest {
         QuranReadingOptions(layout = QuranReadingLayout.CONTINUOUS),
         dark = false,
         name = "quran_continuous_vertical_resumes_midway",
-        // 2:200, the middle of Al-Baqarah. Entering the continuous layout used to
+        // 2:253, the middle of Al-Baqarah. Entering the continuous layout used to
         // open at 2:1 whatever the position was - and then *wrote* 2:1 to Continue
         // Reading half a second later, so the wrong place was not merely shown, it
         // was saved. This baseline is the reader arriving where they were.

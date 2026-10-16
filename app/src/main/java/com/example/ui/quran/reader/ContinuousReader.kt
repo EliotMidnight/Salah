@@ -135,22 +135,25 @@ internal fun ContinuousReader(
         selectionBlockIndex(blocks, selectionRef)
     }
 
-    // The item index the reader's verse sits at, or 0 when it is not in this surah.
-    //
-    // `+ HEADING_ITEMS` because the list is `[heading, verse…]` - the same offset the
-    // scroll observer below subtracts. The two must agree or a scroll writes back a
-    // position one verse from where the reader is.
-    val initialIndex = remember(ayahs, blocks, options.perVerse, position.ref) {
-        val verseIndex = ayahs.indexOfFirst {
+    // The reader's verse's index within this surah, or -1 when it is not in this
+    // surah at all.
+    val verseIndex = remember(ayahs, position.ref) {
+        ayahs.indexOfFirst {
             it.surahNumber == position.ref.surah && it.ayahNumber == position.ref.ayah
         }
-        if (verseIndex < 0) {
-            0
-        } else if (options.perVerse) {
-            verseIndex + HEADING_ITEMS
-        } else {
-            flowIndexOf(verseIndex, blocks)
-        }
+    }
+
+    // The flow block holding it. 0 when it is not here at all: the top of the surah
+    // is the only place that is still a place.
+    val verseBlock = remember(blocks, verseIndex) {
+        if (verseIndex < 0) 0 else flowIndexOf(verseIndex, blocks)
+    }
+
+    // The item the vertical list seats at. The list's items and the pager's blocks
+    // are counted here, each in its own terms - see [seatItem] for what went wrong
+    // when one number was asked to be both.
+    val initialItem = remember(verseIndex, blocks, options.perVerse) {
+        seatItem(verseIndex, blocks, options.perVerse)
     }
 
     // Open at the reader's verse, not at the top of the surah.
@@ -183,10 +186,10 @@ internal fun ContinuousReader(
     // overshoot below is what the reader lands on. Without it the top of the screen is
     // a half-rendered line of Arabic, which is the single most obviously wrong thing a
     // reading surface can show.
-    LaunchedEffect(surah.number, initialIndex, listState) {
+    LaunchedEffect(surah.number, initialItem, listState) {
         snapshotFlow { listState.layoutInfo.totalItemsCount }
             .first { it > 0 }
-        if (initialIndex <= 0) return@LaunchedEffect
+        if (initialItem <= 0) return@LaunchedEffect
 
         // Scroll *past* the target, then back - as two separate awaits across frames,
         // which is the only way a lazy list will compose the items above the target.
@@ -199,30 +202,31 @@ internal fun ContinuousReader(
         //
         // So: request the overshoot, let a frame compose it, then request the target.
         // `withFrameNanos` between them is what makes the first one land.
-        listState.scrollToItem(initialIndex + resumeOvershoot)
+        listState.scrollToItem(initialItem + resumeOvershoot)
         withFrameNanos { }
-        listState.scrollToItem(initialIndex)
+        listState.scrollToItem(initialItem)
     }
 
     // The verse at the top of the viewport is the reader's position.
     //
-    // The list is `[heading, verse…]`, so the index the scroll state reports is one
-    // more than the verse index. The previous version indexed straight into the
-    // ayah list with it, which put the recorded position one verse ahead of the top
-    // of the screen for the whole of the surah - and sent `ayahs[1]` whenever the
-    // heading was showing at all.
+    // The list is `[heading, verse…]` or `[heading, block…]`, so the index the scroll
+    // state reports is one more than the step's index - subtract the heading, and
+    // resolve what is left *in the space the list is drawn in*. Doing it in one space
+    // is the bug this replaces: in flow mode what was left over was fed to the ayah
+    // list, so a scroll to block 17 wrote 2:18, twelve screens away, whose number only
+    // looked like a position because the two counts overlap. See [verseAtSeat].
     //
     // `drop(1)` and not `debounce`: the first emission of a fresh list is the item it
     // opened at, which is the position the reader already had, so there is nothing to
     // report. Debouncing it instead reported it half a second later, which is how a
     // layout switch wrote a position the reader never chose.
-    LaunchedEffect(listState, surah.number) {
+    LaunchedEffect(listState, surah.number, options.perVerse, blocks) {
         snapshotFlow { listState.firstVisibleItemIndex }
             .distinctUntilChanged()
             .drop(1)
             .debounce(SCROLL_SETTLE_MILLIS)
             .collect { index ->
-                ayahs.getOrNull(index - HEADING_ITEMS)?.let { ayah ->
+                verseAtSeat(index, ayahs, blocks, options.perVerse)?.let { ayah ->
                     onPositionSettled(
                         QuranRef(ayah.surahNumber, ayah.ayahNumber, ayah.pageNumber)
                     )
@@ -346,7 +350,7 @@ internal fun ContinuousReader(
             HorizontalFlow(
                 surah = surah,
                 blocks = blocks,
-                initialBlock = initialIndex.coerceIn(0, (blocks.size - 1).coerceAtLeast(0)),
+                initialBlock = verseBlock,
                 selected = position.selection,
                 options = options,
                 ink = ink,
@@ -541,6 +545,50 @@ internal fun flowIndexOf(verseIndex: Int, blocks: List<List<Ayah>>): Int {
         block++
     }
     return block.coerceAtMost(blocks.lastIndex.coerceAtLeast(0))
+}
+
+/**
+ * The item the vertical list seats at, for a verse at [verseIndex].
+ *
+ * The list is `[heading, verse…]` or `[heading, block…]`, so an item index is one past
+ * the step it holds - and which step a verse is at depends on how the verses are
+ * grouped: the verse itself in per-verse, its block of twelve in flowing text. Both
+ * are counted *here*, in the list's own space, because the places that used to count
+ * them each counted in a different one: the resume seat was a block index in flow
+ * mode (a whole block early) and an item index in per-verse, the pager got whichever
+ * of the two the mode produced as a *page* number, and the observer subtracted the
+ * heading and indexed into the ayah list whatever the list was drawing.
+ *
+ * Zero is the heading, and it is a real answer rather than a failure. A verse at the
+ * first step is already at the top of the list with the surah's name in front of it
+ * - what a reader arriving at the start of a surah is looking for - and a verse that
+ * is not in this surah at all ([verseIndex] negative) is left where the list starts.
+ * The resume treats 0 as "there is nothing to scroll to".
+ */
+internal fun seatItem(verseIndex: Int, blocks: List<List<Ayah>>, perVerse: Boolean): Int {
+    if (verseIndex < 0) return 0
+    val step = if (perVerse) verseIndex else flowIndexOf(verseIndex, blocks)
+    return if (step <= 0) 0 else step + HEADING_ITEMS
+}
+
+/**
+ * The verse a settled scroll at [item] puts at the top of the viewport, or null when
+ * the top is the heading.
+ *
+ * [seatItem]'s other half, and it has to be read in the same space: flowing text
+ * seats a *block*, so the verse at the top is the block's first verse - the finest
+ * position this grouping can hold - while per-verse seats a single verse and gets it
+ * exactly. Null for the heading is not a failure: scrolling back to the top of the
+ * list shows the surah's name, which is not a place to write a position from.
+ */
+internal fun verseAtSeat(
+    item: Int,
+    ayahs: List<Ayah>,
+    blocks: List<List<Ayah>>,
+    perVerse: Boolean
+): Ayah? {
+    val step = item - HEADING_ITEMS
+    return if (perVerse) ayahs.getOrNull(step) else blocks.getOrNull(step)?.firstOrNull()
 }
 
 /**

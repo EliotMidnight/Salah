@@ -1,13 +1,17 @@
 package com.example.ui.quran.reader
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollToIndex
 import com.example.data.model.QuranRef
 import com.example.data.model.QuranPinchTarget
 import com.example.data.model.QuranReadingLayout
@@ -47,6 +51,14 @@ import org.robolectric.annotation.Config
  * scrolls and ask it where it went. Asserting on the composable's internals would
  * be a test that has to be rewritten every time they move; asserting on the state
  * the caller passed in is a test about the contract between them.
+ *
+ * ### The other axis
+ *
+ * The sideways surface is a pager rather than a list, and its page follows the same
+ * position through the same arithmetic ([seatItem], [verseAtSeat]). The corpus
+ * property at the end walks every verse of the book through both shapes; the driven
+ * tests cover what arithmetic cannot see - where each surface opened, what a settle
+ * wrote, and whether a move made from elsewhere is followed.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -56,6 +68,9 @@ class ContinuousReaderResumeTest {
 
     /** What the observer wrote, if anything. */
     private var reported: QuranRef? = null
+
+    /** The vertical list [openAt] composed, so a test can ask it where it went. */
+    private lateinit var listState: LazyListState
 
     private fun options(
         layout: QuranReadingLayout = QuranReadingLayout.CONTINUOUS,
@@ -80,7 +95,6 @@ class ContinuousReaderResumeTest {
         val surah = QuranBrowse.surah(ref.surah)!!
         val ayahs = QuranBrowse.ayahsInSurah(ref.surah)
         val position = ReaderPosition(ref)
-        lateinit var listState: androidx.compose.foundation.lazy.LazyListState
 
         composeTestRule.setContent {
             SalahTheme {
@@ -106,18 +120,50 @@ class ContinuousReaderResumeTest {
         return listState.firstVisibleItemIndex
     }
 
+    /**
+     * Let the settled-scroll observers' debounce lapse.
+     *
+     * A write happens half a second after the last scroll, and an idle compose rule
+     * does not advance the clock over a delay - which is why the test below can
+     * assert that opening wrote nothing at all - so a test that wants to see a
+     * settle has to move the clock itself.
+     */
+    private fun settleClock() {
+        composeTestRule.mainClock.advanceTimeBy(SCROLL_SETTLE_MILLIS + 100)
+        composeTestRule.waitForIdle()
+    }
+
     @Test
     fun `flowing text opens on the block holding the reader's verse`() {
         // 2:200 is in block 16 of 24 (0-based), because blocks are twelve verses.
         // Opening at the *verse* index instead - 199 - would land twelve blocks
         // further on, which on a 286-verse surah is anywhere at all.
+        //
+        // Asserted on the first item's *key* as well as its number, because the
+        // number is the half that failed quietly: the list is `[heading, block…]`,
+        // so block 16 is item 17, and a block index seated as an item index put the
+        // top of the viewport on block 15 - a screenful of text early, with both
+        // counts plausible on their own.
         val ref = QuranRef(2, 200, QuranBrowse.pageOf(2, 200))
         val index = openAt(ref, options())
-        val expectedBlock = 199 / 12
+        val expectedBlock = 199 / FLOW_BLOCK_VERSES
         assertEquals(
-            "flowing text opened at block $index, expected block $expectedBlock",
-            expectedBlock,
+            "flowing text opened at item $index, expected block $expectedBlock " +
+                "(item ${expectedBlock + HEADING_ITEMS})",
+            expectedBlock + HEADING_ITEMS,
             index
+        )
+        val visible = listState.layoutInfo.visibleItemsInfo
+        // The item covering the top edge of the viewport. Not `visible.first()`: the
+        // list also reports the item whose last pixel is exactly at the edge, so its
+        // first entry is the item *above* the one being looked at.
+        val topKey = visible.firstOrNull { it.offset <= 0 && it.offset + it.size > 0 }?.key
+        assertEquals(
+            "the top of the viewport holds $topKey, not the block holding the " +
+                "reader's verse (composed: " +
+                visible.take(3).joinToString { "${it.key}@${it.offset}" } + ")",
+            "flow_$expectedBlock",
+            topKey
         )
     }
 
@@ -155,12 +201,119 @@ class ContinuousReaderResumeTest {
     }
 
     @Test
+    fun `a settled flow scroll writes the verse the block starts with`() {
+        // Flowing text seats a *block*: twelve verses are one item, so the verse the
+        // observer finds at the top is the block's first verse. It used to subtract
+        // the heading and index into the ayah list whichever shape the list was
+        // drawing, so a settle on block 17 wrote 2:18 - a verse near the top of the
+        // surah, twelve screens away, whose number only looked like a position
+        // because the two counts overlap for the first two dozen.
+        openAt(QuranRef(2, 110, QuranBrowse.pageOf(2, 110)), options())
+
+        val blocks = QuranBrowse.ayahsInSurah(2).chunked(FLOW_BLOCK_VERSES)
+        val target = 17
+        composeTestRule.onNode(hasScrollToIndexAction())
+            .performScrollToIndex(target + HEADING_ITEMS)
+        composeTestRule.waitForIdle()
+        settleClock()
+
+        val expected = blocks[target].first()
+        assertEquals(
+            "the settled scroll wrote ${reported ?: "nothing"}, not the verse the " +
+                "block at the top of the viewport starts with",
+            QuranRef(expected.surahNumber, expected.ayahNumber, expected.pageNumber),
+            reported
+        )
+    }
+
+    @Test
+    fun `the sideways surface follows a position moved from elsewhere`() {
+        // The pager read its page **once**, as `initialPage`: the vertical list
+        // re-seats in an effect keyed on its target item, but sideways there was no
+        // such effect, so a move made anywhere but by a swipe changed the position
+        // and left the surface on the old block. The pager's own observer debounces,
+        // so what it reports is where it actually is.
+        val surah = QuranBrowse.surah(2)!!
+        val ayahs = QuranBrowse.ayahsInSurah(2)
+        val position = ReaderPosition(QuranRef(2, 100, QuranBrowse.pageOf(2, 100)))
+
+        composeTestRule.setContent {
+            SalahTheme {
+                ProvideAppLanguage(language = "English") {
+                    ContinuousReader(
+                        surah = surah,
+                        ayahs = ayahs,
+                        listState = rememberLazyListState(),
+                        position = position,
+                        options = options(scroll = QuranScrollDirection.HORIZONTAL),
+                        ink = androidx.compose.ui.graphics.Color.Black,
+                        accent = androidx.compose.ui.graphics.Color.Blue,
+                        muted = androidx.compose.ui.graphics.Color.Gray,
+                        actionsFor = { VerseActions(ayah = it) },
+                        onPositionSettled = { reported = it },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // 2:200, from the index: a move the pager did not make itself.
+        composeTestRule.runOnIdle {
+            position.goTo(QuranRef(2, 200, QuranBrowse.pageOf(2, 200)))
+        }
+        composeTestRule.waitForIdle()
+        settleClock()
+
+        val blocks = ayahs.chunked(FLOW_BLOCK_VERSES)
+        val expected = blocks[flowIndexOf(199, blocks)].first()
+        assertEquals(
+            "the sideways surface did not follow the position; it reported " +
+                "${reported ?: "nothing"} instead of the block holding 2:200",
+            QuranRef(expected.surahNumber, expected.ayahNumber, expected.pageNumber),
+            reported
+        )
+    }
+
+    @Test
+    fun `the sideways per-verse layout opens on the block holding the reader's verse`() {
+        // The vertical list steps one verse at a time in per-verse mode, but the
+        // pager still turns blocks of twelve. The resume passed the vertical *item*
+        // index - 200 for 2:200 - as a page number, so it clamped to the last of 24
+        // pages: a reader asking for 2:200 was shown the end of the surah instead.
+        openAt(
+            QuranRef(2, 200, QuranBrowse.pageOf(2, 200)),
+            options(perVerse = true, scroll = QuranScrollDirection.HORIZONTAL)
+        )
+
+        val blocks = QuranBrowse.ayahsInSurah(2).chunked(FLOW_BLOCK_VERSES)
+        val wanted = blocks[flowIndexOf(199, blocks)].first().textArabic.take(12)
+        assertTrue("the fixture is wrong: 2:200 has no text", wanted.isNotBlank())
+        assertTrue(
+            "the block holding 2:200 is not composed, so the surface did not open " +
+                "where the reader is",
+            composeTestRule.onAllNodesWithText(wanted, substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        )
+    }
+
+    @Test
     fun `the first verse of a surah opens on the heading`() {
         // Index 0, because there is nothing to scroll to: the heading and 2:1 are
         // already what the surface shows. Asserted so the "open at the reader's
         // verse" rule cannot be satisfied by always scrolling to some fixed offset.
         val ref = QuranRef(2, 1, 2)
         assertEquals(0, openAt(ref, options()))
+    }
+
+    @Test
+    fun `the first verse of a surah opens on the heading per-verse too`() {
+        // The per-verse list seats a row per verse rather than a block, so its first
+        // step has its own call site: seating it at item 1 would scroll the surah's
+        // name off for a reader who is at the surah's first verse. Both shapes have
+        // to agree on what the top of a surah is.
+        val ref = QuranRef(2, 1, 2)
+        assertEquals(0, openAt(ref, options(perVerse = true)))
     }
 
     @Test
@@ -172,7 +325,6 @@ class ContinuousReaderResumeTest {
         val surah = QuranBrowse.surah(3)!!
         val ayahs = QuranBrowse.ayahsInSurah(3)
         val position = ReaderPosition(ref)
-        lateinit var listState: androidx.compose.foundation.lazy.LazyListState
 
         composeTestRule.setContent {
             SalahTheme {
@@ -400,5 +552,59 @@ class ContinuousReaderResumeTest {
             blocks.lastIndex,
             flowIndexOf(9999, blocks)
         )
+    }
+
+    @Test
+    fun `every verse of the book seats at an item that holds it`() {
+        // The whole corpus, and both shapes. A seat and a settle are one subtraction
+        // apart from reversing each other, and the way they fail is exactly one: a
+        // reader landing a step early, or - in per-verse sideways - on the last block
+        // of the surah. The whole book is 6,236 verses, which is nothing, against
+        // every one of them being asked to be in the block it says it is.
+        var checked = 0
+        for (number in 1..114) {
+            val ayahs = QuranBrowse.ayahsInSurah(number)
+            val blocks = ayahs.chunked(FLOW_BLOCK_VERSES)
+            for (verseIndex in ayahs.indices) {
+                val verse = ayahs[verseIndex]
+                for (perVerse in listOf(true, false)) {
+                    val item = seatItem(verseIndex, blocks, perVerse)
+                    if (item == 0) {
+                        val step =
+                            if (perVerse) verseIndex else flowIndexOf(verseIndex, blocks)
+                        assertEquals(
+                            "surah $number:${verse.ayahNumber} seats on the heading " +
+                                "but is not in the first step, so it would open above " +
+                                "the reader",
+                            0,
+                            step
+                        )
+                    } else {
+                        val seated = verseAtSeat(item, ayahs, blocks, perVerse)
+                        assertTrue(
+                            "surah $number:${verse.ayahNumber} seats at item $item, " +
+                                "which holds no verse",
+                            seated != null
+                        )
+                        val seatedIndex = ayahs.indexOf(seated!!)
+                        if (perVerse) {
+                            assertEquals(
+                                "the per-verse seat must be the verse itself",
+                                verseIndex,
+                                seatedIndex
+                            )
+                        } else {
+                            assertEquals(
+                                "the flow seat must be in the verse's own block",
+                                flowIndexOf(verseIndex, blocks),
+                                flowIndexOf(seatedIndex, blocks)
+                            )
+                        }
+                    }
+                    checked++
+                }
+            }
+        }
+        assertEquals("the whole book, in both shapes", 6_236 * 2, checked)
     }
 }

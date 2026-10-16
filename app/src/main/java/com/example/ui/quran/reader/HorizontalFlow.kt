@@ -78,6 +78,27 @@ internal fun HorizontalFlow(
         pageCount = { pageCount }
     )
 
+    // Follow the position when something else moves it - a tap in the index, a search
+    // hit, a Continue Reading jump.
+    //
+    // The page was read **once**, as `initialPage`: the vertical list re-seats in an
+    // effect keyed on its target item, but this pager had no such effect, so a move
+    // made anywhere but by a swipe changed the position and left the surface showing
+    // the old block. `scrollToPage` and not `animateScrollToPage` for the reason the
+    // vertical seat is instant: it is a re-seat to where the reader already is, not a
+    // page turn, and an animated sweep across twenty blocks would read as one.
+    //
+    // The guard is what keeps a reader's own swipe from being answered: a swipe
+    // settles on a page, the observer below turns the position into that page's first
+    // verse, the target changes to the page the reader is already on, and this does
+    // nothing.
+    LaunchedEffect(initialBlock, blocks) {
+        val target = initialBlock.coerceIn(0, pageCount - 1)
+        if (pagerState.settledPage != target) {
+            pagerState.scrollToPage(target)
+        }
+    }
+
     // Write the reader's position back as blocks settle, debounced — the same reason the
     // vertical list does: the observer fires on every scroll frame and a position saved on
     // a frame is a position saved mid-swipe.
