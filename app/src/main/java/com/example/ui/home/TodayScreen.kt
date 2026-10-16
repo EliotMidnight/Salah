@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -396,7 +397,13 @@ private fun SimpleView(
         )
         val measurer = rememberTextMeasurer()
         val density = LocalDensity.current
-        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        // The box is here to read the row's width; centring is asked for
+        // explicitly, because a box lays its child out from the top-left where
+        // the column used to centre the name itself.
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
             val rowWidthPx = with(density) { maxWidth.roundToPx() }
             val fontScale = density.fontScale
             val sizeSp = remember(headlineText, headlineStyle, rowWidthPx, fontScale) {
@@ -412,7 +419,8 @@ private fun SimpleView(
                 text = headlineText,
                 style = headlineStyle.copy(fontSize = sizeSp.sp),
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("today_headline")
             )
         }
         if (!arabicLeads) {

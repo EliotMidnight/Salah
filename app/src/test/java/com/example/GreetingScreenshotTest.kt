@@ -41,52 +41,12 @@ class GreetingScreenshotTest {
 
     @get:Rule val composeTestRule = createComposeRule()
 
-    private fun sampleState(): SalahUiState {
-        val date = LocalDate.of(2026, 9, 14)
-        val prayers = listOf(
-            PrayerTime(Prayer.FAJR, LocalTime.of(5, 12), LocalDateTime.of(date, LocalTime.of(5, 12))),
-            PrayerTime(Prayer.SUNRISE, LocalTime.of(6, 38), LocalDateTime.of(date, LocalTime.of(6, 38))),
-            PrayerTime(Prayer.DHUHR, LocalTime.of(13, 20), LocalDateTime.of(date, LocalTime.of(13, 20))),
-            PrayerTime(Prayer.ASR, LocalTime.of(16, 45), LocalDateTime.of(date, LocalTime.of(16, 45))),
-            PrayerTime(Prayer.MAGHRIB, LocalTime.of(19, 25), LocalDateTime.of(date, LocalTime.of(19, 25))),
-            PrayerTime(Prayer.ISHA, LocalTime.of(20, 48), LocalDateTime.of(date, LocalTime.of(20, 48)))
-        )
-        return SalahUiState(
-            location = UserLocation.RABAT,
-            method = CalculationMethod.MOROCCO_MINISTRY,
-            madhhab = Madhhab.STANDARD,
-            adjustments = PrayerAdjustments(),
-            todayPrayerTimes = PrayerTimesDay(
-                date = date,
-                prayers = prayers,
-                imsak = LocalTime.of(5, 2),
-                midnight = LocalTime.of(0, 20),
-                lastThirdOfNight = LocalTime.of(2, 0),
-                calculationMethod = CalculationMethod.MOROCCO_MINISTRY,
-                location = UserLocation.RABAT
-            ),
-            // These three are what the page actually reads for today, so the fixture
-            // is the reason the baseline is stable: the page used to compute its own
-            // from the wall clock, which meant every recording of this test baked in
-            // whatever time of day it was run at. It is Fajr-to-Dhuhr here, so the
-            // headline is Asr and Dhuhr is next.
-            nextPrayer = prayers[2],
-            previousPrayer = prayers[1],
-            countdownString = "01h 35m",
-            sunPosition = SunPosition(
-                azimuth = 148f,
-                altitude = 34f,
-                isSunVisible = true
-            ),
-        )
-    }
-
     private fun render(dark: Boolean, name: String) {
         composeTestRule.setContent {
             SalahTheme(darkTheme = dark) {
                 ProvideAppLanguage(language = "English") {
                     TodayScreen(
-                        state = sampleState(),
+                        state = todaySampleState(),
                         onLocationClick = {},
                         onContinueReadingClick = {}
                     )
@@ -101,4 +61,50 @@ class GreetingScreenshotTest {
 
     @Test
     fun home_screen_dark() = render(dark = true, name = "home_dark")
+}
+
+/**
+ * The state the home screenshot renders, and the reason its baseline is stable.
+ *
+ * The page used to compute its own "now" from the wall clock, which meant every
+ * recording of this test baked in whatever time of day it was run at; the three
+ * live figures come from this state instead. It is Fajr-to-Dhuhr here, so the
+ * headline is Sunrise and Dhuhr is next.
+ *
+ * Top-level rather than private to the screenshot class, because the layout test
+ * on the same page renders the same state rather than a second copy of it.
+ */
+internal fun todaySampleState(): SalahUiState {
+    val date = LocalDate.of(2026, 9, 14)
+    val prayers = listOf(
+        PrayerTime(Prayer.FAJR, LocalTime.of(5, 12), LocalDateTime.of(date, LocalTime.of(5, 12))),
+        PrayerTime(Prayer.SUNRISE, LocalTime.of(6, 38), LocalDateTime.of(date, LocalTime.of(6, 38))),
+        PrayerTime(Prayer.DHUHR, LocalTime.of(13, 20), LocalDateTime.of(date, LocalTime.of(13, 20))),
+        PrayerTime(Prayer.ASR, LocalTime.of(16, 45), LocalDateTime.of(date, LocalTime.of(16, 45))),
+        PrayerTime(Prayer.MAGHRIB, LocalTime.of(19, 25), LocalDateTime.of(date, LocalTime.of(19, 25))),
+        PrayerTime(Prayer.ISHA, LocalTime.of(20, 48), LocalDateTime.of(date, LocalTime.of(20, 48)))
+    )
+    return SalahUiState(
+        location = UserLocation.RABAT,
+        method = CalculationMethod.MOROCCO_MINISTRY,
+        madhhab = Madhhab.STANDARD,
+        adjustments = PrayerAdjustments(),
+        todayPrayerTimes = PrayerTimesDay(
+            date = date,
+            prayers = prayers,
+            imsak = LocalTime.of(5, 2),
+            midnight = LocalTime.of(0, 20),
+            lastThirdOfNight = LocalTime.of(2, 0),
+            calculationMethod = CalculationMethod.MOROCCO_MINISTRY,
+            location = UserLocation.RABAT
+        ),
+        nextPrayer = prayers[2],
+        previousPrayer = prayers[1],
+        countdownString = "01h 35m",
+        sunPosition = SunPosition(
+            azimuth = 148f,
+            altitude = 34f,
+            isSunVisible = true
+        ),
+    )
 }
