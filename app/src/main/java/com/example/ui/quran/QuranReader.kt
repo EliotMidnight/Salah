@@ -286,7 +286,7 @@ fun QuranReader(
                     .padding(end = space.lg + SafeArea.sides())
             )
 
-            if (state.isAudioPlaying) {
+            if (state.isAudioPlaying && state.currentAudioReciter != null) {
                 AudioStrip(
                     // From the *playing* reference, not from the reader's surah. The
                     // strip says what is being recited, and the reader may have
@@ -294,7 +294,11 @@ fun QuranReader(
                     // the text is in and the surah being recited are two different
                     // answers and the strip must be reporting the audio's.
                     ref = state.currentAudioRef,
-                    reciter = state.reciter,
+                    // And from the *streaming* reciter, not the preference: the
+                    // preference says who the reader chose; the player says who is
+                    // being heard. They were the same value only while the stream
+                    // ignored the choice.
+                    reciter = state.currentAudioReciter.orEmpty(),
                     onStop = onStopAudio,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)

@@ -6,6 +6,7 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import android.media.MediaPlayer
 import android.net.Uri
+import com.example.data.model.Reciter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -15,14 +16,40 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.Locale
 import kotlin.math.sin
 
 data class AudioPlaybackState(
     val isPlaying: Boolean = false,
     val surahNumber: Int = 1,
     val ayahNumber: Int = 1,
+    /**
+     * The reciter actually being streamed, or null when what is playing is not
+     * a recitation - a Settings preview, for instance.
+     *
+     * Null rather than a default reciter, because the recitation banner reads
+     * this and no banner may ever name a stream reciting when the reader could
+     * be hearing an adhan preview just as easily.
+     */
+    val reciter: Reciter? = null,
 )
+
+/**
+ * The preview tone for a reciter, in Hz.
+ *
+ * A placeholder tone: a Settings preview cannot be a sample of a reciter's
+ * voice, so each reciter gets its own steady pitch and the reader hears that
+ * *this* reciter's mapping fired. Keyed by `when` over [Reciter] and not by
+ * substring because the branches are compiler-checked - a reciter added to the
+ * enum without a tone fails to compile, and a renamer cannot quietly lose one.
+ * The old matcher was `name.contains(...)`, and a third of its branches were
+ * for a reciter this app never offered.
+ */
+internal fun previewToneHz(reciter: Reciter): Double = when (reciter) {
+    Reciter.ALAFASY -> 293.66 // D4
+    Reciter.BASIT -> 220.00 // A3
+    Reciter.HUSARY -> 246.94 // B3
+    Reciter.SHURAIM -> 349.23 // F4
+}
 
 class QuranAudioPlayer(private val context: Context) {
 
@@ -35,26 +62,24 @@ class QuranAudioPlayer(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Main)
     private val appContext: Context get() = context.applicationContext
 
-    fun playAyah(surahNumber: Int, ayahNumber: Int, onAyahCompleted: (() -> Unit)? = null) {
+    fun playAyah(surahNumber: Int, ayahNumber: Int, reciter: Reciter, onAyahCompleted: (() -> Unit)? = null) {
         stop()
 
         _playbackState.value = _playbackState.value.copy(
             isPlaying = true,
             surahNumber = surahNumber,
             ayahNumber = ayahNumber,
+            reciter = reciter,
         )
 
-        // Try online audio stream (EveryAyah public domain audio)
+        // Try online audio stream (EveryAyah public domain audio).
         //
-        // `Locale.ROOT` deliberately, and the reason is not tidiness: these digits go
-        // into a URL, and in a locale whose digits are not ASCII - Arabic, Urdu,
-        // Bengali, all of which this app ships in - `String.format("%03d", 2)` produces
-        // "٠٠٢". everyayah.com names files in ASCII, so the request 404s and the reader
-        // hears nothing, in exactly the languages where listening matters most. Lint
-        // flags the implicit default here and was right to.
-        val paddedSurah = String.format(Locale.ROOT, "%03d", surahNumber)
-        val paddedAyah = String.format(Locale.ROOT, "%03d", ayahNumber)
-        val url = "https://everyayah.com/data/Alafasy_128kbps/${paddedSurah}${paddedAyah}.mp3"
+        // The directory is the reciter's own, from [Reciter]: the same enum the
+        // Settings picker offers, so the selection and the stream are the one
+        // fact. The banner can only name a reciter whose stream is real, because
+        // it names the [Reciter] recorded here and not the preference stored
+        // beside it.
+        val url = reciter.verseUrl(surahNumber, ayahNumber)
 
         try {
             var prepared = false
@@ -191,6 +216,10 @@ class QuranAudioPlayer(private val context: Context) {
         stop()
         _playbackState.value = _playbackState.value.copy(
             isPlaying = true,
+            // A preview is not a recitation, whatever reciter's tone it plays:
+            // the recitation banner reads who is streaming, and a Settings
+            // preview must not be able to borrow a reciter's name for an adhan.
+            reciter = null,
         )
         synthJob = scope.launch(Dispatchers.Default) {
             try {
@@ -198,25 +227,12 @@ class QuranAudioPlayer(private val context: Context) {
                 val durationSec = 3.0
                 val numSamples = (sampleRate * durationSec).toInt()
                 val samples = ShortArray(numSamples)
-                // **Reciters, not adhan sounds.**
-                //
-                // This list began with Makkah, Madinah, Al-Aqsa and Moroccan - the
-                // *adhan* vocabulary, copied from the synthesizer - and then carried
-                // three reciter names after them. None of the first four can appear
-                // here: the four callers of this function pass a reciter, a sound, an
-                // alert mode, or a sound label, and a reciter is not a place. So four
-                // of the seven branches could never fire, and the two vocabularies sat
-                // in one function where either looked plausible.
-                //
-                // A reciter's preview is a placeholder tone, and its own registry is
-                // [com.example.data.model.Reciter]; the mapping is keyed on the
-                // reciter's key so a rename cannot silently fall through.
-                val baseFreq = when {
-                    name.contains("Basit") -> 220.00 // A3
-                    name.contains("Husary") -> 246.94 // B3
-                    name.contains("Ghamdi") -> 349.23 // F4
-                    else -> 293.66 // D4
-                }
+                // **Reciters, not adhan sounds.** The caller of this branch always
+                // passes a reciter's name - the adhan sounds and alert modes are
+                // dispatched to the synthesizer before anything reaches here - so
+                // the mapping is keyed on the [Reciter] the name resolves to, in
+                // [previewToneHz], where a missing branch is a compile error.
+                val baseFreq = previewToneHz(Reciter.from(name))
                 for (i in 0 until numSamples) {
                     val t = i.toDouble() / sampleRate
                     val envelope = kotlin.math.exp(-0.8 * t) * (1.0 - kotlin.math.exp(-20.0 * t))

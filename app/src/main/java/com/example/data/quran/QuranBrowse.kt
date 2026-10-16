@@ -34,6 +34,16 @@ object QuranBrowse {
      */
     const val TRANSLATION_EDITION = QuranCorpus.TRANSLATION_EDITION
 
+    /**
+     * The riwayah every verse's Arabic text is written in.
+     */
+    const val TEXT_RIWAYAH = QuranCorpus.TEXT_RIWAYAH
+
+    /**
+     * The script every verse's Arabic text is written in.
+     */
+    const val TEXT_SCRIPT = QuranCorpus.TEXT_SCRIPT
+
     /** Every verse, in canonical order. */
     val ayahs: List<Ayah> get() = QuranCorpus.ayahs
 

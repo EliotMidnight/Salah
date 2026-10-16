@@ -49,6 +49,7 @@ import com.example.data.model.CalculationMethod
 import com.example.ui.LocationStatus
 import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
+import com.example.data.model.Reciter
 import com.example.data.model.UserLocation
 import com.example.data.quran.QuranBrowse
 import com.example.ui.SalahUiState
@@ -98,14 +99,17 @@ private val AUTO_SILENCE_OPTIONS = listOf(15, 20, 30, 45)
  * automatically, and there is nothing left to keep in step.
  */
 private val ADHAN_SOUNDS: List<AdhanSound> = AdhanSound.offered
-private val RECITERS = listOf(
-    "Mishary Rashid Alafasy",
-    "Abdul Basit Abdus Samad",
-    "Mahmoud Khalil Al-Husary",
-    "Saud Ash-Shuraim"
-)
-private val RIWAYAHS = listOf("Hafs 'an 'Asim", "Warsh 'an Nafi", "Qalun 'an Nafi", "Al-Duri 'an Abi 'Amir")
-private val SCRIPTS = listOf("Uthmani (Madani)", "Maghrebi", "Indo-Pak")
+
+/**
+ * The recitations the picker offers.
+ *
+ * [Reciter.offered] rather than a hand-written list, for the same reason as
+ * [ADHAN_SOUNDS]: the list and the player were two vocabularies and only the
+ * player's copy was real. It streamed one reciter - the directory was literal
+ * text in `playAyah` - so choosing "Abdul Basit Abdus Samad" renamed the
+ * recitation banner while every stream stayed Alafasy's.
+ */
+private val RECITERS: List<Reciter> = Reciter.offered
 private val THEMES = listOf("System Default", "Dark Mode (OLED)", "Clean Light")
 private val HIJRI_OFFSETS = listOf(-2, -1, 0, 1, 2)
 private val PRE_PRAYER_OFFSETS = listOf(5, 10, 15, 20, 30)
@@ -180,9 +184,7 @@ fun SettingsScreen(
     onAutoSilentDuringPrayerToggle: () -> Unit = {},
     onAutoSilentDurationChange: (Int) -> Unit = {},
     onLanguageSelect: (String) -> Unit = {},
-    onRiwayahSelect: (String) -> Unit = {},
     onThemeSelect: (String) -> Unit = {},
-    onQuranScriptSelect: (String) -> Unit = {},
     onTimeFormatToggle: (Boolean) -> Unit,
     onAdhanSoundSelect: (AdhanSound) -> Unit = {},
     onHijriAdjustmentChange: (Int) -> Unit = {},
@@ -422,16 +424,30 @@ fun SettingsScreen(
             // -- Quran ----------------------------------------------------
             SectionHeader(strings.sectionQuran)
             SectionGroup {
+                // Facts, not choices.
+                //
+                // These two rows opened pickers like the reciter's below - four
+                // riwayahs and three scripts - but the corpus is one text: one
+                // narration (Hafs 'an 'Asim) in one orthography (Uthmani). The
+                // other five answers renamed the setting and changed nothing the
+                // reader reads or hears, and the pickers made the text look like
+                // something it is not. What remains is the reader being told what
+                // the text actually is, and the one real choice beside it: the
+                // voice they hear it in.
                 ActionRow(
                     title = strings.riwayahLabel,
-                    value = state.riwayah,
-                    onClick = { sheet = Sheet.RIWAYAH }
+                    value = QuranBrowse.TEXT_RIWAYAH,
+                    showChevron = false,
+                    enabled = false,
+                    onClick = {}
                 )
                 RowDivider()
                 ActionRow(
                     title = strings.scriptStyleLabel,
-                    value = state.quranScript,
-                    onClick = { sheet = Sheet.SCRIPT }
+                    value = QuranBrowse.TEXT_SCRIPT,
+                    showChevron = false,
+                    enabled = false,
+                    onClick = {}
                 )
                 RowDivider()
                 ActionRow(
@@ -962,47 +978,29 @@ fun SettingsScreen(
             title = strings.more.chooseReciter,
             onDismiss = { sheet = null; onStopAudioPreview() }
         ) {
+            // The selection is the reciter the stored name resolves to, through
+            // the same [Reciter.from] the player uses: a stored name the registry
+            // cannot resolve has always streamed Alafasy, so Alafasy is what the
+            // tick must be on.
+            val selected = Reciter.from(state.reciter)
             RECITERS.forEach { reciter ->
                 OptionRow(
-                    title = reciter,
-                    selected = reciter == state.reciter,
-                    onClick = { onReciterSelect(reciter) },
+                    title = reciter.displayName,
+                    selected = reciter == selected,
+                    onClick = { onReciterSelect(reciter.displayName) },
                     trailing = {
                         PlayPreviewButton(
-                            label = "${strings.more.testSound}: $reciter",
-                            isPlaying = state.audioPreviewPlaying == reciter,
+                            label = "${strings.more.testSound}: ${reciter.displayName}",
+                            isPlaying = state.audioPreviewPlaying == reciter.displayName,
                             onToggle = {
-                                if (state.audioPreviewPlaying == reciter) onStopAudioPreview()
-                                else onPlayAudioPreview(reciter)
+                                if (state.audioPreviewPlaying == reciter.displayName) {
+                                    onStopAudioPreview()
+                                } else {
+                                    onPlayAudioPreview(reciter.displayName)
+                                }
                             }
                         )
                     }
-                )
-            }
-        }
-
-        Sheet.RIWAYAH -> OptionSheet(
-            title = strings.riwayahLabel,
-            onDismiss = { sheet = null }
-        ) {
-            RIWAYAHS.forEach { value ->
-                OptionRow(
-                    title = value,
-                    selected = value == state.riwayah,
-                    onClick = { onRiwayahSelect(value); sheet = null }
-                )
-            }
-        }
-
-        Sheet.SCRIPT -> OptionSheet(
-            title = strings.more.chooseScript,
-            onDismiss = { sheet = null }
-        ) {
-            SCRIPTS.forEach { value ->
-                OptionRow(
-                    title = value,
-                    selected = value == state.quranScript,
-                    onClick = { onQuranScriptSelect(value); sheet = null }
                 )
             }
         }
@@ -1153,7 +1151,7 @@ fun SettingsScreen(
 /** The pick-one panels, as one enum so only one can ever be open. */
 private enum class Sheet {
     LANGUAGE, THEME, LOCATION, METHOD, MADHHAB, ADJUSTMENTS, HIJRI,
-    PRE_PRAYER, PRAYER_MODES, ADHAN_SOUND, RECITER, RIWAYAH, SCRIPT,
+    PRE_PRAYER, PRAYER_MODES, ADHAN_SOUND, RECITER,
     VOLUME, CALCULATION, STORAGE, COMPASS
 }
 

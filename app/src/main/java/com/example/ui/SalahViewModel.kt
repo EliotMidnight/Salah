@@ -36,6 +36,7 @@ import com.example.data.model.QuranReadingLayout
 import com.example.data.model.QuranReadingOptions
 import com.example.data.model.QuranScrollDirection
 import com.example.data.model.QuranRef
+import com.example.data.model.Reciter
 import com.example.data.model.Surah
 import com.example.data.model.UserLocation
 import com.example.data.quran.QuranBrowse
@@ -129,12 +130,10 @@ data class SalahUiState(
     val isOnline: Boolean = false,
     // Expanded user preferences
     val language: String = "English",
-    val riwayah: String = "Hafs 'an 'Asim",
     val appTheme: String = "System Default",
-    val quranScript: String = "Uthmani (Madani)",
     val timeFormat24h: Boolean = true,
     val adhanSound: AdhanSound = AdhanSound.MAKKAH,
-    val reciter: String = "Mishary Rashid Alafasy",
+    val reciter: String = Reciter.ALAFASY.displayName,
     val prePrayerOffsetMinutes: Int = 10,
     val adhanVolume: Float = 0.85f,
     val audioPreviewPlaying: String? = null,
@@ -206,6 +205,18 @@ data class SalahUiState(
      * the argument it was asked to play - and the field carrying it was never read.
      */
     val currentAudioRef: QuranRef = QuranRef.Start,
+
+    /**
+     * The reciter actually being streamed, or null when nothing is and when what
+     * is playing is not a recitation (a Settings preview).
+     *
+     * The recitation banner reads this and has never read the reciter
+     * *preference*: the preference says who the reader chose, and only the
+     * player knows who is being heard. They were the same value for as long as
+     * the player streamed one reciter, and following one change while the other
+     * ignores it is how a promise rots.
+     */
+    val currentAudioReciter: String? = null,
     /**
      * The reader's own preferences, as one value.
      */
@@ -374,20 +385,8 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         }
 
         viewModelScope.launch {
-            repository.riwayahFlow.collectLatest { r ->
-                _uiState.value = _uiState.value.copy(riwayah = r)
-            }
-        }
-
-        viewModelScope.launch {
             repository.themeFlow.collectLatest { t ->
                 _uiState.value = _uiState.value.copy(appTheme = t)
-            }
-        }
-
-        viewModelScope.launch {
-            repository.quranScriptFlow.collectLatest { s ->
-                _uiState.value = _uiState.value.copy(quranScript = s)
             }
         }
 
@@ -483,7 +482,12 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
                         surah = ps.surahNumber,
                         ayah = ps.ayahNumber,
                         page = QuranBrowse.pageOf(ps.surahNumber, ps.ayahNumber)
-                    )
+                    ),
+                    // What the player is streaming, not what the reader chose.
+                    // Null when nothing is streamed, or when what plays is a
+                    // Settings preview - the banner has no way to say
+                    // "reciting" without a reciter behind it.
+                    currentAudioReciter = ps.reciter?.displayName
                 )
             }
         }
@@ -858,16 +862,8 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         repository.setLanguage(language)
     }
 
-    fun setRiwayah(riwayah: String) {
-        repository.setRiwayah(riwayah)
-    }
-
     fun setAppTheme(theme: String) {
         repository.setAppTheme(theme)
-    }
-
-    fun setQuranScript(script: String) {
-        repository.setQuranScript(script)
     }
 
     fun setTimeFormat24h(is24h: Boolean) {
@@ -1055,19 +1051,17 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         setTimeFormat24h(true)
         setAppTheme("System Default")
         setLanguage("English")
-        setQuranScript("Uthmani (Madani)")
 
         // The Quran reader's own preferences, so a reset really does hand back a
         // reader that looks and behaves the way it did on first run.
         setQuranReadingOptions(QuranReadingOptions())
         setQuranImmersive(false)
 
-        // Reciter and riwayah name an audio stream and a reading tradition. There is
-        // one of each in this app - the player streams from everyayah.com and the
-        // corpus is one text - so they reset to what is actually offered rather than
-        // being left as labels for nothing.
-        setReciter("Mishary Rashid Alafasy")
-        setRiwayah("Hafs 'an 'Asim")
+        // The reciter is the one Quran choice Settings still offers, because it is
+        // the one that does something: it names the directory the player streams.
+        // The riwayah and the script were choices over a corpus that is one text -
+        // they are facts now, not preferences, and there is nothing left to reset.
+        setReciter(Reciter.ALAFASY.displayName)
 
         // Location and the reader's place are deliberately **not** reset.
         //
@@ -1189,7 +1183,11 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             audioPlayer.pause()
         } else {
             _uiState.value = _uiState.value.copy(currentAudioRef = ref)
-            audioPlayer.playAyah(ayah.surahNumber, ayah.ayahNumber) {
+            // The reciter the *preference* names, resolved through [Reciter]:
+            // the same registry the picker offers, so an old or foreign stored
+            // name cannot make the player stream something the banner will not
+            // describe.
+            audioPlayer.playAyah(ayah.surahNumber, ayah.ayahNumber, Reciter.from(_uiState.value.reciter)) {
                 // Autoplay the next ayah of **this verse's** surah.
                 //
                 // It used to walk `_uiState.currentSurahAyahs` and stop at

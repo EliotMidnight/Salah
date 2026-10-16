@@ -91,14 +91,8 @@ class SalahRepository(
     private val _languageFlow = MutableStateFlow(prefs.getString("pref_language", "English") ?: "English")
     val languageFlow: StateFlow<String> = _languageFlow.asStateFlow()
 
-    private val _riwayahFlow = MutableStateFlow(prefs.getString("pref_riwayah", "Hafs 'an 'Asim") ?: "Hafs 'an 'Asim")
-    val riwayahFlow: StateFlow<String> = _riwayahFlow.asStateFlow()
-
     private val _themeFlow = MutableStateFlow(prefs.getString("pref_theme", "System Default") ?: "System Default")
     val themeFlow: StateFlow<String> = _themeFlow.asStateFlow()
-
-    private val _quranScriptFlow = MutableStateFlow(prefs.getString("pref_quran_script", "Uthmani (Madani)") ?: "Uthmani (Madani)")
-    val quranScriptFlow: StateFlow<String> = _quranScriptFlow.asStateFlow()
 
     private val _timeFormat24hFlow = MutableStateFlow(prefs.getBoolean("pref_time_format_24h", true))
     val timeFormat24hFlow: StateFlow<Boolean> = _timeFormat24hFlow.asStateFlow()
@@ -353,19 +347,9 @@ class SalahRepository(
         _languageFlow.value = language
     }
 
-    fun setRiwayah(riwayah: String) {
-        prefs.edit().putString("pref_riwayah", riwayah).apply()
-        _riwayahFlow.value = riwayah
-    }
-
     fun setAppTheme(theme: String) {
         prefs.edit().putString("pref_theme", theme).apply()
         _themeFlow.value = theme
-    }
-
-    fun setQuranScript(script: String) {
-        prefs.edit().putString("pref_quran_script", script).apply()
-        _quranScriptFlow.value = script
     }
 
     fun setTimeFormat24h(is24h: Boolean) {

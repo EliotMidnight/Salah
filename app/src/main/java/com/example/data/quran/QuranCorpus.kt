@@ -21,6 +21,20 @@ internal object QuranCorpus {
      */
     const val TRANSLATION_EDITION = "English (Saheeh International)"
 
+    /**
+     * The riwayah of the one text this app bundles.
+     *
+     * A fact about `uthmani.txt`, not a preference: the bundled text is Tanzil's
+     * Uthmani text, which is the Hafs 'an 'Asim narration, and no setting can
+     * change that. Settings used to offer Warsh, Qalun and Al-Duri beside it -
+     * four answers to a question with one - so a reader could "pick" a narration
+     * they were not reading.
+     */
+    const val TEXT_RIWAYAH = "Hafs 'an 'Asim"
+
+    /** The script of the one bundled text: Uthmani orthography. */
+    const val TEXT_SCRIPT = "Uthmani (Madani)"
+
     const val SURA_COUNT = 114
     const val VERSE_COUNT = 6236
     const val PAGE_COUNT = 604
