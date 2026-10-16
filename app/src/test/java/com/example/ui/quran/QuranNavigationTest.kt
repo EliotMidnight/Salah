@@ -1,6 +1,10 @@
 package com.example.ui.quran
 
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
@@ -9,12 +13,17 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.example.data.model.QuranReadingLayout
+import com.example.data.model.QuranReadingOptions
 import com.example.data.model.QuranRef
+import com.example.data.model.QuranScrollDirection
 import com.example.data.quran.QuranBrowse
 import com.example.ui.SalahUiState
 import com.example.ui.localization.ProvideAppLanguage
 import com.example.ui.theme.SalahTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
 import org.junit.Rule
 import org.junit.Test
@@ -64,23 +73,60 @@ class QuranNavigationTest {
     private val state = mutableStateOf(SalahUiState())
     private var requested: QuranRef? = null
 
+    /**
+     * Whether the destination is composed.
+     *
+     * The destination lives inside a [androidx.compose.runtime.saveable.SaveableStateHolder],
+     * the same arrangement `NavHost` uses for a destination kept on the back stack
+     * with `saveState` - so toggling this leaves the destination and comes back the
+     * way a tab switch does, restoring everything `rememberSaveable` held.
+     */
+    private var mounted by mutableStateOf(true)
+
     private fun mount() {
         compose.setContent {
             SalahTheme {
                 ProvideAppLanguage(language = "English") {
-                    QuranScreen(
-                        state = state.value,
-                        onOpen = { requested = it },
-                        onAyahViewed = {},
-                        onToggleBookmark = {},
-                        onTogglePlayAyah = {},
-                        onStopAudio = {},
-                        onOptionsChange = {},
-                        onImmersiveChange = {}
-                    )
+                    val holder = rememberSaveableStateHolder()
+                    if (mounted) {
+                        holder.SaveableStateProvider("quran") {
+                            QuranScreen(
+                                state = state.value,
+                                onOpen = { requested = it },
+                                onOpenConsumed = {
+                                    state.value = state.value.copy(pendingOpen = null)
+                                },
+                                onAyahViewed = {},
+                                onToggleBookmark = {},
+                                onTogglePlayAyah = {},
+                                onStopAudio = {},
+                                onOptionsChange = {},
+                                onImmersiveChange = {}
+                            )
+                        }
+                    }
                 }
             }
         }
+        awaitReader()
+    }
+
+    /**
+     * Leave the destination and come back.
+     *
+     * `LaunchedEffect`s run again from scratch on the way back, while
+     * `rememberSaveable` state - the reader's own position among it - is
+     * restored. That is the shape of the re-entry bug: a request still set in
+     * the ViewModel was re-delivered by the fresh effect on every return.
+     */
+    private fun remount() {
+        mounted = false
+        compose.waitForIdle()
+        mounted = true
+        awaitReader()
+    }
+
+    private fun awaitReader() {
         // The destination loads the corpus before it shows the reader (off the
         // main thread, once per process), so the reader is what to wait for.
         compose.waitUntil(timeoutMillis = 60_000) {
@@ -99,14 +145,15 @@ class QuranNavigationTest {
      *
      * Read from the text a reader sees, not from the accessibility label: the two are
      * built from the same `page` here, and a test that reached past the rendered text
-     * would go on passing if the label drifted from it.
+     * would go on passing if the label drifted from it. Read from *the pill*, not by
+     * searching all the text on screen: the flowing layout prints page rules among
+     * the verses, and a global search finds those first.
      */
     private fun pillPage(): Int {
-        compose.onNodeWithTag("reader_index").assertIsDisplayed()
-        val shown = compose
-            .onNodeWithText("Page ", substring = true, useUnmergedTree = true)
+        val pill = compose.onNodeWithTag("reader_index")
+            .assertIsDisplayed()
             .fetchSemanticsNode()
-        val text = shown.config.getOrNull(SemanticsProperties.Text)
+        val text = pill.config.getOrNull(SemanticsProperties.Text)
             ?.joinToString(" ") { it.text }
             ?: "the control pill's page label has no text"
         return Regex("Page (\\d+)").find(text)?.groupValues?.get(1)?.toInt()
@@ -241,5 +288,75 @@ class QuranNavigationTest {
             requested?.page,
             pillPage()
         )
+    }
+
+    @Test
+    fun `an honoured request is emptied, so a return to the destination cannot drag the reader back`() {
+        // The defect this guards: `pendingOpen` was set and never cleared, so the
+        // destination's effect - keyed on the request - ran again on every re-entry
+        // (a tab switch keeps the destination through `saveState`). A reader who
+        // arrived from the index and read on was pulled back to the index's verse
+        // on their next visit to the tab - and the debounced position writer saved
+        // the stale place, so the wrong page outlived the session.
+        val kahf = QuranBrowse.ref(18, 1)!!
+        mount()
+        deliver(kahf)
+        assertEquals("the request did not reach the reader", 293, pillPage())
+        assertNull(
+            "the honoured request stayed in the mailbox, so every re-entry into " +
+                "the destination re-delivers it",
+            state.value.pendingOpen
+        )
+
+        // The reader moves on by their own hand: the page-turn action the page
+        // exposes to accessibility, which drives the same `turn` a swipe and the
+        // pager share.
+        nextPage()
+        val moved = pillPage()
+        assertNotEquals("fixture: the page turn did not move the reader", 293, moved)
+
+        // And switches to the flowing text. Which surface the reader is on decides
+        // whether a replayed request is *visible*: the pager pushes its page into
+        // the position on its first collection, so it shrugs the stale request off;
+        // the list takes its seating from the position and drops its opening
+        // emission, so a stale request drags the reader - and then the list follows
+        // them there. That is the reader this guards.
+        state.value = state.value.copy(
+            quranReadingOptions = QuranReadingOptions(
+                layout = QuranReadingLayout.CONTINUOUS,
+                perVerse = true,
+                scroll = QuranScrollDirection.VERTICAL
+            )
+        )
+        compose.waitForIdle()
+        assertEquals("the layout switch lost the reader's place", moved, pillPage())
+
+        // Leave the destination and come back, the way a tab switch does.
+        remount()
+
+        assertEquals(
+            "a request that had already been honoured was delivered again on re-entry " +
+                "and dragged the reader back",
+            moved,
+            pillPage()
+        )
+    }
+
+    /** Turn the page through the page's own accessibility action. */
+    private fun nextPage() {
+        val page = pillPage()
+        // The page-turn actions ride on the page's text node - the same node
+        // that carries the page's state description - and the pager composes its
+        // neighbours, so the right node is picked by what it says it is.
+        val node = compose.onAllNodesWithTag("mushaf_page_text", useUnmergedTree = true)
+            .fetchSemanticsNodes()
+            .first {
+                it.config.getOrNull(SemanticsProperties.StateDescription) == "Page $page"
+            }
+        val turn = node.config[SemanticsActions.CustomActions]
+            .first { it.label == "Next page" }
+            .action
+        compose.runOnIdle { turn() }
+        compose.waitForIdle()
     }
 }

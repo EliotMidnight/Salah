@@ -37,6 +37,15 @@ import kotlinx.coroutines.withContext
 fun QuranScreen(
     state: SalahUiState,
     onOpen: (QuranRef) -> Unit,
+    /**
+     * Told when the pending request has been honoured, so it can be forgotten.
+     *
+     * Required, not defaulted: a caller that does not pass it is a caller that
+     * leaves the request set, which is exactly the bug the effect below spent a
+     * release with - a request re-delivered on every re-entry into the
+     * destination. The compiler is the only reliable reminder.
+     */
+    onOpenConsumed: () -> Unit,
     onAyahViewed: (Ayah) -> Unit,
     onToggleBookmark: (Ayah) -> Unit,
     onTogglePlayAyah: (Ayah) -> Unit,
@@ -79,15 +88,26 @@ fun QuranScreen(
         onPosition = { ref -> QuranBrowse.ayah(ref.surah, ref.ayah)?.let(onAyahViewed) }
     )
 
-    // A request to be put somewhere, honoured once.
+    // A request to be put somewhere, honoured once - and consumed.
     //
     // Keyed on the *request*, not on the position, so a request fires the reader
-    // exactly once and the reader's own movements cannot re-trigger it - the loop
-    // that the two-writer arrangement invited. `goTo` is the only way anything
-    // outside a reading surface moves the reader, which is what makes "where am I"
-    // have one answer.
+    // exactly once per arrival and the reader's own movements cannot re-trigger it -
+    // the loop that the two-writer arrangement invited. `goTo` is the only way
+    // anything outside a reading surface moves the reader, which is what makes
+    // "where am I" have one answer.
+    //
+    // Consumption is the other half of "once". A request left set is an event kept
+    // as state: the destination is recomposed on every re-entry (a tab switch
+    // re-uses the destination through `saveState`/`restoreState`), this effect
+    // re-runs with the same request, and the reader is moved back to it - and the
+    // debounced position writer saves that place. The ViewModel is told to forget
+    // the request the moment it has been handed over, so a re-entry finds an empty
+    // mailbox and the reader's own place stands.
     LaunchedEffect(state.pendingOpen) {
-        state.pendingOpen?.let { position.goTo(it) }
+        state.pendingOpen?.let { ref ->
+            position.goTo(ref)
+            onOpenConsumed()
+        }
     }
 
     // The system back gesture closes the reader's own layers before it leaves

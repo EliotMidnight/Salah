@@ -1114,6 +1114,23 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
     }
 
     /**
+     * The reader has honoured the pending request; there is nothing left to open.
+     *
+     * A request is an *event*, and `pendingOpen` is its mailbox - it must be empty
+     * again the moment it has been read. It used to stay set, and the destination's
+     * effect is keyed on the request, so every return to the Quran destination (a
+     * tab switch, a back-stack restore) re-ran the same request and moved the
+     * reader to old news; the debounced position writer then persisted that place,
+     * so the stale request quietly overwrote where the reader really was.
+     *
+     * The destination calls this, not the ViewModel, because only the reader knows
+     * the moment the request has been honoured.
+     */
+    fun onOpenConsumed() {
+        _uiState.value = _uiState.value.copy(pendingOpen = null)
+    }
+
+    /**
      * The reader has settled on a verse; remember it for next time.
      *
      * **Persistence only.** This used to also write the reader's in-session position,

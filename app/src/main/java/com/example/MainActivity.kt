@@ -315,6 +315,7 @@ private fun SalahApp(viewModel: SalahViewModel) {
                     QuranScreen(
                         state = uiState,
                         onOpen = viewModel::requestOpen,
+                        onOpenConsumed = viewModel::onOpenConsumed,
                         onAyahViewed = viewModel::onAyahViewed,
                         onToggleBookmark = viewModel::toggleBookmark,
                         onTogglePlayAyah = viewModel::togglePlayAyah,
