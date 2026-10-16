@@ -222,7 +222,12 @@ data class SalahUiState(
      */
     val quranReadingOptions: QuranReadingOptions = QuranReadingOptions(),
     /**
-     * Whether the reader has taken over the whole screen.
+     * Whether the reader is taking over the whole screen, this moment.
+     *
+     * Session state, never persisted: the takeover is a mode of the reader's
+     * stay in the destination, and `MainActivity` clears it when the
+     * destination under it changes, so it can neither hide the dock on Today
+     * nor outlive a relaunch.
      */
     val isQuranImmersive: Boolean = false
 ) {
@@ -500,7 +505,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         // `QuranRef.Start` - Al-Fatihah, page 1 - and the stored Continue Reading row
         // replaces as soon as it arrives. So a first run opens Al-Fatihah because that
         // is the start of the book, not because something had to be written down first.
-        _uiState.value = _uiState.value.copy(isQuranImmersive = repository.quranImmersive)
 
         // Register background prayer alarm scheduling
         PrayerAlarmScheduler.scheduleAllPrayers(application)
@@ -852,9 +856,15 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     /**
      * Takes the reader over the whole screen, or gives the screen back.
+     *
+     * Session state rather than a preference. It used to be persisted, which
+     * meant a reader who entered the mode and then tapped Today left the dock
+     * and the status bar hidden on Today - and the flag survived the process,
+     * so the first screen after a relaunch was missing its chrome too. Nothing
+     * here writes it down any more, and `MainActivity` clears it when the
+     * reader's destination is left.
      */
     fun setQuranImmersive(immersive: Boolean) {
-        repository.quranImmersive = immersive
         _uiState.value = _uiState.value.copy(isQuranImmersive = immersive)
     }
 
@@ -1055,7 +1065,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         // The Quran reader's own preferences, so a reset really does hand back a
         // reader that looks and behaves the way it did on first run.
         setQuranReadingOptions(QuranReadingOptions())
-        setQuranImmersive(false)
 
         // The reciter is the one Quran choice Settings still offers, because it is
         // the one that does something: it names the directory the player streams.

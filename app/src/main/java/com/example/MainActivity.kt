@@ -127,6 +127,43 @@ private val SALAH_TABS = listOf(
     SalahDestination.SETTINGS
 )
 
+/**
+ * Whether the reader is taking the whole screen, this moment.
+ *
+ * The flag alone is not the answer, and that was the bug: the reader's
+ * immersive flag hid the dock and the status bar on Today, and - because it was
+ * persisted - on the first screen after every relaunch. A takeover is a fact
+ * about the destination on screen, so the route is half the answer, and the
+ * dock's visibility and the reset below both read this one predicate so they
+ * cannot disagree about when the takeover is in force.
+ */
+internal fun readerTakesTheScreen(route: String, immersive: Boolean): Boolean =
+    immersive && route == SalahDestination.QURAN.route
+
+/**
+ * Ends the reader's takeover when the destination under it changes.
+ *
+ * The derivation above keeps the chrome honest on the frame the route changes;
+ * this keeps the flag honest, so a later visit to the reader starts with the
+ * chrome in place instead of reliving a mode the reader had left. The flag is
+ * session state now - nothing writes it to preferences - so this is the only
+ * thing that ends it besides the reader's own toggle.
+ *
+ * Scoped to the route rather than run from the destination's `onDispose`,
+ * because a destination leaves the screen by more paths than it can call back
+ * on: a tab switch and a back-stack pop are not the same callback.
+ */
+@Composable
+internal fun ClearImmersiveWhenLeavingReader(
+    route: String,
+    immersive: Boolean,
+    onClear: () -> Unit
+) {
+    LaunchedEffect(route, immersive) {
+        if (immersive && !readerTakesTheScreen(route, immersive)) onClear()
+    }
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -152,28 +189,16 @@ class MainActivity : ComponentActivity() {
             // battery could not be read at all. The dark theme happened to match
             // the default, which is why only light mode looked broken.
             val view = LocalView.current
-            // The reader's immersive mode is the only thing in the app that
-            // hides the status bar, so it is read here rather than inside the
-            // reader: the bar belongs to the window, not to one composable, and
-            // setting it from a screen that gets navigated away from would leave
-            // it hidden on Today.
-            val immersive = uiState.isQuranImmersive
+            // The status bar's *icons* follow the theme, and only the theme.
+            // Whether the bar is there at all depends on the destination on
+            // screen, which this composable does not know - `SalahApp` derives
+            // that from the route and owns the hide/show below.
             if (!view.isInEditMode) {
                 SideEffect {
                     val window = (view.context as? Activity)?.window ?: return@SideEffect
                     val controller = WindowCompat.getInsetsController(window, view)
                     controller.isAppearanceLightStatusBars = !darkTheme
                     controller.isAppearanceLightNavigationBars = !darkTheme
-                    if (immersive) {
-                        controller.hide(WindowInsetsCompat.Type.statusBars())
-                        // Swipe it back rather than never showing it again: a bar
-                        // the user cannot summon with a gesture is a bar they will
-                        // assume the app got stuck behind.
-                        controller.systemBarsBehavior =
-                            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                    } else {
-                        controller.show(WindowInsetsCompat.Type.statusBars())
-                    }
                 }
             }
 
@@ -200,6 +225,42 @@ private fun SalahApp(viewModel: SalahViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val strings = LocalStrings.current
+
+    // Whether the reader is taking the whole screen, this moment.
+    //
+    // Derived from the route, not read from the flag alone. The flag says the
+    // reader asked for the takeover; the route says they are still in the
+    // reader. Reading the flag by itself is how the dock and the status bar
+    // stayed hidden on Today, and the flag below is cleared the moment the
+    // reader leaves so a return does not relive the mode.
+    val immersive = readerTakesTheScreen(currentRoute, uiState.isQuranImmersive)
+    ClearImmersiveWhenLeavingReader(
+        route = currentRoute,
+        immersive = uiState.isQuranImmersive,
+        onClear = { viewModel.setQuranImmersive(false) }
+    )
+
+    // The status bar belongs to the window, but whether it is hidden is a fact
+    // about the destination on screen, so it is set here where the route is
+    // known rather than inside the reader - setting it from a screen that gets
+    // navigated away from is exactly how it was left hidden on Today.
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as? Activity)?.window ?: return@SideEffect
+            val controller = WindowCompat.getInsetsController(window, view)
+            if (immersive) {
+                controller.hide(WindowInsetsCompat.Type.statusBars())
+                // Swipe it back rather than never showing it again: a bar
+                // the user cannot summon with a gesture is a bar they will
+                // assume the app got stuck behind.
+                controller.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                controller.show(WindowInsetsCompat.Type.statusBars())
+            }
+        }
+    }
 
     // The ticker is a 1 Hz recomputation and the compass is a sensor stream;
     // both run only while the app is in front of the reader. The write side
@@ -260,11 +321,12 @@ private fun SalahApp(viewModel: SalahViewModel) {
         }
     }
 
-    // The dock is hidden while the reader is immersive. Not just made transparent:
-    // the reader's own controls are already off the top of the screen at that
-    // point, so leaving a navigation bar under a full page of Arabic would be
-    // the one piece of chrome the reader could not dismiss.
-    val immersive = uiState.isQuranImmersive
+    // The dock is hidden while the reader is taking the screen. Not just made
+    // transparent: the reader's own controls are already off the top of the screen
+    // at that point, so leaving a navigation bar under a full page of Arabic would
+    // be the one piece of chrome the reader could not dismiss. The value is the
+    // route-derived one above, so "hidden" cannot be true on a destination the
+    // reader is not in.
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,

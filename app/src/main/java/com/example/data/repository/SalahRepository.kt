@@ -86,7 +86,6 @@ class SalahRepository(
         const val KEY_QURAN_ARABIC_SCALE = "pref_quran_arabic_scale"
         const val KEY_QURAN_TRANSLATION_SCALE = "pref_quran_translation_scale"
         const val KEY_QURAN_SHOW_TRANSLATION = "pref_quran_show_translation"
-        const val KEY_QURAN_IMMERSIVE = "pref_quran_immersive"
     }
     private val _languageFlow = MutableStateFlow(prefs.getString("pref_language", "English") ?: "English")
     val languageFlow: StateFlow<String> = _languageFlow.asStateFlow()
@@ -334,13 +333,6 @@ class SalahRepository(
             .apply()
         _quranReadingOptions.value = safe
     }
-
-    /**
-     * The reader's own immersive flag, kept apart from [QuranReadingOptions].
-     */
-    var quranImmersive: Boolean
-        get() = prefs.getBoolean(KEY_QURAN_IMMERSIVE, false)
-        set(value) = prefs.edit().putBoolean(KEY_QURAN_IMMERSIVE, value).apply()
 
     fun setLanguage(language: String) {
         prefs.edit().putString("pref_language", language).apply()
