@@ -20,6 +20,15 @@ import kotlin.math.sin
 
 data class AudioPlaybackState(
     val isPlaying: Boolean = false,
+    /**
+     * True while a stream is held paused, so the next tap continues it instead of
+     * starting the verse over.
+     *
+     * Separate from [isPlaying], which cannot carry it: a paused verse and a
+     * finished one are both "not playing", and only one of them has a place to go
+     * back to.
+     */
+    val isPaused: Boolean = false,
     val surahNumber: Int = 1,
     val ayahNumber: Int = 1,
     /**
@@ -32,6 +41,31 @@ data class AudioPlaybackState(
      */
     val reciter: Reciter? = null,
 )
+
+/** What a tap on a verse's play control means, from the player's own state. */
+internal enum class PlaybackTap { PLAY, PAUSE, RESUME }
+
+/**
+ * The meaning of a tap on the verse [surahNumber]:[ayahNumber].
+ *
+ * Three answers, because two are not enough: the play control asked only "is the
+ * verse I hold playing" - [AudioPlaybackState.isPlaying] - so the tap that should
+ * continue a paused recitation saw "not playing" and started the verse over from
+ * zero, re-downloading it, while [QuranAudioPlayer.resume] sat with no caller.
+ * The state read here is the player's own, not the surfaces' copy of it.
+ */
+internal fun playbackTapFor(
+    state: AudioPlaybackState,
+    surahNumber: Int,
+    ayahNumber: Int
+): PlaybackTap {
+    val isHeldVerse = state.surahNumber == surahNumber && state.ayahNumber == ayahNumber
+    return when {
+        isHeldVerse && state.isPlaying -> PlaybackTap.PAUSE
+        isHeldVerse && state.isPaused -> PlaybackTap.RESUME
+        else -> PlaybackTap.PLAY
+    }
+}
 
 /**
  * The preview tone for a reciter, in Hz.
@@ -67,6 +101,7 @@ class QuranAudioPlayer(private val context: Context) {
 
         _playbackState.value = _playbackState.value.copy(
             isPlaying = true,
+            isPaused = false,
             surahNumber = surahNumber,
             ayahNumber = ayahNumber,
             reciter = reciter,
@@ -94,14 +129,24 @@ class QuranAudioPlayer(private val context: Context) {
                 setOnPreparedListener { mp ->
                     prepared = true
                     prepareTimeoutJob?.cancel()
-                    mp.start()
-                    _playbackState.value = _playbackState.value.copy(
-                        isPlaying = true,
-                    )
+                    // The reader may have released this attempt while it prepared -
+                    // by tapping pause, which cannot pause a stream that has not
+                    // made a sound - and a callback already on its way must not
+                    // start a player that is gone.
+                    if (mediaPlayer === mp) {
+                        mp.start()
+                        _playbackState.value = _playbackState.value.copy(
+                            isPlaying = true,
+                            isPaused = false,
+                        )
+                    }
                 }
                 setOnCompletionListener {
                     prepareTimeoutJob?.cancel()
-                    _playbackState.value = _playbackState.value.copy(isPlaying = false)
+                    _playbackState.value = _playbackState.value.copy(
+                        isPlaying = false,
+                        isPaused = false,
+                    )
                     onAyahCompleted?.invoke()
                 }
                 setOnErrorListener { _, _, _ ->
@@ -138,6 +183,7 @@ class QuranAudioPlayer(private val context: Context) {
     private fun playOfflineChime(surahNumber: Int, ayahNumber: Int, onAyahCompleted: (() -> Unit)?) {
         _playbackState.value = _playbackState.value.copy(
             isPlaying = true,
+            isPaused = false,
         )
 
         synthJob = scope.launch(Dispatchers.Default) {
@@ -192,24 +238,49 @@ class QuranAudioPlayer(private val context: Context) {
             }
 
             scope.launch(Dispatchers.Main) {
-                _playbackState.value = _playbackState.value.copy(isPlaying = false)
+                _playbackState.value = _playbackState.value.copy(isPlaying = false, isPaused = false)
                 onAyahCompleted?.invoke()
             }
         }
     }
 
 
+    /**
+     * Hold the sound, and only sound that can be held.
+     *
+     * A stream that has started is paused in place, and [AudioPlaybackState.isPaused]
+     * says so, so [resume] can continue it where it stopped. Anything else is
+     * *released*: a chime has no head to continue from, and a stream still preparing
+     * has not made a sound yet - calling `pause()` on one throws, which is what the
+     * old two-way tap asked of a reader on a slow connection. Nothing is held, so
+     * the next tap on the verse starts it over rather than resuming a stream that
+     * is gone.
+     */
     fun pause() {
-        mediaPlayer?.pause()
-        synthJob?.cancel()
-        _playbackState.value = _playbackState.value.copy(isPlaying = false)
+        val player = mediaPlayer
+        val held = player != null && try {
+            player.pause()
+            true
+        } catch (_: IllegalStateException) {
+            false
+        }
+        if (held) {
+            _playbackState.value = _playbackState.value.copy(isPlaying = false, isPaused = true)
+        } else {
+            stop()
+        }
     }
 
+    /**
+     * Continue the stream [pause] held, exactly where it stopped.
+     *
+     * Every path that releases the player clears [AudioPlaybackState.isPaused] on
+     * the way, so the flag being set is the guarantee that there is a stream to
+     * start.
+     */
     fun resume() {
-        if (mediaPlayer != null) {
-            mediaPlayer?.start()
-            _playbackState.value = _playbackState.value.copy(isPlaying = true)
-        }
+        mediaPlayer?.start()
+        _playbackState.value = _playbackState.value.copy(isPlaying = true, isPaused = false)
     }
 
     fun playAudioPreview(name: String, onDone: (() -> Unit)? = null) {
@@ -287,6 +358,6 @@ class QuranAudioPlayer(private val context: Context) {
             mediaPlayer?.release()
         } catch (_: Exception) {}
         mediaPlayer = null
-        _playbackState.value = _playbackState.value.copy(isPlaying = false)
+        _playbackState.value = _playbackState.value.copy(isPlaying = false, isPaused = false)
     }
 }

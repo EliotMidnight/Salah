@@ -44,12 +44,14 @@ import com.example.data.quran.QuranDataSource
 import com.example.data.repository.SalahRepository
 import com.example.engine.HijriCalendarEngine
 import com.example.engine.MagneticFieldStatus
+import com.example.engine.PlaybackTap
 import com.example.engine.PrayerCalculationEngine
 import com.example.engine.PrayerNotificationManager
 import com.example.engine.QiblaEngine
 import com.example.engine.QiblaGuidance
 import com.example.engine.QuranAudioPlayer
 import com.example.engine.SunPosition
+import com.example.engine.playbackTapFor
 import com.example.engine.AdhanAudioSynthesizer
 import com.example.service.PrayerAlarmScheduler
 import com.example.service.PrayerAlertService
@@ -1197,24 +1199,27 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     // Audio Playback
     fun togglePlayAyah(ayah: Ayah) {
-        val ref = ayah.ref
-        if (_uiState.value.isAudioPlaying && _uiState.value.currentAudioRef == ref) {
-            audioPlayer.pause()
-        } else {
-            _uiState.value = _uiState.value.copy(currentAudioRef = ref)
-            // The reciter the *preference* names, resolved through [Reciter]:
-            // the same registry the picker offers, so an old or foreign stored
-            // name cannot make the player stream something the banner will not
-            // describe.
-            audioPlayer.playAyah(ayah.surahNumber, ayah.ayahNumber, Reciter.from(_uiState.value.reciter)) {
-                // Autoplay the next ayah of **this verse's** surah.
-                //
-                // It used to walk `_uiState.currentSurahAyahs` and stop at
-                // `selectedSurah.totalVerses` - the surah the reader had *open*, which
-                // is not necessarily the surah being recited. Playing 114:6 would try
-                // to continue into a surah that was not being read.
-                QuranBrowse.ayah(ayah.surahNumber, ayah.ayahNumber + 1)
-                    ?.let { next -> togglePlayAyah(next) }
+        // The player's own state, not the UiState's copy of it: the copy is what the
+        // surfaces draw, and the decision is a question about the player, so it is
+        // asked of the thing that has to carry it out.
+        when (playbackTapFor(audioPlayer.playbackState.value, ayah.surahNumber, ayah.ayahNumber)) {
+            PlaybackTap.PAUSE -> audioPlayer.pause()
+            PlaybackTap.RESUME -> audioPlayer.resume()
+            PlaybackTap.PLAY -> {
+                // The reciter the *preference* names, resolved through [Reciter]:
+                // the same registry the picker offers, so an old or foreign stored
+                // name cannot make the player stream something the banner will not
+                // describe.
+                audioPlayer.playAyah(ayah.surahNumber, ayah.ayahNumber, Reciter.from(_uiState.value.reciter)) {
+                    // Autoplay the next ayah of **this verse's** surah.
+                    //
+                    // It used to walk `_uiState.currentSurahAyahs` and stop at
+                    // `selectedSurah.totalVerses` - the surah the reader had *open*, which
+                    // is not necessarily the surah being recited. Playing 114:6 would try
+                    // to continue into a surah that was not being read.
+                    QuranBrowse.ayah(ayah.surahNumber, ayah.ayahNumber + 1)
+                        ?.let { next -> togglePlayAyah(next) }
+                }
             }
         }
     }
