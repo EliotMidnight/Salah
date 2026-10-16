@@ -1,0 +1,83 @@
+# The JVM suite, on GitHub's x86_64 Linux runners.
+#
+# There was no CI in this repository: nothing ran the suite unless someone ran
+# `tools/build.sh` on the one machine with the SDK. This workflow is that check,
+# moved somewhere it cannot be forgotten.
+#
+# It is deliberately *not* `tools/build.sh`. That script is a wrapper for a
+# specific 4 GB laptop: it pins JAVA_HOME to that host's Temurin install, caps
+# workers at 2, and relocates Robolectric's 205 MB extraction off its 1.9 GB
+# /tmp. None of those facts hold here, and the JAVA_HOME pin would fail outright
+# on a runner. CI runs Gradle directly, with what the version catalog pins.
+#
+# Scope: the JVM suite. Robolectric 4.15+ ships its native runtime for
+# linux-x86_64, so this is exactly the platform the suite is written for (the
+# project's ARM64 gate in `app/build.gradle.kts` exists for the other one).
+# No emulator tests, no lint, no release builds - those need a device, a
+# decision, or credentials, and a check that cannot run everywhere is a check
+# that gets deleted instead of fixed.
+#
+# The Roborazzi baselines are *not* compared here: `testDebugUnitTest` runs the
+# screenshot tests with capture disabled. Comparison is `verifyRoborazziDebug`,
+# which re-renders all 32 images and must run on the host that recorded them
+# (see AGENTS.md) - inviting a second rendering platform into that comparison
+# is how a suite starts failing for its environment instead of its code.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A superseded push does not need its run finished.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  jvm-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # compileSdk is 36.1 (platforms;android-36.1, not platforms;android-36) and
+      # build-tools are pinned to 36.0.0. The runner image carries neither, and a
+      # missing package would be a red build for a reason that has nothing to do
+      # with the change under review.
+      - name: Install the SDK packages this build pins
+        run: |
+          yes | sdkmanager --licenses > /dev/null
+          sdkmanager "platforms;android-36.1" "build-tools;36.0.0"
+
+      # local.properties is gitignored and AGP otherwise resolves the SDK from
+      # ANDROID_HOME; writing it makes the build follow the README's Quick start
+      # on any machine, runner included.
+      - name: Point Gradle at the SDK
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      # debug.keystore is gitignored too (Quick start generates it) and the debug
+      # signing config names it. No test needs it, but its absence is a build-time
+      # surprise the day assembleDebug is added to this job.
+      - name: Provide the debug keystore
+        run: |
+          keytool -genkeypair -keystore debug.keystore -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10950 \
+            -storepass android -keypass android \
+            -dname "CN=Android Debug, O=Android, C=US"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: JVM test suite
+        run: ./gradlew testDebugUnitTest
