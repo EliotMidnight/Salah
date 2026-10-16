@@ -30,7 +30,7 @@ Built with Kotlin and Jetpack Compose (Material 3). No account, no tracking, wor
 
 - **Today dashboard** — next prayer countdown, live astronomical sky indicator, Hijri date, prayer checklist, continue-reading shortcut.
 - **Prayer times** — 8 calculation methods (Morocco Ministry/Habous default, MWL, ISNA, Egypt, Umm Al-Qura, Karachi, Dubai, France 12°), Standard/Hanafi Asr jurisprudence, per-prayer minute adjustments, monthly calendar, Imsak / Islamic midnight / last-third-of-night vigils.
-- **Quran reader** — opens straight into the text at your last position (Al-Fatihah on a first run). Two layouts — the canonical 604-page mushaf, or continuous per-surah flow with optional per-verse blocks — each on either axis. Seven washed-out papers with light/dark treatment, independent Arabic and translation sizing, five bundled Quran faces, pinch as zoom or as text size, and immersive mode that clears the status bar and the dock. All 114 surahs with verified Uthmani Arabic and Saheeh International English, bundled offline (6,236 verses). Verse-level search in Arabic or English with the matched words emphasised, and page/juz'/hizb quick filters, bookmarks, copy/share, per-verse audio recitation (Mishary Alafasy via everyayah.com, streamed), whose banner names the verse being recited so a reader who has scrolled elsewhere can still find it. Page turns work by drag *and* by accessibility action, so a page is reachable without a finger; every page announces itself — reference, extent, surah range and page — in the reader's own language, and the text is kept out of a display cutout in landscape, where the outer column of a page is where a page *begins*.
+- **Quran reader** — opens straight into the text at your last position (Al-Fatihah on a first run). Two layouts — the canonical 604-page mushaf, or continuous per-surah flow with optional per-verse blocks — each on either axis. Seven washed-out papers with light/dark treatment, independent Arabic and translation sizing, five bundled Quran faces, pinch as zoom or as text size, and immersive mode that clears the status bar and the dock. All 114 surahs with verified Uthmani Arabic and Saheeh International English, bundled offline (6,236 verses). Verse-level search in Arabic or English with the matched words emphasised, and page/juz'/hizb quick filters, bookmarks, copy/share, per-verse audio recitation (streamed from everyayah.com in the reader's chosen reciter), whose banner names the verse being recited so a reader who has scrolled elsewhere can still find it. Page turns work by drag *and* by accessibility action, so a page is reachable without a finger; every page announces itself — reference, extent, surah range and page — in the reader's own language, and the text is kept out of a display cutout in landscape, where the outer column of a page is where a page *begins*.
 - **Qibla compass** — sensor-fused bearing with true/magnetic north, distance to the Kaaba, magnetic-interference diagnostics, device-level indicator, vibration on alignment. Graduated dial: tick every 2°, numerals every 30°, heading and Qibla bearing side by side, and a banner that names the turn — "turn right 12°" — rather than only reporting that you are not there yet.
 - **Adhan & alerts** — every word a notification shows is in the reader's own language, read from the same preference the interface uses: full Adhan, Takbeer-only, chime, vibration or silent per prayer; pre-prayer reminders; global silent and auto masjid-silence mode during prayer windows. Five adhan timbres, one decoder, and the Settings preview plays the sound the alarm will play. Prayer times are computed on this device and are never described as having been verified against anything.
 - **Localization** — full UI in 11 languages (English, Arabic, French, Indonesian, Turkish, Urdu, Malay, Bengali, Russian, German, Spanish) with RTL support.
@@ -497,7 +497,7 @@ install is not the only one that reads correctly.
 
 - Quran Arabic (Uthmani 1.1) and partition metadata: **Tanzil Project** (CC BY 3.0) — https://tanzil.net — see `app/src/main/resources/quran/SOURCES.md` for hashes and notices.
 - English translation: **Saheeh International**, shown in-app as “English — Saheeh International”.
-- Verse audio: **everyayah.com** (Mishary Alafasy, 128 kbps), streamed on demand.
+- Verse audio: **everyayah.com**, streamed on demand in the reciter the reader chooses (Mishary Rashid Alafasy, Abdul Basit Abdus Samad, Mahmoud Khalil Al-Husary, Saud Ash-Shuraim).
 
 ## Tests
 
@@ -571,8 +571,8 @@ credentials, which are standard for debug builds and never used for release.
   the only writer. It is included in the standard OS app backup
   (`res/xml/data_extraction_rules.xml`); uninstall wipes it.
 - The only network use is streaming verse audio from `https://everyayah.com`
-  (Mishary Alafasy, 128 kbps) on demand. If the stream fails or times out
-  (12 s watchdog), the app falls back to a gentle offline tone and stays usable.
+  on demand. If the stream fails or times out (12 s watchdog), the reader is
+  told the recitation needs a connection; the surah does not march on.
 
 ## Production build & release
 

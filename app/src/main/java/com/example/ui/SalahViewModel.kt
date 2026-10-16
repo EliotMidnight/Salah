@@ -198,6 +198,15 @@ data class SalahUiState(
     val isAudioPlaying: Boolean = false,
 
     /**
+     * True when the last verse the reader asked for could not be streamed.
+     *
+     * The reader has to be told what happened: the player no longer answers a
+     * failed stream with a chime, so silence and a still play button would be the
+     * whole message. Cleared by a new attempt at playback and by `stopAudio`.
+     */
+    val audioFailed: Boolean = false,
+
+    /**
      * Which verse is playing, as a reference.
      *
      * A whole reference and not an ayah number, because an ayah number alone does
@@ -485,6 +494,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             audioPlayer.playbackState.collectLatest { ps ->
                 _uiState.value = _uiState.value.copy(
                     isAudioPlaying = ps.isPlaying,
+                    audioFailed = ps.failed,
                     currentAudioRef = QuranRef(
                         surah = ps.surahNumber,
                         ayah = ps.ayahNumber,

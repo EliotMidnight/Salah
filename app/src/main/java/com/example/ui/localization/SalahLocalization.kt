@@ -488,6 +488,16 @@ data class UiStringsMore(
     val showTranslation: String = "Show translation",
     val recitingLabel: String = "Reciting",
     val stopAudio: String = "Stop",
+    /**
+     * Told to the reader when a verse's recitation could not be streamed.
+     *
+     * The player used to answer a failed stream with a synthesized chime and
+     * carry on with the next verse - the banner named a reciter while a tone
+     * played, and the surah advanced. The honest answer to a stream that cannot
+     * be prepared is to say what happened.
+     */
+    val recitationNeedsConnection: String =
+        "This recitation needs a connection",
     val playVerse: String = "Play",
     val pauseVerse: String = "Pause",
     val bookmarkVerse: String = "Save verse",
@@ -946,6 +956,7 @@ reader = ReaderStrings(
         privacyNoAccount = "بدون حساب أو تسجيل دخول",
         privacyFree = "مجاني ومفتوح المصدر",
         readingOptions = "خيارات القراءة", // verify
+        recitationNeedsConnection = "تحتاج هذه التلاوة إلى اتصال بالشبكة", // verify
         recitingLabel = "يتلو", // verify
         resetAllConfirmMessage = "تعود إعدادات الحساب والتنبيه والعرض إلى قيمها الافتراضية. تبقى آياتك المحفوظة وسجل صلاتك.",
         resetAllConfirmTitle = "إعادة ضبط كل الإعدادات؟",
@@ -1243,6 +1254,7 @@ reader = ReaderStrings(
         privacyNoAccount = "Pas de compte ni de connexion",
         privacyFree = "Gratuit et open source",
         readingOptions = "Options de lecture", // verify
+        recitationNeedsConnection = "Cette récitation nécessite une connexion", // verify
         recitingLabel = "En récitation", // verify
         resetAllConfirmMessage = "Les paramètres de calcul, d'alerte et d'affichage reviennent à leurs valeurs par défaut. Vos versets enregistrés et votre journal de prière sont conservés.",
         resetAllConfirmTitle = "Réinitialiser tous les paramètres ?",
@@ -1540,6 +1552,7 @@ reader = ReaderStrings(
         privacyNoAccount = "Tanpa akun atau masuk",
         privacyFree = "Gratis dan sumber terbuka",
         readingOptions = "Opsi bacaan", // verify
+        recitationNeedsConnection = "Tilawah ini memerlukan koneksi", // verify
         recitingLabel = "Membaca", // verify
         resetAllConfirmMessage = "Pengaturan perhitungan, pengingat, dan tampilan kembali ke bawaan. Ayat tersimpan dan catatan shalat Anda tetap disimpan.",
         resetAllConfirmTitle = "Atur ulang semua pengaturan?",
@@ -1837,6 +1850,7 @@ reader = ReaderStrings(
         privacyNoAccount = "Hesap veya giriş yok",
         privacyFree = "Ücretsiz ve açık kaynak",
         readingOptions = "Okuma seçenekleri", // verify
+        recitationNeedsConnection = "Bu tilavet bir bağlantı gerektiriyor", // verify
         recitingLabel = "Kıraat ediyor", // verify
         resetAllConfirmMessage = "Hesap, uyarı ve görünüm ayarları varsayılanlara döner. Kayıtlı ayetleriniz ve namaz kaydınız korunur.",
         resetAllConfirmTitle = "Tüm ayarlar sıfırlansın mı?",
@@ -2134,6 +2148,7 @@ reader = ReaderStrings(
         privacyNoAccount = "کوئی اکاؤنٹ یا سائن ان نہیں",
         privacyFree = "مفت اور اوپن سورس",
         readingOptions = "پڑھنے کے اختیارات", // verify
+        recitationNeedsConnection = "اس تلاوت کے لیے انٹرنیٹ کنکشن درکار ہے", // verify
         recitingLabel = "تلاوت کر رہے ہیں", // verify
         resetAllConfirmMessage = "حساب، الرٹ اور ڈسپلے کی ترتیبات ڈیفالٹ پر آ جاتی ہیں۔ آپ کی محفوظ آیات اور نماز کا لاگ محفوظ رہتا ہے۔",
         resetAllConfirmTitle = "تمام ترتیبات دوبارہ ترتیب دیں؟",
@@ -2431,6 +2446,7 @@ reader = ReaderStrings(
         privacyNoAccount = "Tiada akaun atau log masuk",
         privacyFree = "Percuma dan sumber terbuka",
         readingOptions = "Pilihan bacaan", // verify
+        recitationNeedsConnection = "Tilawah ini memerlukan sambungan", // verify
         recitingLabel = "Membaca", // verify
         resetAllConfirmMessage = "Tetapan pengiraan, peringatan, dan paparan kembali ke lalai. Ayat dan catatan solat anda disimpan.",
         resetAllConfirmTitle = "Set semula semua tetapan?",
@@ -2728,6 +2744,7 @@ reader = ReaderStrings(
         privacyNoAccount = "কোনো অ্যাকাউন্ট বা সাইন ইন নেই",
         privacyFree = "বিনামূল্যে এবং ওপেন সোর্স",
         readingOptions = "পড়ার বিকল্প", // verify
+        recitationNeedsConnection = "এই তিলাওয়াতের জন্য একটি ইন্টারনেট সংযোগ প্রয়োজন", // verify
         recitingLabel = "তিলাওয়াত করছে", // verify
         resetAllConfirmMessage = "গণনা, সতর্কতা ও প্রদর্শনের সেটিংস ডিফল্টে ফিরে যায়। আপনার সংরক্ষিত আয়াত ও নামাজের বিবরণ থেকে যায়।",
         resetAllConfirmTitle = "সমস্ত সেটিংস পুনরায় সেট করবেন?",
@@ -3025,6 +3042,7 @@ reader = ReaderStrings(
         privacyNoAccount = "Без аккаунта и входа",
         privacyFree = "Бесплатно и с открытым исходным кодом",
         readingOptions = "Настройки чтения", // verify
+        recitationNeedsConnection = "Для этого чтения нужно подключение к сети", // verify
         recitingLabel = "Читает", // verify
         resetAllConfirmMessage = "Настройки расчёта, оповещений и отображения возвращаются к значениям по умолчанию. Сохранённые аяты и журнал молитв сохраняются.",
         resetAllConfirmTitle = "Сбросить все настройки?",
@@ -3322,6 +3340,7 @@ reader = ReaderStrings(
         privacyNoAccount = "Kein Konto und keine Anmeldung",
         privacyFree = "Kostenlos und Open Source",
         readingOptions = "Leseoptionen", // verify
+        recitationNeedsConnection = "Diese Rezitation benötigt eine Verbindung", // verify
         recitingLabel = "Rezitiert", // verify
         resetAllConfirmMessage = "Berechnungs-, Warn- und Anzeigeeinstellungen werden auf die Standardwerte zurückgesetzt. Ihre gespeicherten Verse und Ihr Gebetsprotokoll bleiben erhalten.",
         resetAllConfirmTitle = "Alle Einstellungen zurücksetzen?",
@@ -3619,6 +3638,7 @@ reader = ReaderStrings(
         privacyNoAccount = "Sin cuenta ni inicio de sesión",
         privacyFree = "Gratuito y de código abierto",
         readingOptions = "Opciones de lectura", // verify
+        recitationNeedsConnection = "Esta recitación necesita conexión", // verify
         recitingLabel = "Recitando", // verify
         resetAllConfirmMessage = "Los ajustes de cálculo, alerta y visualización vuelven a sus valores predeterminados. Tus versículos guardados y tu registro de oraciones se conservan.",
         resetAllConfirmTitle = "¿Restablecer todos los ajustes?",

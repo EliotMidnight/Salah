@@ -29,6 +29,15 @@ data class AudioPlaybackState(
      * back to.
      */
     val isPaused: Boolean = false,
+    /**
+     * True when the last stream could not be prepared - the connection never
+     * answered, or the request was refused.
+     *
+     * A failure is not silence: the surfaces read this to say *why* there is no
+     * sound. It used to be answered with a synthesized chime, which is a
+     * different sound pretending to be the recitation.
+     */
+    val failed: Boolean = false,
     val surahNumber: Int = 1,
     val ayahNumber: Int = 1,
     /**
@@ -102,6 +111,7 @@ class QuranAudioPlayer(private val context: Context) {
         _playbackState.value = _playbackState.value.copy(
             isPlaying = true,
             isPaused = false,
+            failed = false,
             surahNumber = surahNumber,
             ayahNumber = ayahNumber,
             reciter = reciter,
@@ -150,111 +160,64 @@ class QuranAudioPlayer(private val context: Context) {
                     onAyahCompleted?.invoke()
                 }
                 setOnErrorListener { _, _, _ ->
-                    // Fallback to offline synthetic tone chimes
-                    prepareTimeoutJob?.cancel()
-                    playOfflineChime(surahNumber, ayahNumber, onAyahCompleted)
+                    playbackFailed()
                     true
                 }
                 prepareAsync()
             }
             mediaPlayer = player
-            // Watchdog: if the stream cannot be prepared (offline / hanging
-            // network), fall back to the offline chime instead of spinning.
+            // Watchdog: a stream that never arrives - a hanging connection rather
+            // than an error the platform reported - fails like any other. The
+            // identity guard keeps a superseded attempt from taking down the
+            // stream that replaced it.
             prepareTimeoutJob?.cancel()
             prepareTimeoutJob = scope.launch {
                 delay(12_000)
-                if (!prepared) {
-                    try {
-                        player.reset()
-                        player.release()
-                    } catch (_: Exception) {}
-                    if (mediaPlayer === player) {
-                        mediaPlayer = null
-                        playOfflineChime(surahNumber, ayahNumber, onAyahCompleted)
-                    }
+                if (!prepared && mediaPlayer === player) {
+                    playbackFailed()
                 }
             }
-        } catch (e: Exception) {
-            prepareTimeoutJob?.cancel()
-            playOfflineChime(surahNumber, ayahNumber, onAyahCompleted)
+        } catch (_: Exception) {
+            playbackFailed()
         }
     }
 
-    private fun playOfflineChime(surahNumber: Int, ayahNumber: Int, onAyahCompleted: (() -> Unit)?) {
+    /**
+     * A stream that could not be prepared: offline, refused, or a connection that
+     * never answered.
+     *
+     * The player used to answer this with a synthesized chime and then reap the
+     * verse as recited - `onAyahCompleted` ran and the next verse chained in, so
+     * an offline reader heard a tone march down the surah while the banner named
+     * a reciter who was never heard. There is nothing to play, so nothing plays:
+     * the state carries the failure for the reader to see, and the surah stays
+     * where it is.
+     */
+    private fun playbackFailed() {
+        prepareTimeoutJob?.cancel()
+        try {
+            mediaPlayer?.reset()
+            mediaPlayer?.release()
+        } catch (_: Exception) {
+        }
+        mediaPlayer = null
         _playbackState.value = _playbackState.value.copy(
-            isPlaying = true,
+            isPlaying = false,
             isPaused = false,
+            failed = true,
         )
-
-        synthJob = scope.launch(Dispatchers.Default) {
-            try {
-                // Generate soft, meditative contemplative acoustic harmonic wave
-                val sampleRate = 44100
-                val durationSec = 3.5
-                val numSamples = (sampleRate * durationSec).toInt()
-                val samples = ShortArray(numSamples)
-
-                val baseFreq = 220.0 + (ayahNumber % 12) * 18.0
-                for (i in 0 until numSamples) {
-                    val t = i.toDouble() / sampleRate
-                    // Gentle envelope attack and slow decay
-                    val envelope = kotlin.math.exp(-1.2 * t) * (1.0 - kotlin.math.exp(-20.0 * t))
-                    val wave = (sin(2 * Math.PI * baseFreq * t) * 0.6 +
-                            sin(2 * Math.PI * (baseFreq * 1.5) * t) * 0.3 +
-                            sin(2 * Math.PI * (baseFreq * 2.0) * t) * 0.1) * envelope
-                    samples[i] = (wave * 28000).toInt().coerceIn(-32767, 32767).toShort()
-                }
-
-                val track = AudioTrack.Builder()
-                    .setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                            .build()
-                    )
-                    .setAudioFormat(
-                        AudioFormat.Builder()
-                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                            .setSampleRate(sampleRate)
-                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                            .build()
-                    )
-                    .setBufferSizeInBytes(samples.size * 2)
-                    .setTransferMode(AudioTrack.MODE_STATIC)
-                    .build()
-
-                track.write(samples, 0, samples.size)
-                track.play()
-
-                val startTime = System.currentTimeMillis()
-                while (isActive && System.currentTimeMillis() - startTime < 3500) {
-                    val elapsed = (System.currentTimeMillis() - startTime).toInt()
-                    delay(100)
-                }
-
-                track.stop()
-                track.release()
-            } catch (_: Exception) {
-            }
-
-            scope.launch(Dispatchers.Main) {
-                _playbackState.value = _playbackState.value.copy(isPlaying = false, isPaused = false)
-                onAyahCompleted?.invoke()
-            }
-        }
     }
-
 
     /**
      * Hold the sound, and only sound that can be held.
      *
      * A stream that has started is paused in place, and [AudioPlaybackState.isPaused]
      * says so, so [resume] can continue it where it stopped. Anything else is
-     * *released*: a chime has no head to continue from, and a stream still preparing
-     * has not made a sound yet - calling `pause()` on one throws, which is what the
-     * old two-way tap asked of a reader on a slow connection. Nothing is held, so
-     * the next tap on the verse starts it over rather than resuming a stream that
-     * is gone.
+     * *released*: a preview tone has no head to continue from, and a stream still
+     * preparing has not made a sound yet - calling `pause()` on one throws, which
+     * is what the old two-way tap asked of a reader on a slow connection. Nothing
+     * is held, so the next tap on the verse starts it over rather than resuming a
+     * stream that is gone.
      */
     fun pause() {
         val player = mediaPlayer
@@ -358,6 +321,10 @@ class QuranAudioPlayer(private val context: Context) {
             mediaPlayer?.release()
         } catch (_: Exception) {}
         mediaPlayer = null
-        _playbackState.value = _playbackState.value.copy(isPlaying = false, isPaused = false)
+        _playbackState.value = _playbackState.value.copy(
+            isPlaying = false,
+            isPaused = false,
+            failed = false,
+        )
     }
 }

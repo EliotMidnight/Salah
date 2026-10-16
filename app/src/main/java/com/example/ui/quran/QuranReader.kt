@@ -59,6 +59,7 @@ import com.example.ui.components.isDarkSurface
 import com.example.ui.SalahUiState
 import com.example.ui.components.EmptyState
 import com.example.ui.components.StatusBanner
+import com.example.ui.components.BannerTone
 import com.example.ui.localization.LocalStrings
 import com.example.ui.quran.gesture.readerPinch
 import com.example.ui.quran.reader.ContinuousReader
@@ -286,25 +287,35 @@ fun QuranReader(
                     .padding(end = space.lg + SafeArea.sides())
             )
 
-            if (state.isAudioPlaying && state.currentAudioReciter != null) {
-                AudioStrip(
-                    // From the *playing* reference, not from the reader's surah. The
-                    // strip says what is being recited, and the reader may have
-                    // navigated elsewhere while it plays - in which case the surah
-                    // the text is in and the surah being recited are two different
-                    // answers and the strip must be reporting the audio's.
-                    ref = state.currentAudioRef,
-                    // And from the *streaming* reciter, not the preference: the
-                    // preference says who the reader chose; the player says who is
-                    // being heard. They were the same value only while the stream
-                    // ignored the choice.
-                    reciter = state.currentAudioReciter.orEmpty(),
-                    onStop = onStopAudio,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = space.sm)
-                        .padding(horizontal = space.md)
-                )
+            when {
+                state.isAudioPlaying && state.currentAudioReciter != null ->
+                    AudioStrip(
+                        // From the *playing* reference, not from the reader's surah. The
+                        // strip says what is being recited, and the reader may have
+                        // navigated elsewhere while it plays - in which case the surah
+                        // the text is in and the surah being recited are two different
+                        // answers and the strip must be reporting the audio's.
+                        ref = state.currentAudioRef,
+                        // And from the *streaming* reciter, not the preference: the
+                        // preference says who the reader chose; the player says who is
+                        // being heard. They were the same value only while the stream
+                        // ignored the choice.
+                        reciter = state.currentAudioReciter.orEmpty(),
+                        onStop = onStopAudio,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = space.sm)
+                            .padding(horizontal = space.md)
+                    )
+
+                state.audioFailed ->
+                    AudioFailureStrip(
+                        onDismiss = onStopAudio,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = space.sm)
+                            .padding(horizontal = space.md)
+                    )
             }
         }
     }
@@ -534,7 +545,6 @@ private fun AudioStrip(
     modifier: Modifier = Modifier
 ) {
     val strings = LocalStrings.current
-    val space = Space.current
 
     StatusBanner(
         message = buildString {
@@ -548,27 +558,78 @@ private fun AudioStrip(
         },
         icon = Icons.AutoMirrored.Filled.MenuBook,
         action = {
-            Surface(
-                color = MaterialTheme.colorScheme.primaryContainer,
-                shape = QuranShape.pill,
-                modifier = Modifier
-                    .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
-                    .clip(QuranShape.pill)
-                    .clickable(role = Role.Button, onClick = onStop)
-            ) {
-                Text(
-                    text = strings.more.stopAudio,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.padding(
-                        horizontal = space.lg,
-                        vertical = space.sm
-                    )
-                )
-            }
+            BannerPill(
+                label = strings.more.stopAudio,
+                onClick = onStop
+            )
         },
         modifier = modifier
     )
+}
+
+/**
+ * The recitation the reader asked for could not be streamed.
+ *
+ * The player used to answer a failed stream with a synthesized chime and carry
+ * on to the next verse, so an offline reader heard a tone march down the surah
+ * while the banner named a reciter who was never heard. There is nothing to
+ * play, so nothing plays - and this says why, instead of leaving silence and a
+ * reader tapping play again.
+ *
+ * The message alone and a way out of it: the failure is a state the reader can
+ * dismiss, not one that resolves on its own.
+ */
+@Composable
+private fun AudioFailureStrip(
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val strings = LocalStrings.current
+
+    StatusBanner(
+        message = strings.more.recitationNeedsConnection,
+        tone = BannerTone.Warning,
+        action = {
+            BannerPill(
+                label = strings.more.actionClose,
+                onClick = onDismiss
+            )
+        },
+        modifier = modifier
+    )
+}
+
+/**
+ * The pill both audio banners offer: one tap, one word.
+ *
+ * The strip's "Stop" and the failure's "Close" are the same control, so they are
+ * one piece of code rather than two that can drift apart.
+ */
+@Composable
+private fun BannerPill(
+    label: String,
+    onClick: () -> Unit
+) {
+    val space = Space.current
+
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        shape = QuranShape.pill,
+        modifier = Modifier
+            .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+            .clip(QuranShape.pill)
+            .clickable(role = Role.Button, onClick = onClick)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.padding(
+                horizontal = space.lg,
+                vertical = space.sm
+            )
+        )
+    }
 }
 
 /**

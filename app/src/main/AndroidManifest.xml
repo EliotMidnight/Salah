@@ -5,8 +5,9 @@
          recitation audio from everyayah.com (see QuranAudioPlayer). Prayer times,
          Qibla, the Quran text and its translation are all on-device; there is no
          account, no analytics and no tracking. ACCESS_NETWORK_STATE lets the
-         player check reachability so it can fall back to the offline chime
-         instead of hanging when there is no connection. -->
+         repository report whether the device is online - Settings shows it - and
+         nothing else; the player handles a dead stream itself, by reporting the
+         failure rather than waiting on a flag. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
