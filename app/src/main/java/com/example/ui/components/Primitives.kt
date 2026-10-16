@@ -1,6 +1,5 @@
 package com.example.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.foundation.text.KeyboardActions
@@ -62,7 +60,6 @@ import com.example.ui.localization.LocalStrings
 import com.example.ui.theme.DotShape
 import com.example.ui.theme.IconSize
 import com.example.ui.theme.Space
-import com.example.ui.theme.QuranShape
 import com.example.ui.theme.Tonal
 import com.example.ui.theme.layoutMetrics
 
@@ -638,40 +635,6 @@ fun ToggleRow(
     }
 }
 
-/** Small pill for a count or a short status word. */
-@Composable
-fun Badge(
-    text: String,
-    modifier: Modifier = Modifier,
-    tone: BannerTone = BannerTone.Neutral
-) {
-    val semantic = Tonal.colors
-    val space = Space.current
-    val (container, content) = when (tone) {
-        BannerTone.Neutral ->
-            MaterialTheme.colorScheme.surfaceContainerHigh to MaterialTheme.colorScheme.onSurfaceVariant
-        BannerTone.Success ->
-            semantic.successContainer to semantic.onSuccessContainer
-        BannerTone.Warning ->
-            semantic.warningContainer to semantic.onWarningContainer
-        BannerTone.Danger ->
-            MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
-    }
-    Surface(color = container, shape = CircleShape, modifier = modifier) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            color = content,
-            modifier = Modifier.padding(horizontal = space.sm, vertical = space.xxs)
-        )
-    }
-}
-
-/** Convenience for the many `border` variations the old screens hand-rolled. */
-@Composable
-fun hairlineBorder(color: Color = MaterialTheme.colorScheme.outlineVariant) =
-    BorderStroke(1.dp, color)
-
 /**
  * A search input.
  */
@@ -687,6 +650,7 @@ fun SearchInput(
 ) {
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val strings = LocalStrings.current
 
     LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
 
@@ -705,7 +669,10 @@ fun SearchInput(
                 IconButton(onClick = onClear) {
                     Icon(
                         Icons.Default.Close,
-                        contentDescription = null,
+                        // The search field's only button, and it was an unlabelled
+                        // one: "button" beside a query, with no way to know it is
+                        // the query it clears.
+                        contentDescription = strings.more.actionClear,
                         modifier = Modifier.size(IconSize.md)
                     )
                 }
@@ -727,74 +694,6 @@ fun SearchInput(
             .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
             .focusRequester(focusRequester)
     )
-}
-
-/**
- * A floating row of pill tabs, drawn over the content beneath it.
- */
-val PillTabBarHeight = 48.dp
-
-@Composable
-fun PillTabRow(
-    tabs: List<String>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val space = Space.current
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = space.lg, vertical = space.sm),
-        horizontalArrangement = Arrangement.spacedBy(space.sm)
-    ) {
-        tabs.forEachIndexed { index, label ->
-            val selected = index == selectedIndex
-            Surface(
-                color = if (selected) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surface
-                },
-                shape = QuranShape.pill,
-                border = if (selected) {
-                    BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-                } else {
-                    BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = PillTabBarHeight)
-                    // `selectable` already publishes the selected/not-selected
-                    // state. An extra stateDescription here used to overwrite it
-                    // with the tab label, so TalkBack announced "Surahs, Surahs".
-                    .selectable(
-                        selected = selected,
-                        role = Role.Tab,
-                        onClick = { onSelect(index) }
-                    )
-            ) {
-                Box(
-                    modifier = Modifier.padding(horizontal = space.xs, vertical = space.sm),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
-    }
 }
 
 /**

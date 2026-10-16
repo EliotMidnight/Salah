@@ -1,9 +1,7 @@
 package com.example.ui.prayer
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -59,7 +57,9 @@ import com.example.ui.components.ScreenScaffold
 import com.example.ui.home.DaySelector
 import com.example.ui.components.SectionGroup
 import com.example.ui.components.SectionHeader
+import com.example.ui.localization.LocalLanguage
 import com.example.ui.localization.LocalStrings
+import com.example.ui.localization.appLocale
 import com.example.ui.localization.prayerName
 import com.example.ui.theme.ArabicFamily
 import com.example.ui.theme.IconSize
@@ -67,7 +67,6 @@ import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
  * Prayer times for a chosen day, the night periods around them, and the month at
@@ -85,8 +84,10 @@ fun PrayerScreen(
     val strings = LocalStrings.current
 
     // The selected day lives in the ViewModel, not in this screen. This is the
-    // app's only date switcher, and the Today page follows whatever it picks -
-    // two independent switches were two answers to "which day is this".
+    // app's date switch: the Today page opens on whatever it picks and asks it for
+    // that day's times. Today's own arrows step that page only, because the
+    // countdown and the notifications are about the shared date and browsing a day
+    // must not move them.
     //
     // Null means "today", so the app keeps following the current day instead of
     // freezing on whatever date it was built.
@@ -127,22 +128,30 @@ fun PrayerScreen(
         )
     }
 
-    // No header. The bottom navigation already says "Prayer", and the method it
-    // used to carry in the subtitle is shown as a labelled row further down this
-    // same screen, so nothing is lost.
+    // A title, and no subtitle. The dock's four destinations are labelled by the bar
+    // itself and can go without one; this screen is not in the dock, so where it stands
+    // has to be said here. The method that used to ride in the subtitle is a labelled
+    // row further down this same screen, so nothing is lost without it.
     ScreenScaffold(
-        title = null,
+        // A destination the dock does not carry has to say where it is. The
+        // other four tabs are labelled by the bar itself; this one is not.
+        title = strings.navPrayer,
         onBack = null,
         modifier = modifier
     ) { _ ->
         Column {
+            // The platform names the day, in the app's language and not the device's:
+            // they are two different settings, and a weekday here is read beside the
+            // app's own words.
+            val dateLocale = appLocale(LocalLanguage.current)
+            val gregorianFormatter = remember(dateLocale) {
+                DateTimeFormatter.ofPattern("EEEE d MMMM", dateLocale)
+            }
             DaySelector(
                 selectedDate = selectedDate,
                 isToday = isToday,
                 hijriLabel = "${hijri.day} ${hijri.monthNameEn} ${hijri.year} AH",
-                gregorianLabel = selectedDate.format(
-                    DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault())
-                ),
+                gregorianLabel = selectedDate.format(gregorianFormatter),
                 todayLabel = strings.todayBtn,
                 onPrevious = { onSelectDate(selectedDate.minusDays(1)) },
                 onNext = { onSelectDate(selectedDate.plusDays(1)) },
@@ -337,7 +346,13 @@ private fun PrayerTimeRow(
             .fillMaxWidth()
             .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
             .padding(vertical = space.md)
-            .testTag("prayer_time_${prayerTime.prayer.name}"),
+            .testTag("prayer_time_${prayerTime.prayer.name}")
+            // The next prayer is marked by a heavier weight and a dot - a weight and a
+            // colour, neither of which a screen reader can hear. This is the same fact
+            // as words, so the row that is marked is also the row that says so.
+            .semantics {
+                if (isNext) stateDescription = strings.dateNav.nextPrayerPrefix
+            },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -399,6 +414,13 @@ private fun MonthTable(
 ) {
     val space = Space.current
     val strings = LocalStrings.current
+    // The month's name, in the app's language - the same decision as the weekday the
+    // sheet rules itself with, and the same reason: `Locale.getDefault()` is the
+    // device's setting, not this app's.
+    val monthLocale = appLocale(LocalLanguage.current)
+    val monthFormatter = remember(monthLocale) {
+        DateTimeFormatter.ofPattern("MMMM yyyy", monthLocale)
+    }
     val month = selectedDate.month
     val daysInMonth = month.length(selectedDate.isLeapYear)
 
@@ -425,9 +447,7 @@ private fun MonthTable(
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
-        SectionHeader(
-            selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
-        )
+        SectionHeader(selectedDate.format(monthFormatter))
         Spacer(Modifier.height(space.sm))
 
         // Column headings, so the five numbers per row are not unlabelled.

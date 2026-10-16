@@ -1,6 +1,5 @@
 package com.example.ui.quran
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Search
@@ -266,7 +266,11 @@ private fun RowScope.IndexTab(label: String, selected: Boolean, onClick: () -> U
             .weight(1f)
             .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
             .clip(QuranShape.pill)
-            .clickable(role = Role.Tab, onClick = onClick)
+            // `selectable`, so the tab reports whether it is the open one. With
+            // `clickable(role = Tab)` a screen reader announced three tabs and no
+            // selected tab, on the sheet whose whole job is to say which list you
+            // are looking at.
+            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
     ) {
         Box(
             modifier = Modifier.padding(vertical = Space.current.sm),

@@ -51,12 +51,17 @@ import com.example.data.model.PrayerTimesDay
 import com.example.data.model.UserLocation
 import com.example.engine.HijriCalendarEngine
 import com.example.engine.PrayerCalculationEngine
+import com.example.ui.localization.LocalLanguage
 import com.example.ui.localization.LocalStrings
+import com.example.ui.localization.appLocale
 import com.example.ui.localization.prayerName
 import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
+import java.util.Locale
 
 /**
  * The whole Hijri month, as a grid of its days.
@@ -79,6 +84,10 @@ fun HijriMonthSheet(
 ) {
     val space = Space.current
     val strings = LocalStrings.current
+    // The platform's month and weekday names are asked for in the *app's* language,
+    // not the device's: a reader can choose Arabic on a German phone, and the grid
+    // was then ruled in German beside Arabic headings.
+    val locale = appLocale(LocalLanguage.current)
 
     // The month on screen, which is not necessarily the month the selected day
     // falls in once the reader starts paging. Null until the sheet opens, then
@@ -161,10 +170,15 @@ fun HijriMonthSheet(
             Spacer(Modifier.height(space.md))
 
             // Weekday initials, so the seven columns are not unlabelled numbers.
+            //
+            // Labels, in the reader's own language, from [weekdayLabels] - the platform's
+            // names rather than a literal, and Sunday first so they line up with the
+            // grid's leading blanks ([weekdayColumn]).
             Row(modifier = Modifier.fillMaxWidth()) {
-                listOf("S", "M", "T", "W", "T", "F", "S").forEach { initial ->
+                val labels = remember(locale) { weekdayLabels(locale) }
+                labels.forEach { label ->
                     Text(
-                        text = initial,
+                        text = label,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -182,7 +196,7 @@ fun HijriMonthSheet(
             ) {
                 // A blank cell per leading weekday, so the 1st lands under its
                 // own column rather than being pulled to the left.
-                val leadingBlanks = days.first().dayOfWeek.value % 7
+                val leadingBlanks = weekdayColumn(days.first().dayOfWeek)
                 items(leadingBlanks) { Box(Modifier.aspectRatio(1f)) }
                 items(days) { day ->
                     HijriDayCell(
@@ -220,6 +234,8 @@ private fun HijriDayCell(
     onClick: () -> Unit
 ) {
     val space = Space.current
+    val locale = appLocale(LocalLanguage.current)
+    val gregorianDay = remember(locale) { DateTimeFormatter.ofPattern("d MMMM", locale) }
     val hijri = remember(day, hijriAdjustment) { hijriOf(day, hijriAdjustment) }
     val onSurface = MaterialTheme.colorScheme.onSurface
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -251,8 +267,12 @@ private fun HijriDayCell(
             )
             .clickable(onClick = onClick)
             .semantics {
+                // "14 Muharram, 18 September". The Gregorian half was
+                // `day.month.name.lowercase()`, which is the *enum constant* - so an
+                // Arabic reader heard the English word "september" under a Hijri
+                // date, in every language, on every cell of the month.
                 contentDescription = "${hijri.day} ${hijri.monthNameEn}, " +
-                    "${day.dayOfMonth} ${day.month.name.lowercase()}"
+                    day.format(gregorianDay)
             },
         contentAlignment = Alignment.Center
     ) {
@@ -375,3 +395,59 @@ private fun sameHijriMonth(candidate: LocalDate, month: HijriDate, adjustment: I
  */
 private fun hijriOf(date: LocalDate, adjustment: Int): HijriDate =
     HijriCalendarEngine.getHijriDate(date.plusDays(adjustment.toLong()))
+
+/**
+ * The grid's columns, in the order the leading blanks count them.
+ *
+ * Sunday first, because [weekdayColumn] is `dayOfWeek.value % 7` over ISO's
+ * Monday-first numbering, which lands Sunday in column one. The two are one decision
+ * with two halves - a header in another order puts every date under the wrong initial,
+ * and in a language whose initials are not all distinct that does not look wrong.
+ */
+internal val WEEKDAY_COLUMNS: List<DayOfWeek> = listOf(
+    DayOfWeek.SUNDAY,
+    DayOfWeek.MONDAY,
+    DayOfWeek.TUESDAY,
+    DayOfWeek.WEDNESDAY,
+    DayOfWeek.THURSDAY,
+    DayOfWeek.FRIDAY,
+    DayOfWeek.SATURDAY
+)
+
+/**
+ * The column a weekday is drawn in, starting at nought.
+ *
+ * Shared with the header rather than written twice: the reader sees a date under an
+ * initial and reads the two as one fact.
+ */
+internal fun weekdayColumn(day: DayOfWeek): Int = day.value % 7
+
+/**
+ * The seven weekday labels the month grid is ruled by, Sunday first, in [locale].
+ *
+ * Read from the platform rather than written as "S M T W T F S". Those seven letters
+ * were the only English left in this sheet in all eleven languages, and the three T's
+ * and two S's that make the English set ambiguous are exactly what a translated set
+ * fixes.
+ *
+ * ### The fallback, and why it is not a detail
+ *
+ * The platform's *narrow* names are one letter in most languages, and for a language
+ * that has none it answers with the **root locale's** - which are the English letters
+ * again. Urdu's narrow names are exactly "S M T W T F S", so a header that read narrow
+ * names and nothing else would have ruled the Urdu sheet in the same English letters the
+ * literal did, in the one language the fix was for. A narrow set that is the root's while
+ * the abbreviated set is the language's own is a *fallback*, not a translation, and the
+ * abbreviated names ("اتوار") are what that language has. English is the root's own
+ * language, so the same test would ask it for its abbreviated names as well; it is the
+ * one locale where both sets are the root's, and there the narrow letters are the
+ * design.
+ */
+internal fun weekdayLabels(locale: Locale): List<String> {
+    val narrow = WEEKDAY_COLUMNS.map { it.getDisplayName(TextStyle.NARROW, locale) }
+    val rootNarrow = WEEKDAY_COLUMNS.map { it.getDisplayName(TextStyle.NARROW, Locale.ROOT) }
+    val abbreviated = WEEKDAY_COLUMNS.map { it.getDisplayName(TextStyle.SHORT, locale) }
+    val rootAbbreviated = WEEKDAY_COLUMNS.map { it.getDisplayName(TextStyle.SHORT, Locale.ROOT) }
+
+    return if (narrow != rootNarrow || abbreviated == rootAbbreviated) narrow else abbreviated
+}

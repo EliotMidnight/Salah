@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -43,11 +44,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.ui.localization.LocalStrings
 import com.example.ui.theme.IconSize
 import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
 import androidx.compose.material3.Surface
-import androidx.compose.foundation.clickable
 
 /**
  * One bottom sheet.
@@ -149,6 +150,7 @@ fun SheetHeader(
     subtitle: String? = null
 ) {
     val space = Space.current
+    val strings = LocalStrings.current
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -180,7 +182,11 @@ fun SheetHeader(
         ) {
             Icon(
                 imageVector = Icons.Default.Close,
-                contentDescription = null,
+                // Every sheet in the app carries this button, and it was the one
+                // control on a sheet with no name: TalkBack announced "button",
+                // and there is no other way out of a modal sheet for a reader who
+                // cannot tap the scrim.
+                contentDescription = strings.close,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -310,7 +316,12 @@ fun OptionChip(
     ) {
         Box(
             modifier = Modifier
-                .clickable(
+                // `selectable`, not `clickable(role = RadioButton)`: the role was
+                // announced and the answer to "is this one chosen" was not, so a
+                // screen reader read a row of radio buttons with nothing selected -
+                // the checkmark on the chosen chip is a colour no one can hear.
+                .selectable(
+                    selected = selected,
                     role = Role.RadioButton,
                     onClick = onClick
                 )

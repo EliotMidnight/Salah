@@ -5,6 +5,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import java.util.Locale
 
 /**
  * Supported UI languages in SALAH
@@ -303,7 +304,6 @@ data class ReaderStrings(
 
     // --- The Qibla dial readouts --------------------------------------------
     val headingLabel: String = "Heading",
-    val mushaf: String = "Mushaf",
 
     // --- Compass directions ------------------------------------------------
     //
@@ -390,7 +390,9 @@ data class DateNavStrings(
     val nextPrayerPrefix: String = "Next",
     val fullHijriMonth: String = "Full Hijri month",
     val previousMonth: String = "Previous month",
-    val nextMonth: String = "Next month"
+    val nextMonth: String = "Next month",
+    val nextDay: String = "Next day",
+    val previousDay: String = "Previous day"
 )
 
 /**
@@ -477,7 +479,8 @@ data class UiStringsMore(
     /**
      * The note that says the list is a page and not everything.
      */
-    val searchShowingFirst: String = "showing the first %d",    val surahsFound: String = "%d surahs",
+    val searchShowingFirst: String = "showing the first %d",
+    val surahsFound: String = "%d surahs",
     val verseCount: String = "%d verses",
     val verseReference: String = "%d:%d",
     val selectSurah: String = "Select surah",
@@ -508,6 +511,8 @@ data class UiStringsMore(
     val magneticInterferenceMessage: String = "Reading may be inaccurate. Move away from metal and electronics.",
     val sectionAppearance: String = "Appearance",
     val sectionLocationAndCalculation: String = "Location & calculation",
+    val prayerTimesRow: String = "Prayer times",
+    val actionClear: String = "Clear",
     val sectionAlerts: String = "Alerts",
     val sectionAbout: String = "About & diagnostics",
     val timeFormat24hLabel: String = "24-hour time",
@@ -784,6 +789,8 @@ val ArabicStrings = UiStrings(
             nextMonth = "الشهر التالي", // verify
             nextPrayerPrefix = "التالي", // verify
             previousMonth = "الشهر السابق", // verify
+            nextDay = "اليوم التالي", // verify
+            previousDay = "اليوم السابق", // verify
     ),
     more = UiStringsMore(
 reader = ReaderStrings(
@@ -815,7 +822,6 @@ reader = ReaderStrings(
         emptySavedTitle = "لا توجد محفوظات بعد",  // verify
         emptySavedMessage = "احفظ آية أثناء القراءة وستجدها هنا.",  // verify
         headingLabel = "العنوان",
-        mushaf = "المصحف",  // verify
         changeInReader = "غيّر هذا من خيارات القراءة في المصحف.",
         pageAnnouncement = "صفحة %1\$d، جزء %2\$d، سورة %3\$s، %4\$s، من %5\$s إلى %6\$s",
         blockAnnouncement = "%1\$s إلى %2\$s، %3\$s، صفحة %4\$d",
@@ -854,6 +860,8 @@ reader = ReaderStrings(
         textSize = "حجم النص",
         sectionAppearance = "المظهر",
         sectionLocationAndCalculation = "الموقع والحساب",
+        prayerTimesRow = "أوقات الصلاة",
+        actionClear = "مسح", // verify
         sectionAlerts = "التنبيهات",
         sectionAbout = "حول التطبيق",
         chooseLocation = "اختر الموقع",
@@ -1079,6 +1087,8 @@ val FrenchStrings = UiStrings(
             nextMonth = "Mois suivant", // verify
             nextPrayerPrefix = "Suivante", // verify
             previousMonth = "Mois précédent", // verify
+            nextDay = "Jour suivant", // verify
+            previousDay = "Jour précédent", // verify
     ),
     more = UiStringsMore(
 reader = ReaderStrings(
@@ -1110,7 +1120,6 @@ reader = ReaderStrings(
         emptySavedTitle = "Rien d’enregistré pour l’instant",  // verify
         emptySavedMessage = "Enregistrez un verset en lisant et il vous attendra ici.",  // verify
         headingLabel = "Titre",
-        mushaf = "Mushaf",  // verify
         changeInReader = "À modifier dans les options de lecture du Coran.",
         pageAnnouncement = "Page %1\$d, juz' %2\$d, sourate %3\$s, %4\$s, de %5\$s à %6\$s",
         blockAnnouncement = "%1\$s à %2\$s, %3\$s, page %4\$d",
@@ -1149,6 +1158,8 @@ reader = ReaderStrings(
         textSize = "Taille du texte",
         sectionAppearance = "Apparence",
         sectionLocationAndCalculation = "Localisation et calcul",
+        prayerTimesRow = "Horaires de prière",
+        actionClear = "Effacer", // verify
         sectionAlerts = "Alertes",
         sectionAbout = "À propos",
         chooseLocation = "Choisir un emplacement",
@@ -1374,6 +1385,8 @@ val IndonesianStrings = UiStrings(
             nextMonth = "Bulan berikutnya", // verify
             nextPrayerPrefix = "Berikutnya", // verify
             previousMonth = "Bulan sebelumnya", // verify
+            nextDay = "Hari berikutnya", // verify
+            previousDay = "Hari sebelumnya", // verify
     ),
     more = UiStringsMore(
 reader = ReaderStrings(
@@ -1405,7 +1418,6 @@ reader = ReaderStrings(
         emptySavedTitle = "Belum ada yang tersimpan",  // verify
         emptySavedMessage = "Simpan ayat saat membaca dan akan menunggu di sini.",  // verify
         headingLabel = "Judul",
-        mushaf = "Mushaf",  // verify
         changeInReader = "Ubah ini di Opsi Bacaan Al-Qur’an.",
         pageAnnouncement = "Halaman %1\$d, juz' %2\$d, surah %3\$s, %4\$s, dari %5\$s ke %6\$s",
         blockAnnouncement = "%1\$s hingga %2\$s, %3\$s, halaman %4\$d",
@@ -1444,6 +1456,8 @@ reader = ReaderStrings(
         textSize = "Ukuran teks",
         sectionAppearance = "Tampilan",
         sectionLocationAndCalculation = "Lokasi dan perhitungan",
+        prayerTimesRow = "Waktu sholat",
+        actionClear = "Hapus", // verify
         sectionAlerts = "Peringatan",
         sectionAbout = "Tentang",
         chooseLocation = "Pilih lokasi",
@@ -1669,6 +1683,8 @@ val TurkishStrings = UiStrings(
             nextMonth = "Sonraki ay", // verify
             nextPrayerPrefix = "Sonraki", // verify
             previousMonth = "Önceki ay", // verify
+            nextDay = "Sonraki gün", // verify
+            previousDay = "Önceki gün", // verify
     ),
     more = UiStringsMore(
 reader = ReaderStrings(
@@ -1700,7 +1716,6 @@ reader = ReaderStrings(
         emptySavedTitle = "Henüz kaydedilen yok",  // verify
         emptySavedMessage = "Okurken bir ayeti kaydet, burada seni bekliyor olacak.",  // verify
         headingLabel = "Başlık",
-        mushaf = "Mushaf",  // verify
         changeInReader = "Bunu Mushaf okuma seçeneklerinden değiştirebilirsin.",
         pageAnnouncement = "Sayfa %1\$d, cüz %2\$d, sure %3\$s, %4\$s, %5\$s'ten %6\$s'ya",
         blockAnnouncement = "%1\$s ile %2\$s arası, %3\$s, sayfa %4\$d",
@@ -1739,6 +1754,8 @@ reader = ReaderStrings(
         textSize = "Yazı boyutu",
         sectionAppearance = "Görünüm",
         sectionLocationAndCalculation = "Konum ve hesaplama",
+        prayerTimesRow = "Namaz vakitleri",
+        actionClear = "Temizle", // verify
         sectionAlerts = "Uyarılar",
         sectionAbout = "Hakkında",
         chooseLocation = "Konum seç",
@@ -1964,6 +1981,8 @@ val UrduStrings = UiStrings(
             nextMonth = "اگلا مہینہ", // verify
             nextPrayerPrefix = "اگلی", // verify
             previousMonth = "پچھلا مہینہ", // verify
+            nextDay = "اگلا دن", // verify
+            previousDay = "پچھلا دن", // verify
     ),
     more = UiStringsMore(
 reader = ReaderStrings(
@@ -1995,7 +2014,6 @@ reader = ReaderStrings(
         emptySavedTitle = "ابھی کچھ محفوظ نہیں",  // verify
         emptySavedMessage = "پڑھتے ہوئے کوئی آیت محفوظ کریں، وہ یہاں انتظار کرے گی۔",  // verify
         headingLabel = "عنوان",
-        mushaf = "مصحف",  // verify
         changeInReader = "یہ قرآن کی تلاوت کے اختیارات میں تبدیل کریں۔",
         pageAnnouncement = "صفحہ %1\$d، پارہ %2\$d، سورہ %3\$s، %4\$s، %5\$s سے %6\$s تک",
         blockAnnouncement = "%1\$s سے %2\$s تک، %3\$s، صفحہ %4\$d",
@@ -2034,6 +2052,8 @@ reader = ReaderStrings(
         textSize = "متن کا حجم",
         sectionAppearance = "ظاہری شکل",
         sectionLocationAndCalculation = "مقام اور حساب",
+        prayerTimesRow = "نماز کے اوقات",
+        actionClear = "مٹائیں", // verify
         sectionAlerts = "اطلاعات",
         sectionAbout = "تعارف",
         chooseLocation = "مقام منتخب کریں",
@@ -2259,6 +2279,8 @@ val MalayStrings = UiStrings(
             nextMonth = "Bulan berikutnya", // verify
             nextPrayerPrefix = "Seterusnya", // verify
             previousMonth = "Bulan sebelumnya", // verify
+            nextDay = "Hari seterusnya", // verify
+            previousDay = "Hari sebelumnya", // verify
     ),
     more = UiStringsMore(
 reader = ReaderStrings(
@@ -2290,7 +2312,6 @@ reader = ReaderStrings(
         emptySavedTitle = "Belum ada yang disimpan",  // verify
         emptySavedMessage = "Simpan ayat semasa membaca dan ia akan menunggu di sini.",  // verify
         headingLabel = "Tajuk",
-        mushaf = "Mushaf",  // verify
         changeInReader = "Ubah ini dalam pilihan bacaan Al-Quran.",
         pageAnnouncement = "Halaman %1\$d, juz' %2\$d, surah %3\$s, %4\$s, daripada %5\$s hingga %6\$s",
         blockAnnouncement = "%1\$s hingga %2\$s, %3\$s, halaman %4\$d",
@@ -2329,6 +2350,8 @@ reader = ReaderStrings(
         textSize = "Saiz teks",
         sectionAppearance = "Paparan",
         sectionLocationAndCalculation = "Lokasi dan pengiraan",
+        prayerTimesRow = "Waktu solat",
+        actionClear = "Kosongkan", // verify
         sectionAlerts = "Amaran",
         sectionAbout = "Perihal",
         chooseLocation = "Pilih lokasi",
@@ -2554,6 +2577,8 @@ val BengaliStrings = UiStrings(
             nextMonth = "পরের মাস", // verify
             nextPrayerPrefix = "পরবর্তী", // verify
             previousMonth = "আগের মাস", // verify
+            nextDay = "পরের দিন", // verify
+            previousDay = "আগের দিন", // verify
     ),
     more = UiStringsMore(
 reader = ReaderStrings(
@@ -2585,7 +2610,6 @@ reader = ReaderStrings(
         emptySavedTitle = "এখনও কিছু সংরক্ষণ করা হয়নি",  // verify
         emptySavedMessage = "পড়ার সময় একটি আয়াত সংরক্ষণ করুন, তা এখানে অপেক্ষা করবে।",  // verify
         headingLabel = "শিরোনাম",
-        mushaf = "মুশফ",  // verify
         changeInReader = "এটি মুশফ পাঠের বিকল্পগুলোতে বদলান।",
         pageAnnouncement = "পৃষ্ঠা %1\$d, জুজ %2\$d, সূরা %3\$s, %4\$s, %5\$s থেকে %6\$s পর্যন্ত",
         blockAnnouncement = "%1\$s থেকে %2\$s পর্যন্ত, %3\$s, পৃষ্ঠা %4\$d",
@@ -2624,6 +2648,8 @@ reader = ReaderStrings(
         textSize = "লেখার আকার",
         sectionAppearance = "চেহারা",
         sectionLocationAndCalculation = "অবস্থান ও হিসাব",
+        prayerTimesRow = "নামাজের সময়সূচী",
+        actionClear = "মুছুন", // verify
         sectionAlerts = "সতর্কতা",
         sectionAbout = "সম্পর্কে",
         chooseLocation = "অবস্থান বেছে নিন",
@@ -2849,6 +2875,8 @@ val RussianStrings = UiStrings(
             nextMonth = "Следующий месяц", // verify
             nextPrayerPrefix = "След.", // verify
             previousMonth = "Предыдущий месяц", // verify
+            nextDay = "Следующий день", // verify
+            previousDay = "Предыдущий день", // verify
     ),
     more = UiStringsMore(
 reader = ReaderStrings(
@@ -2880,7 +2908,6 @@ reader = ReaderStrings(
         emptySavedTitle = "Пока ничего не сохранено",  // verify
         emptySavedMessage = "Сохраните аят при чтении — он будет ждать здесь.",  // verify
         headingLabel = "Заголовок",
-        mushaf = "Мусхаф",  // verify
         changeInReader = "Измените это в параметрах чтения Корана.",
         pageAnnouncement = "Страница %1\$d, джуз' %2\$d, сура %3\$s, %4\$s, с %5\$s по %6\$s",
         blockAnnouncement = "с %1\$s по %2\$s, %3\$s, страница %4\$d",
@@ -2919,6 +2946,8 @@ reader = ReaderStrings(
         textSize = "Размер текста",
         sectionAppearance = "Оформление",
         sectionLocationAndCalculation = "Местоположение и расчёт",
+        prayerTimesRow = "Время намаза",
+        actionClear = "Очистить", // verify
         sectionAlerts = "Оповещения",
         sectionAbout = "О приложении",
         chooseLocation = "Выберите местоположение",
@@ -3144,6 +3173,8 @@ val GermanStrings = UiStrings(
             nextMonth = "Nächster Monat", // verify
             nextPrayerPrefix = "Nächst.", // verify
             previousMonth = "Vorheriger Monat", // verify
+            nextDay = "Nächster Tag", // verify
+            previousDay = "Vorheriger Tag", // verify
     ),
     more = UiStringsMore(
 reader = ReaderStrings(
@@ -3175,7 +3206,6 @@ reader = ReaderStrings(
         emptySavedTitle = "Noch nichts gespeichert",  // verify
         emptySavedMessage = "Speichere beim Lesen einen Vers, er wartet hier auf dich.",  // verify
         headingLabel = "Überschrift",
-        mushaf = "Mushaf",  // verify
         changeInReader = "Ändere das in den Lesoptionen des Mushaf.",
         pageAnnouncement = "Seite %1\$d, Dschuz %2\$d, Sure %3\$s, %4\$s, von %5\$s bis %6\$s",
         blockAnnouncement = "%1\$s bis %2\$s, %3\$s, Seite %4\$d",
@@ -3214,6 +3244,8 @@ reader = ReaderStrings(
         textSize = "Schriftgröße",
         sectionAppearance = "Darstellung",
         sectionLocationAndCalculation = "Standort & Berechnung",
+        prayerTimesRow = "Gebetszeiten",
+        actionClear = "Leeren", // verify
         sectionAlerts = "Hinweise",
         sectionAbout = "Über",
         chooseLocation = "Standort wählen",
@@ -3439,6 +3471,8 @@ val SpanishStrings = UiStrings(
             nextMonth = "Mes siguiente", // verify
             nextPrayerPrefix = "Próxima", // verify
             previousMonth = "Mes anterior", // verify
+            nextDay = "Día siguiente", // verify
+            previousDay = "Día anterior", // verify
     ),
     more = UiStringsMore(
 reader = ReaderStrings(
@@ -3470,7 +3504,6 @@ reader = ReaderStrings(
         emptySavedTitle = "Aún no has guardado nada",  // verify
         emptySavedMessage = "Guarda un versículo al leer y te estará esperando aquí.",  // verify
         headingLabel = "Título",
-        mushaf = "Mushaf",  // verify
         changeInReader = "Cámbialo en las opciones de lectura del Mushaf.",
         pageAnnouncement = "Página %1\$d, juz' %2\$d, sura %3\$s, %4\$s, de %5\$s a %6\$s",
         blockAnnouncement = "%1\$s a %2\$s, %3\$s, página %4\$d",
@@ -3509,6 +3542,8 @@ reader = ReaderStrings(
         textSize = "Tamaño del texto",
         sectionAppearance = "Apariencia",
         sectionLocationAndCalculation = "Ubicación y cálculo",
+        prayerTimesRow = "Horarios de oración",
+        actionClear = "Borrar", // verify
         sectionAlerts = "Alertas",
         sectionAbout = "Acerca de",
         chooseLocation = "Elegir ubicación",
@@ -3769,3 +3804,15 @@ fun ProvideAppLanguage(language: String, content: @Composable () -> Unit) {
         content()
     }
 }
+
+/**
+ * The platform locale of a stored app-language name.
+ *
+ * The reading surfaces ask the platform for month and weekday names, and the app's own
+ * language is not the device's: a reader can choose Arabic on a German phone, and the
+ * month sheet was then ruled in German beside Arabic headings. The locale comes from the
+ * same [AppLanguage] the strings and the layout direction come from, so the language is
+ * one decision rather than three.
+ */
+fun appLocale(language: String): Locale =
+    Locale.forLanguageTag(AppLanguage.fromNameOrCode(language).code)

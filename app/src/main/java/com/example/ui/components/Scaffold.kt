@@ -172,7 +172,12 @@ fun SectionHeader(
         text = text.uppercase(),
         style = SectionLabelStyle,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(top = space.xl, bottom = space.sm)
+        // A heading, so a screen reader can jump section to section on the long
+        // scrolling screens instead of walking every row. The top bar's title is
+        // the only other heading in the app.
+        modifier = modifier
+            .padding(top = space.xl, bottom = space.sm)
+            .semantics { heading() }
     )
 }
 

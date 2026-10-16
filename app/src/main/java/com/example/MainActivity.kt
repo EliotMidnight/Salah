@@ -358,6 +358,7 @@ private fun SalahApp(viewModel: SalahViewModel) {
                         onCustomLocationSave = viewModel::setCustomLocation,
                         onReschedulePrayers = viewModel::reschedulePrayers,
                         onResetAllSettings = viewModel::resetAllSettings,
+                        onOpenPrayer = { navController.navigateTab(SalahDestination.PRAYER) },
                     )
                 }
             }

@@ -25,8 +25,8 @@ package com.example.ui
  *
  * - **True cognates.** French *page*, German *Seite*, Spanish *página*, Indonesian
  *   *halaman*.
- * - **Borrowed terms.** *Mushaf* is used as a loanword in most European languages and
- *   written identically; *Indigo* is likewise.
+ * - **Borrowed terms.** *Juz* is used as a loanword in French, Indonesian and Malay
+ *   and written identically; *Indigo* is likewise.
  * - **Loan translations.** German says *Sand*, Malay says *Apricot* — both are the
  *   correct German and Malay words for the thing, and they happen to be spelled like
  *   the English. Demanding a difference would push a translator to invent a wrong one.
@@ -46,7 +46,6 @@ internal object BorrowedWords {
     /** English text → the languages that write it the same way. */
     private val byText: Map<String, Set<String>> = mapOf(
         // --- Reader chrome ---------------------------------------------------
-        "Mushaf" to setOf("French", "Indonesian", "Turkish", "Malay", "German", "Spanish"),
         "Vertical" to setOf("French", "Spanish"),
         "Horizontal" to setOf("French", "Indonesian", "German", "Spanish"),
 

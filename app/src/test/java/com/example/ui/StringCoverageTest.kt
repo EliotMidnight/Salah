@@ -120,7 +120,7 @@ class StringCoverageTest {
     @Test
     fun `a language that has its own name for a borrowed term uses it`() {
         // The counterpart to [BorrowedWords]. Arabic, Urdu, Bengali and
-        // Russian all have an established form for "Mushaf"; if one of them
+        // Russian all have an established form for "Juz"; if one of them
         // reverted to the English spelling that would be a regression the
         // allowlist would otherwise hide.
         val mustDiffer = setOf("Arabic", "Urdu", "Bengali", "Russian")
@@ -128,10 +128,10 @@ class StringCoverageTest {
         val failures = nonEnglish
             .filter { (language, _) -> language in mustDiffer }
             .filter { (language, strings) ->
-                read(strings.more.reader, "mushaf") ==
-                    read(EnglishStrings.more.reader, "mushaf")
+                read(strings.more, "juzOf") ==
+                    read(EnglishStrings.more, "juzOf")
             }
-            .map { (language, _) -> "$language should use its own form of \"Mushaf\"" }
+            .map { (language, _) -> "$language should use its own form of \"Juz\"" }
 
         assertTrue(
             "Borrowed term used where the language has its own:\n" +
@@ -215,11 +215,20 @@ class StringCoverageTest {
             .filter { it.type == String::class.java }
             .map { it.name }
 
+    /**
+     * The value of [field] in [target].
+     *
+     * Deliberately not tolerant of a field name that does not exist. This helper is
+     * asked for fields by name, and the compiler cannot check those names; a miss used
+     * to read as `""` on both sides of a comparison, which makes a probe report an
+     * untranslated value where the field it meant to read was not there at all. It read
+     * that way when `juzOf` moved from `ReaderStrings` to `UiStringsMore`: four
+     * languages were named as untranslated while the holder being read had no such
+     * field, and the value on both sides was the empty fallback.
+     */
     private fun read(target: Any, field: String): String =
-        runCatching {
-            target::class.java.declaredFields
-                .first { it.name == field }
-                .apply { isAccessible = true }
-                .get(target) as? String ?: ""
-        }.getOrDefault("")
+        target::class.java.declaredFields
+            .first { it.name == field }
+            .apply { isAccessible = true }
+            .get(target) as? String ?: ""
 }

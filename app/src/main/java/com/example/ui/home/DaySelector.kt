@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import com.example.ui.localization.LocalStrings
 import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
 import java.time.LocalDate
@@ -43,6 +44,10 @@ fun DaySelector(
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
+    // The arrows were two unlabelled buttons: a screen reader walked the row as
+    // "button, Friday 14 September, button", so the only date controls in the app
+    // had no names. The month sheet's arrows carry theirs; these did not.
+    val dateNav = LocalStrings.current.dateNav
 
     Row(
         modifier = modifier
@@ -53,7 +58,7 @@ fun DaySelector(
         IconButton(onClick = onPrevious, modifier = Modifier.testTag("day_prev")) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                contentDescription = null,
+                contentDescription = dateNav.previousDay,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -88,7 +93,7 @@ fun DaySelector(
         IconButton(onClick = onNext, modifier = Modifier.testTag("day_next")) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
+                contentDescription = dateNav.nextDay,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }

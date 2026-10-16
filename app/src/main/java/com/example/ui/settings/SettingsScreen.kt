@@ -196,6 +196,7 @@ fun SettingsScreen(
     onReschedulePrayers: () -> Unit = {},
     onResetAllSettings: () -> Unit = {},
     onFetchLocation: () -> Unit = {},
+    onOpenPrayer: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
@@ -242,8 +243,12 @@ fun SettingsScreen(
                 ActionRow(
                     title = strings.locationLabel,
                     subtitle = state.location.name,
+                    // `Locale.US` for the numbers, as `AppLocationService` already
+                    // formats the same coordinates. The pair is joined with ", " and in
+                    // German, French and Spanish the decimal separator *is* that comma,
+                    // so "48,85, 2,35" read as four numbers.
                     value = String.format(
-                        java.util.Locale.getDefault(),
+                        java.util.Locale.US,
                         "%.2f, %.2f",
                         state.location.latitude,
                         state.location.longitude
@@ -320,6 +325,17 @@ fun SettingsScreen(
                     title = strings.hijriCalibrationLabel,
                     value = hijriSummary(state.hijriAdjustment),
                     onClick = { sheet = Sheet.HIJRI }
+                )
+                RowDivider()
+                // The Prayer screen - the month table, the vigils, and the day
+                // switcher the Today page follows - is a destination with no dock
+                // item. It was left out of the bar deliberately, "reached from
+                // Settings", and this is that route: it was never wired, so the
+                // whole screen was unreachable.
+                ActionRow(
+                    title = strings.more.prayerTimesRow,
+                    onClick = onOpenPrayer,
+                    testTag = "setting_prayer_times"
                 )
             }
 
@@ -521,7 +537,13 @@ fun SettingsScreen(
                     onClick = {}
                 )
                 RowDivider()
-                SectionGroup {
+                // The privacy block, as a child of this group rather than a
+                // `SectionGroup` nested inside it. A card inside a card is a second
+                // surface deciding the same padding: it reads as nothing today
+                // because both are `surface`, and the day one of them is retinted the
+                // inner card appears with its own radius and indent. The rows above
+                // are this group's children; so is this.
+                Column(modifier = Modifier.padding(horizontal = space.md)) {
                     Text(
                         text = strings.privacyPhilosophyTitle,
                         style = MaterialTheme.typography.titleMedium,

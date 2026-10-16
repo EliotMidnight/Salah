@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -44,6 +45,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -60,12 +65,13 @@ import com.example.engine.PrayerCalculationEngine
 import com.example.engine.QiblaEngine
 import com.example.ui.SalahUiState
 import com.example.ui.components.SafeArea
+import com.example.ui.localization.LocalLanguage
 import com.example.ui.localization.LocalStrings
+import com.example.ui.localization.appLocale
 import com.example.ui.localization.prayerName
 import com.example.ui.localization.isArabicInterface
 import com.example.ui.localization.DateNavStrings
 import com.example.ui.theme.Motion
-import com.example.ui.theme.layoutMetrics
 import com.example.ui.theme.HandwritingFamily
 import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
@@ -73,7 +79,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
  * Today: the prayer, its time, and how long until the next one.
@@ -87,15 +92,16 @@ fun TodayScreen(
 ) {
     val strings = LocalStrings.current
     val space = Space.current
-    val accent = MaterialTheme.colorScheme.primary
     val timeFormatter = remember(state.timeFormat24h) {
         DateTimeFormatter.ofPattern(if (state.timeFormat24h) "HH:mm" else "h:mm a")
     }
 
     var showMonth by rememberSaveable { mutableStateOf(false) }
     // How far the reader has walked from the shared date with this page's own
-    // arrows. Kept as an offset rather than a second selected date, so the two
-    // can never disagree: the arrows move the shared date, they do not shadow it.
+    // arrows. Kept as an offset rather than a second selected date, so browsing a
+    // day here cannot move the app's date: the Prayer screen owns that switch, and
+    // the notifications and the "next prayer" countdown are about *today*, which
+    // this page would otherwise be redefining.
     var dayOffset by rememberSaveable { mutableIntStateOf(0) }
 
     // The Prayer tab owns the date. There is no switcher here: a second one
@@ -234,10 +240,17 @@ fun TodayScreen(
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    // A 48dp tap target around a 24dp line of text: the location is how
+                    // the reader changes where the times come from, and the label alone
+                    // was a 32dp-tall target - the smallest control on the page in the
+                    // one place that is a primary action. The text stays where it was;
+                    // the target and the ripple grow around it.
                     modifier = Modifier
                         .weight(1f)
                         .clip(MaterialTheme.shapes.small)
                         .clickable(onClick = onLocationClick)
+                        .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+                        .wrapContentHeight(Alignment.CenterVertically)
                         .padding(vertical = space.xs, horizontal = space.xs)
                 )
             }
@@ -361,23 +374,47 @@ private fun SimpleView(
         // chose Arabic - a headline in a language you did not pick is decoration,
         // and the Arabic belongs underneath it as the subtitle, not above it as
         // the title.
+        //
+        // Measured, not fixed: see [HeadlineFit]. A fixed 58sp cut "Lever du
+        // soleil" and "Sonnenaufgang" off mid-word on one line, with no ellipsis,
+        // on the one line the page is built around.
         val localisedName = strings.prayerName(currentPrayer)
         val arabicLeads = isArabicUi
-        Text(
-            text = if (arabicLeads) currentPrayer.arabicName else localisedName,
-            // Handwriting, not the display serif. This is the one line on the
-            // page that should read as written by a person rather than set by a
-            // typesetter, and at 58sp the difference is the whole character of
-            // the page. The Arabic subtitle below keeps the serif, because
-            // [HandwritingFamily] has no Arabic glyphs to fall back from within.
+        val headlineText = if (arabicLeads) currentPrayer.arabicName else localisedName
+        // Handwriting, not the display serif. This is the one line on the
+        // page that should read as written by a person rather than set by a
+        // typesetter, and at 58sp the difference is the whole character of
+        // the page. The Arabic subtitle below keeps the serif, because
+        // [HandwritingFamily] has no Arabic glyphs to fall back from within.
+        val headlineStyle = TextStyle(
             fontFamily = if (arabicLeads) FontFamily.Serif else HandwritingFamily,
-            fontSize = 58.sp,
-            lineHeight = 66.sp,
+            fontSize = HeadlineFit.CEILING_SP.sp,
+            lineHeight = HeadlineFit.LINE_HEIGHT_SP.sp,
             fontWeight = FontWeight.Bold,
             color = accent,
-            textAlign = TextAlign.Center,
-            maxLines = 1
+            textAlign = TextAlign.Center
         )
+        val measurer = rememberTextMeasurer()
+        val density = LocalDensity.current
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val rowWidthPx = with(density) { maxWidth.roundToPx() }
+            val fontScale = density.fontScale
+            val sizeSp = remember(headlineText, headlineStyle, rowWidthPx, fontScale) {
+                HeadlineFit.size(
+                    measuredWidthPx = measurer
+                        .measure(AnnotatedString(headlineText), headlineStyle)
+                        .size
+                        .width,
+                    availableWidthPx = rowWidthPx
+                )
+            }
+            Text(
+                text = headlineText,
+                style = headlineStyle.copy(fontSize = sizeSp.sp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
         if (!arabicLeads) {
             Text(
                 text = currentPrayer.arabicName,
@@ -454,17 +491,26 @@ private fun SimpleView(
                 CountdownRule(accent = accent, countdown = countdown)
             }
 
-            // The app's one date switcher. It lives on the Prayer tab too, and
-            // both write the same selected date - two switches would be two
-            // answers to "which day am I looking at".
+            // The date row's own arrows, the same control the Prayer screen has. They
+            // step this page's date and write nothing back: the app's date is
+            // switched on the Prayer screen, and a second writer would be a second
+            // answer to "which day is it".
             Spacer(Modifier.height(space.sm))
+
+            // The day's own name comes from the platform, in the *app's* language and
+            // not the device's - the two are separate settings, and an Arabic interface
+            // on a German phone was reading a German weekday under an Arabic date.
+            // Hoisted out of the body as well: this row redraws with the countdown, and
+            // the pattern was rebuilt with it.
+            val dateLocale = appLocale(LocalLanguage.current)
+            val gregorianFormatter = remember(dateLocale) {
+                DateTimeFormatter.ofPattern("EEEE d MMMM", dateLocale)
+            }
             DaySelector(
                 selectedDate = date,
                 isToday = isToday,
                 hijriLabel = "${hijri.day} ${hijri.monthNameEn} ${hijri.year} AH",
-                gregorianLabel = date.format(
-                    DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault())
-                ),
+                gregorianLabel = date.format(gregorianFormatter),
                 todayLabel = LocalStrings.current.todayBtn,
                 onPrevious = { onShiftDate(dayOffset - 1) },
                 onNext = { onShiftDate(dayOffset + 1) },
@@ -485,12 +531,12 @@ private fun SimpleView(
                 PrayerTimeRow(
                     prayer = prayer,
                     time = times[prayer]?.format(timeFormatter) ?: "--:--",
-                    state = when {
-                        prayer == currentPrayer -> PrayerTimeRowState.Current
-                        nextPrayer != null && isAfter(prayer, currentPrayer, nextPrayer) ->
-                            PrayerTimeRowState.Past
-                        else -> PrayerTimeRowState.Future
-                    }
+                    state = prayerRowState(
+                        isToday = isToday,
+                        prayer = prayer,
+                        currentPrayer = currentPrayer,
+                        nextPrayer = nextPrayer
+                    )
                 )
             }
         }
@@ -600,7 +646,48 @@ private fun RuleSegment(accent: Color, modifier: Modifier) {
     }
 }
 
-private enum class PrayerTimeRowState { Past, Current, Future }
+/** Which of the three marks a prayer's row carries. */
+internal enum class PrayerTimeRowState { Past, Current, Future }
+
+/**
+ * The mark a prayer's row carries on the day being shown.
+ *
+ * ### Why a day that is not today gets no marks
+ *
+ * A mark is a claim about now, and now is only on today. A scrubbed day cannot ask
+ * the state - it holds today - so its hero and its next line come from a fixed
+ * anchor, the day's own Maghrib, picked for being deterministic and for keeping the
+ * arrows stable to walk (see the derivation above). The marks were fed that same
+ * anchored pair, so a page of tomorrow's times dimmed the prayer *after* the anchor:
+ * Isha, the last of the day, drawn as already gone on a page whose own "now" was
+ * Maghrib - the prayer before it. The anchor is how the hero is drawn; it is not
+ * turned into marks.
+ *
+ * ### On today, the walk marks the wrong row
+ *
+ * The current prayer's row is accent. The rows marked [PrayerTimeRowState.Past] come
+ * from [isAfter], whose forward walk steps before it compares and therefore includes
+ * the `next` end of its range: `current` and `next` always bracket now, so the only
+ * row it can reach is `next` - the row the NEXT line names - while the prayer whose
+ * window has ended keeps full-strength ink. That disagrees with the only written
+ * account of the state ("a past prayer is one that has already come round") and with
+ * the times printed on the same rows. Fixing it needs a clock, and the clock has one
+ * owner: the ticker that writes the state's previous and next prayers can name the
+ * elapsed rows in the same pass, and [isAfter] can then go. This function takes no
+ * clock of its own on purpose - a second reading of now on the page is exactly the
+ * kind of duplicate decision this list cannot afford.
+ */
+internal fun prayerRowState(
+    isToday: Boolean,
+    prayer: Prayer,
+    currentPrayer: Prayer,
+    nextPrayer: Prayer?
+): PrayerTimeRowState = when {
+    !isToday -> PrayerTimeRowState.Future
+    prayer == currentPrayer -> PrayerTimeRowState.Current
+    nextPrayer != null && isAfter(prayer, currentPrayer, nextPrayer) -> PrayerTimeRowState.Past
+    else -> PrayerTimeRowState.Future
+}
 
 @Composable
 private fun PrayerTimeRow(

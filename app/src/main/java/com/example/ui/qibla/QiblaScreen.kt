@@ -192,10 +192,13 @@ private fun SunReferenceSheet(state: SalahUiState, onDismiss: () -> Unit) {
 
         Spacer(Modifier.height(Space.current.lg))
 
+        // `Locale.US`, like the bearing and the distance listed beside them: these
+        // are instrument readings, and the device's decimal separator made these two
+        // the only numbers on the screen with a comma in them.
         com.example.ui.components.DetailList(
             items = listOf(
-                strings.more.sunAzimuth to String.format(java.util.Locale.getDefault(), "%.1f°", sun.azimuth),
-                strings.more.sunAltitudeValue to String.format(java.util.Locale.getDefault(), "%.1f°", sun.altitude),
+                strings.more.sunAzimuth to String.format(java.util.Locale.US, "%.1f°", sun.azimuth),
+                strings.more.sunAltitudeValue to String.format(java.util.Locale.US, "%.1f°", sun.altitude),
                 strings.more.qiblaBearing to PrayerNotificationManager.formatBearing(state.qiblaBearing)
             )
         )

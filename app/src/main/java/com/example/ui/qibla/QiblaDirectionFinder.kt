@@ -522,7 +522,11 @@ private fun DialReadout(
             ReadoutFigure(
                 label = strings.more.qiblaBearing,
                 value = PrayerNotificationManager.formatBearing(bearing),
-                caption = strings.more.reader.mushaf,
+                // The cardinal sector of the bearing, exactly as the heading beside
+                // it. The two figures are read side by side, so they are captioned
+                // by the same rule: the numeral says how far, the sector says which
+                // way. A caption that is not a direction belongs on neither of them.
+                caption = strings.more.reader.cardinal(bearing),
                 captionColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 valueColor = if (isFacing) success else MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f)

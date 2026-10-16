@@ -185,6 +185,4 @@ data class HijriDate(
     val monthNameEn: String,
     val monthNameAr: String,
     val year: Int
-) {
-    fun formatDisplay(): String = "$day $monthNameEn $year AH"
-}
+)
