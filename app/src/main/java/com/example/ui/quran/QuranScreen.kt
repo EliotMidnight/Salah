@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -12,8 +13,11 @@ import com.example.data.model.Ayah
 import com.example.data.model.QuranReadingOptions
 import com.example.data.model.QuranRef
 import com.example.data.quran.QuranBrowse
+import com.example.data.quran.QuranCorpus
 import com.example.ui.SalahUiState
 import com.example.ui.quran.reader.rememberReaderPosition
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * The Quran destination: read.
@@ -41,6 +45,25 @@ fun QuranScreen(
     onImmersiveChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // The corpus is the one read in this app big enough to be felt: a SHA-256
+    // gate, a parse and 6,236 verses, hundreds of milliseconds on a cold
+    // process. The reader is where every reader meets it first, so the wait
+    // happens here, off the main thread, and shows the reader's own loading
+    // face rather than arriving as a frozen frame.
+    //
+    // The check is a field read once the corpus is in memory, so every later
+    // visit composes the reader immediately; only the first open in a process
+    // can see the loading face at all.
+    var corpusReady by remember { mutableStateOf(QuranCorpus.isLoaded) }
+    if (!corpusReady) {
+        LaunchedEffect(Unit) {
+            withContext(Dispatchers.Default) { QuranCorpus.ayahs }
+            corpusReady = true
+        }
+        QuranLoading(modifier = modifier)
+        return
+    }
+
     var indexOpen by rememberSaveable { mutableStateOf(false) }
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
 

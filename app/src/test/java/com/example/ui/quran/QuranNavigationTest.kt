@@ -5,6 +5,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -80,7 +81,11 @@ class QuranNavigationTest {
                 }
             }
         }
-        compose.waitForIdle()
+        // The destination loads the corpus before it shows the reader (off the
+        // main thread, once per process), so the reader is what to wait for.
+        compose.waitUntil(timeoutMillis = 60_000) {
+            compose.onAllNodesWithTag("reader_index").fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     /** What `MainActivity` does in response to a request. */

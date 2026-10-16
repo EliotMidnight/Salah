@@ -181,4 +181,52 @@ class QuranSearchTest {
         val english = QuranSearch.searchVerses("Merciful").hits.first()
         assertEquals(english.ayah.textEnglish, english.subject)
     }
+
+    // --- Ordering ---------------------------------------------------------
+
+    /**
+     * The sheet's promise, restated from the public pieces: the key a row is
+     * ordered by is the rank of its match, and the surah and ayah only break
+     * ties between equally-ranked matches.
+     *
+     * The rule is written out again here on purpose. It is the fact the refactor
+     * this test arrived with was about - the rank used to be computed inside the
+     * sort comparator, per comparison - and a test that reached into the
+     * implementation for the key could not catch the key being dropped.
+     */
+    private fun assertOrderedByRank(query: String) {
+        val terms = QuranText.terms(query)
+        val hits = QuranSearch.searchVerses(query).hits
+        assertTrue("expected a page to order for \"$query\"", hits.size >= 10)
+
+        val keys = hits.map { hit ->
+            val rank = when (hit.matchedIn) {
+                QuranSearchHit.Field.ARABIC ->
+                    QuranText.rank(QuranText.normalise(hit.ayah.textArabic), terms)
+
+                QuranSearchHit.Field.ENGLISH ->
+                    QuranText.rank(hit.ayah.textEnglish.lowercase(), terms) + 1
+
+                // Never produced by a verse search; named for exhaustiveness.
+                QuranSearchHit.Field.SURAH_NAME -> QuranText.NO_MATCH
+            }
+            Triple(rank, hit.ayah.surahNumber, hit.ayah.ayahNumber)
+        }
+
+        assertEquals(
+            "\"$query\" is not ordered best-first",
+            keys.sortedWith(compareBy({ it.first }, { it.second }, { it.third })),
+            keys
+        )
+    }
+
+    @Test
+    fun `an English page of results is ordered by rank, not by verse number`() {
+        assertOrderedByRank("mercy")
+    }
+
+    @Test
+    fun `an Arabic page of results is ordered by rank, not by verse number`() {
+        assertOrderedByRank("ٱلرحمن")
+    }
 }

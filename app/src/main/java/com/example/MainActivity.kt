@@ -50,9 +50,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,6 +70,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -131,7 +134,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val viewModel: SalahViewModel = viewModel()
-            val uiState by viewModel.uiState.collectAsState()
+            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
             // The app has three explicit theme choices plus "match system".
             // Dynamic (wallpaper) colour is intentionally not offered: it cannot
@@ -194,9 +197,16 @@ private fun SalahApp(viewModel: SalahViewModel) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: SalahDestination.TODAY.route
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val strings = LocalStrings.current
+
+    // The ticker is a 1 Hz recomputation and the compass is a sensor stream;
+    // both run only while the app is in front of the reader. The write side
+    // (the ViewModel) is told, rather than the app collecting differently,
+    // because a stopped ticker is also less work, not just a quieter one.
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.setForeground(true) }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.setForeground(false) }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -315,6 +325,14 @@ private fun SalahApp(viewModel: SalahViewModel) {
                 }
 
                 composable(SalahDestination.QIBLA.route) {
+                    // The heading is the only thing on this screen, and the
+                    // sensors are only polled while a screen that shows one is
+                    // composed. Settings has its own registration, because its
+                    // sensor diagnostics read the same accuracy report.
+                    DisposableEffect(Unit) {
+                        viewModel.startCompass()
+                        onDispose { viewModel.stopCompass() }
+                    }
                     QiblaScreen(
                         state = uiState,
                         onToggleTrueNorth = viewModel::toggleTrueNorth,
@@ -329,6 +347,10 @@ private fun SalahApp(viewModel: SalahViewModel) {
                 }
 
                 composable(SalahDestination.SETTINGS.route) {
+                    DisposableEffect(Unit) {
+                        viewModel.startCompass()
+                        onDispose { viewModel.stopCompass() }
+                    }
                     SettingsScreen(
                         state = uiState,
                         onLocationSelect = viewModel::setLocation,

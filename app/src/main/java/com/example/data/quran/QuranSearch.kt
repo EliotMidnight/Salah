@@ -113,7 +113,7 @@ object QuranSearch {
         val arabic = QuranText.normalised
         val english = QuranText.lowerEnglish
         val ayahs = QuranCorpus.ayahs
-        val results = ArrayList<QuranSearchHit>(limit * 2)
+        val matches = ArrayList<Match>(limit * 2)
 
         for (index in ayahs.indices) {
             val inArabic = allPresent(arabic[index], terms)
@@ -123,59 +123,59 @@ object QuranSearch {
             val ayah = ayahs[index]
             val surah = QuranDataSource.getSurahByNumber(ayah.surahNumber) ?: continue
 
-            // A verse that matches in both scripts is a better answer than one
-            // that matches in one, so the score is the sum rather than a choice.
-            val score = when {
-                inArabic && inEnglish -> 0
-                inArabic -> QuranText.rank(arabic[index], terms)
-                else -> QuranText.rank(english[index], terms) + 1
-            }
+            // The rank is taken **here**, once per matching verse, rather than in
+            // the comparator. It used to be in the comparator, which re-ran this
+            // same rank - a scan of the verse already scanned - for every
+            // comparison the sort made: O(n log n) scans to order 50 rows.
+            //
+            // English is the language a reader is most likely reading in, so an
+            // English match is not behind an Arabic one by much. One point, not
+            // a rank: it should break a tie, not decide the order.
             val field = if (inArabic) {
                 QuranSearchHit.Field.ARABIC
             } else {
                 QuranSearchHit.Field.ENGLISH
             }
-            results += QuranSearchHit(
-                ayah = ayah,
-                surah = surah,
-                ref = QuranRef(ayah.surahNumber, ayah.ayahNumber, ayah.pageNumber),
-                matchedIn = field,
-                range = highlightRange(index, field, terms)
-            )
+            val rank = if (field == QuranSearchHit.Field.ARABIC) {
+                QuranText.rank(arabic[index], terms)
+            } else {
+                QuranText.rank(english[index], terms) + 1
+            }
+            matches += Match(index = index, ayah = ayah, surah = surah, field = field, rank = rank)
         }
 
         // The total is the *count before the page is taken*, so a caller can say how
         // many there are rather than how many it was given. See [VerseResults].
-        val total = results.size
-        val page = results
-            .sortedWith(
-                compareBy(
-                    { hitRank(it, terms) },
-                    { it.ayah.surahNumber },
-                    { it.ayah.ayahNumber }
-                )
-            )
+        val total = matches.size
+        val page = matches
+            .sortedWith(compareBy({ it.rank }, { it.ayah.surahNumber }, { it.ayah.ayahNumber }))
             .take(limit)
+            // Only the returned rows get their highlight computed. A broad query
+            // matches thousands of verses and shows fifty, and the ranges of the
+            // other few thousand were computed only to be dropped with them.
+            .map { match ->
+                QuranSearchHit(
+                    ayah = match.ayah,
+                    surah = match.surah,
+                    ref = QuranRef(
+                        match.ayah.surahNumber,
+                        match.ayah.ayahNumber,
+                        match.ayah.pageNumber
+                    ),
+                    matchedIn = match.field,
+                    range = highlightRange(match.index, match.field, terms)
+                )
+            }
         return VerseResults(page, total)
     }
 
-    private fun hitRank(hit: QuranSearchHit, terms: List<String>): Int {
-        val index = verseIndex(hit)
-        val source = when (hit.matchedIn) {
-            QuranSearchHit.Field.ARABIC -> QuranText.normalised[index]
-            QuranSearchHit.Field.ENGLISH -> QuranText.lowerEnglish[index]
-            QuranSearchHit.Field.SURAH_NAME -> hit.surah.englishName.lowercase()
-        }
-        val base = QuranText.rank(source, terms)
-        // English is the language a reader is most likely reading in, so an
-        // English match is not behind an Arabic one by much. One point, not a
-        // rank: it should break a tie, not decide the order.
-        return if (hit.matchedIn == QuranSearchHit.Field.ENGLISH) base + 1 else base
-    }
-
-    private fun verseIndex(hit: QuranSearchHit): Int = QuranCorpus.indexOf(
-        hit.ayah.surahNumber,
-        hit.ayah.ayahNumber
+    /** A matching verse, with the rank its row will be ordered by. */
+    private class Match(
+        val index: Int,
+        val ayah: Ayah,
+        val surah: Surah,
+        val field: QuranSearchHit.Field,
+        val rank: Int
     )
 
     /**

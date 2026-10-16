@@ -53,6 +53,7 @@ import com.example.engine.AdhanAudioSynthesizer
 import com.example.service.PrayerAlarmScheduler
 import com.example.service.PrayerAlertService
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,6 +62,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -448,7 +450,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
                     // page that no longer holds the verse.
                     if (!readingPositionRestored && cont.surahNumber > 0) {
                         readingPositionRestored = true
-                        requestOpen(QuranBrowse.ref(cont.surahNumber, cont.ayahNumber) ?: return@collectLatest)
+                        requestOpenVerse(cont.surahNumber, cont.ayahNumber)
                     }
                 }
             }
@@ -496,14 +498,8 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         // is the start of the book, not because something had to be written down first.
         _uiState.value = _uiState.value.copy(isQuranImmersive = repository.quranImmersive)
 
-        // Start 1-second live ticker
-        startLiveTicker()
-
         // Register background prayer alarm scheduling
         PrayerAlarmScheduler.scheduleAllPrayers(application)
-
-        // Register compass sensor
-        startCompass()
     }
 
     /**
@@ -511,11 +507,29 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
      */
     val hasCompass: Boolean get() = rotationSensor != null || magneticSensor != null
 
+    /**
+     * How many composed surfaces are showing a heading.
+     *
+     * Registration is reference-counted rather than a flag because the
+     * destination that is leaving and the one that is arriving overlap while a
+     * navigation transition runs: without the count, the outgoing surface's
+     * [stopCompass] would switch the sensors off under the incoming one.
+     */
+    private var compassWatchers = 0
+
+    /**
+     * Starts the compass stream for one composed surface.
+     *
+     * Called by the surfaces that display a heading - Qibla, and Settings'
+     * sensor diagnostics - not at launch. The magnetometer at UI rate is a
+     * continuous drain, and no other surface reads a heading; a device with no
+     * compass registers nothing and simply never hears from a sensor, which is
+     * the same as a device whose sensors are all asleep, and [hasCompass] is
+     * what tells those two apart.
+     */
     fun startCompass() {
-        // A device with no compass registers nothing and simply never hears from
-        // a sensor, which is the same as a device whose sensors are all asleep.
-        // [hasCompass] is what tells those two apart, for the caller deciding
-        // whether to show the Qibla tab.
+        compassWatchers++
+        if (compassWatchers > 1) return
         rotationSensor?.let {
             sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
@@ -527,8 +541,15 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         }
     }
 
+    /**
+     * Releases one composed surface's hold on the compass.
+     */
     fun stopCompass() {
-        sensorManager?.unregisterListener(this)
+        if (compassWatchers == 0) return
+        compassWatchers--
+        if (compassWatchers == 0) {
+            sensorManager?.unregisterListener(this)
+        }
     }
 
     fun toggleTrueNorth() {
@@ -540,9 +561,27 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     override fun onCleared() {
         super.onCleared()
-        stopCompass()
+        compassWatchers = 0
+        sensorManager?.unregisterListener(this)
         tickerJob?.cancel()
         audioPlayer.stop()
+    }
+
+    /**
+     * Ties the ticker to the app's foreground life.
+     *
+     * The tick is a 1 Hz recomputation of the next prayer, the countdown and the
+     * sun's position. Nothing on screen needs keeping when the app is not in
+     * front of the reader and the alarms are already scheduled, so it runs only
+     * between ON_START and ON_STOP and catches up on the way back in: the loop
+     * runs [updateLiveTiming] before its first delay.
+     */
+    fun setForeground(foreground: Boolean) {
+        if (foreground) {
+            startLiveTicker()
+        } else {
+            tickerJob?.cancel()
+        }
     }
 
     private fun startLiveTicker() {
@@ -1049,10 +1088,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
     /**
      * Asks for the reader to be put at [ref].
      */
-    fun requestOpen(ref: QuranRef) {
-        val resolved = QuranBrowse.ref(ref.surah, ref.ayah) ?: return
-        _uiState.value = _uiState.value.copy(pendingOpen = resolved)
-    }
+    fun requestOpen(ref: QuranRef) = requestOpenVerse(ref.surah, ref.ayah)
 
     /**
      * Asks for a surah, which is a request for its first verse.
@@ -1060,8 +1096,27 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
      * A surah's ayah 1 is the only verse that means "this surah" - so it is resolved
      * through the same path as everything else rather than by a second convention.
      */
-    fun requestOpenSurah(surahNumber: Int) {
-        requestOpen(QuranBrowse.ref(surahNumber, 1) ?: return)
+    fun requestOpenSurah(surahNumber: Int) = requestOpenVerse(surahNumber, 1)
+
+    /**
+     * Resolves a verse against the corpus, off the main thread, then asks the
+     * reader to go there.
+     *
+     * The resolution is what keeps the request honest - a stored row cannot name
+     * a verse this build does not have - and it is the app's most expensive lazy
+     * read (the SHA-256 gate, the parse, 6,236 verses) the first time it runs.
+     * The launch restore and "Continue reading" on Today both arrive here before
+     * the Quran destination has ever loaded the corpus, so the work goes to a
+     * Default dispatcher, and the state write stays on the main thread with
+     * every other write to it.
+     */
+    private fun requestOpenVerse(surah: Int, ayah: Int) {
+        viewModelScope.launch {
+            val resolved = withContext(Dispatchers.Default) {
+                QuranBrowse.ref(surah, ayah)
+            } ?: return@launch
+            _uiState.value = _uiState.value.copy(pendingOpen = resolved)
+        }
     }
 
     /**
@@ -1108,7 +1163,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
      */
     fun jumpToContinueReading() {
         val cr = _uiState.value.continueReading
-        requestOpen(QuranBrowse.ref(cr.surahNumber, cr.ayahNumber) ?: return)
+        requestOpenVerse(cr.surahNumber, cr.ayahNumber)
     }
 
     fun toggleBookmark(ayah: Ayah) {

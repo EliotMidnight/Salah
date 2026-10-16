@@ -360,7 +360,9 @@ internal object QuranCorpus {
      * counts are known. A failure names the structure that did not match instead of
      * arriving as a reader looking at an empty screen.
      */
-    val ayahs: List<Ayah> by lazy {
+    val ayahs: List<Ayah> get() = ayahsLazy.value
+
+    private val ayahsLazy = lazy {
         QuranStructure.requireIntact(structure)
         val pages = pageOfIndex
         val juzs = juzOfIndex
@@ -373,6 +375,16 @@ internal object QuranCorpus {
             )
         }
     }
+
+    /**
+     * Whether [ayahs] has already been built in this process.
+     *
+     * The build is the expensive part of the first read; a caller that can
+     * afford to wait [off the main thread][ayahs] uses this to keep a surface
+     * from paying the wait when it has already been paid. See the Quran
+     * destination's gate.
+     */
+    val isLoaded: Boolean get() = ayahsLazy.isInitialized()
 
     /** Verses on a mushaf page, as a range of the canonical list. */
     fun ayahsOnPage(page: Int): List<Ayah> {

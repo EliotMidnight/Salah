@@ -108,6 +108,15 @@ fun QuranReader(
     // The surah's verses, derived from the position.
     val ayahs = remember(position.surah) { QuranBrowse.ayahsInSurah(position.surah) }
 
+    // One set per bookmark list, not one scan per verse.
+    //
+    // It is asked per verse on the page ("is this one saved?") and again for the
+    // control pill, and every ask re-scanned the whole list; the list changes
+    // rarely and is rebuilt here only when it does.
+    val bookmarked = remember(state.bookmarks) {
+        state.bookmarks.mapTo(HashSet()) { it.surahNumber to it.ayahNumber }
+    }
+
     // A layout change drops the magnification.
     //
     // `resetMagnification` was documented as doing this and nothing called it, so a
@@ -143,17 +152,12 @@ fun QuranReader(
                 // produce verses for the surah the position names - which is the one
                 // case where a bare "Loading" with no way out is the right thing to
                 // show, and the only one.
-                EmptyState(
-                    title = strings.more.loading,
-                    message = strings.more.loadingQuranMessage,
-                    icon = Icons.AutoMirrored.Filled.MenuBook,
-                    modifier = Modifier.fillMaxSize()
-                )
+                QuranLoading()
             } else {
                 val actionsFor: (Ayah) -> VerseActions = { ayah ->
                     VerseActions(
                         ayah = ayah,
-                        isBookmarked = state.isBookmarked(ayah),
+                        isBookmarked = (ayah.surahNumber to ayah.ayahNumber) in bookmarked,
                         // A whole reference, so "is this the playing verse" is
                         // exact. It was an ayah number alone, which is true of three
                         // different ayah-1s on the last page and of any ayah number
@@ -257,7 +261,7 @@ fun QuranReader(
                 page = position.page,
                 ink = ink,
                 muted = muted,
-                isBookmarked = state.isBookmarkedAt(surah.number, position.ref.ayah),
+                isBookmarked = (surah.number to position.ref.ayah) in bookmarked,
                 visible = !immersive,
                 onOpenIndex = onOpenIndex,
                 onOpenOptions = onOpenOptions,
@@ -563,10 +567,21 @@ private fun AudioStrip(
     )
 }
 
-/** Is this verse in the reader's bookmark list? */
-private fun SalahUiState.isBookmarked(ayah: Ayah): Boolean =
-    isBookmarkedAt(ayah.surahNumber, ayah.ayahNumber)
-
-/** Is `ayah` of `surah` bookmarked? */
-private fun SalahUiState.isBookmarkedAt(surah: Int, ayah: Int): Boolean =
-    bookmarks.any { it.surahNumber == surah && it.ayahNumber == ayah }
+/**
+ * The reader's loading face.
+ *
+ * Shown while the corpus is loading - the Quran destination gates on it, because
+ * the first access in a process is a parse, not a read - and in the one case
+ * where the corpus has loaded but produced no verses for the requested surah,
+ * where a bare "Loading" with no way out is still the right thing to show.
+ */
+@Composable
+internal fun QuranLoading(modifier: Modifier = Modifier) {
+    val strings = LocalStrings.current
+    EmptyState(
+        title = strings.more.loading,
+        message = strings.more.loadingQuranMessage,
+        icon = Icons.AutoMirrored.Filled.MenuBook,
+        modifier = modifier.fillMaxSize()
+    )
+}

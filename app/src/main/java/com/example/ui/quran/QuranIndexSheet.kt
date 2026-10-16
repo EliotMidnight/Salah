@@ -69,7 +69,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 /** What the index is showing. */
 private enum class IndexView { SURAHS, SAVED, SEARCH }
@@ -113,6 +115,11 @@ fun QuranIndexSheet(
     // Verse search scans all 6,236 verses, so it is debounced rather than run on
     // every keystroke. The hits carry their own reference and their own highlight
     // range, which is why this is a list of hits and not a list of verses.
+    //
+    // The scan itself runs on a Default dispatcher: the debounce says *when*, but
+    // the scan is still tens of milliseconds over the corpus (and, the first time
+    // in a process, the fold pass that builds it), and none of that belongs on
+    // the frame clock.
     var results by remember { mutableStateOf(VerseResults(emptyList(), 0)) }
     LaunchedEffect(query, referenceKind) {
         if (query.isBlank() || referenceKind != null) {
@@ -120,7 +127,7 @@ fun QuranIndexSheet(
             return@LaunchedEffect
         }
         delay(SEARCH_DEBOUNCE_MILLIS)
-        results = QuranSearch.searchVerses(query)
+        results = withContext(Dispatchers.Default) { QuranSearch.searchVerses(query) }
     }
 
     // Strings for the list builders.
