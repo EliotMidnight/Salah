@@ -96,6 +96,11 @@ internal fun PageActionBar(
  * different things: in a scrolling list the bar is an *item* and moves with the
  * text, while on a page it is an overlay at the foot. Sharing the content and
  * splitting the placement is what stops the two from drifting.
+ *
+ * An item, but not the *last* item: the list draws it under the block that holds
+ * the selected verse, so it is one screen from the reader's finger rather than
+ * one scroll to the end of the surah. The horizontal axis has no list to hang it
+ * under and places it at the foot of the surface instead.
  */
 @Composable
 internal fun SelectedVerseActions(

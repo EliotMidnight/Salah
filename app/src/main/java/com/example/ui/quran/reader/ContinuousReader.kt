@@ -119,6 +119,22 @@ internal fun ContinuousReader(
     // is not a composable scope and so cannot `remember`.
     val blocks = remember(ayahs) { ayahs.chunked(FLOW_BLOCK_VERSES) }
 
+    // The verse the reader has selected, and the flow block it sits in.
+    //
+    // Resolved once, for both placements: the flow draws the bar under the block
+    // that holds the verse - where the reader's eye already is - and the horizontal
+    // pager, which has no list to hang it under, draws it at the foot of the
+    // surface. Neither is a place to re-scan the surah for the verse.
+    val selectionRef = position.selection
+    val selectedAyah = remember(ayahs, selectionRef) {
+        selectionRef?.let { ref ->
+            ayahs.firstOrNull { it.surahNumber == ref.surah && it.ayahNumber == ref.ayah }
+        }
+    }
+    val selectionBlock = remember(blocks, selectionRef) {
+        selectionBlockIndex(blocks, selectionRef)
+    }
+
     // The item index the reader's verse sits at, or 0 when it is not in this surah.
     //
     // `+ HEADING_ITEMS` because the list is `[heading, verse…]` - the same offset the
@@ -298,56 +314,80 @@ internal fun ContinuousReader(
                             )
                         }
                     )
-                }
-            }
 
-            // The selected verse's actions, at the end of the flow.
-            position.selection?.let { selected ->
-                ayahs.firstOrNull { it.surahNumber == selected.surah && it.ayahNumber == selected.ayah }
-                    ?.let { ayah ->
-                        item(key = SELECTION_KEY) {
-                            SelectedVerseActions(
-                                ayah = ayah,
-                                actions = actionsFor(ayah),
-                                options = options,
-                                onDismiss = { position.clearSelection() },
-                                modifier = Modifier.padding(vertical = space.md)
-                            )
-                        }
+                    // The selected verse's actions, directly under the block that
+                    // holds it.
+                    //
+                    // They were the last item in the list, which is a bar under
+                    // whatever verse the reader tapped: in Al-Baqarah a tap on the
+                    // first verse put the bar after verse 286, so a selection showed
+                    // a highlight and nothing else - no route to bookmark, copy,
+                    // share or play from the text being read. An item, still, so it
+                    // moves with the text rather than covering the lines below it.
+                    if (index == selectionBlock && selectedAyah != null) {
+                        SelectedVerseActions(
+                            ayah = selectedAyah,
+                            actions = actionsFor(selectedAyah),
+                            options = options,
+                            onDismiss = { position.clearSelection() },
+                            modifier = Modifier.padding(vertical = space.md)
+                        )
                     }
+                }
             }
         }
     }
 
-    if (horizontal) {
-        HorizontalFlow(
-            surah = surah,
-            blocks = blocks,
-            initialBlock = initialIndex.coerceIn(0, (blocks.size - 1).coerceAtLeast(0)),
-            selected = position.selection,
-            options = options,
-            ink = ink,
-            accent = accent,
-            muted = muted,
-            onSelectVerse = { ayah ->
-                position.toggleSelection(
-                    QuranRef(ayah.surahNumber, ayah.ayahNumber, ayah.pageNumber)
-                )
-            },
-            onSettled = { block ->
-                block.firstOrNull()?.let { ayah ->
-                    onPositionSettled(
+    // One surface, two ways of turning it: down the text or through it. The
+    // selected verse's actions belong to both, so the box is what knows about a
+    // selection and the branches below only know how to draw text.
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (horizontal) {
+            HorizontalFlow(
+                surah = surah,
+                blocks = blocks,
+                initialBlock = initialIndex.coerceIn(0, (blocks.size - 1).coerceAtLeast(0)),
+                selected = position.selection,
+                options = options,
+                ink = ink,
+                accent = accent,
+                muted = muted,
+                onSelectVerse = { ayah ->
+                    position.toggleSelection(
                         QuranRef(ayah.surahNumber, ayah.ayahNumber, ayah.pageNumber)
                     )
-                }
-            },
-            topInset = PageInsets.top(controlsVisible) + space.md,
-            modifier = modifier.fillMaxSize()
-        )
-        return
-    }
+                },
+                onSettled = { block ->
+                    block.firstOrNull()?.let { ayah ->
+                        onPositionSettled(
+                            QuranRef(ayah.surahNumber, ayah.ayahNumber, ayah.pageNumber)
+                        )
+                    }
+                },
+                topInset = PageInsets.top(controlsVisible) + space.md,
+                modifier = modifier.fillMaxSize()
+            )
 
-    body(modifier.fillMaxSize())
+            // At the foot of the surface, as it is on a mushaf page: this axis
+            // turns viewport-sized blocks like pages, so the block the verse is in
+            // *is* the surface, and there is no list to hang the bar under. A tap
+            // here used to select a verse with no actions at all.
+            selectedAyah?.let { ayah ->
+                SelectedVerseActions(
+                    ayah = ayah,
+                    actions = actionsFor(ayah),
+                    options = options,
+                    onDismiss = { position.clearSelection() },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = space.md)
+                        .padding(bottom = space.sm)
+                )
+            }
+        } else {
+            body(modifier.fillMaxSize())
+        }
+    }
 }
 
 /**
@@ -504,6 +544,31 @@ internal fun flowIndexOf(verseIndex: Int, blocks: List<List<Ayah>>): Int {
 }
 
 /**
+ * The flow block that holds the selected verse, or -1 when none does.
+ *
+ * ### Why it is its own function
+ *
+ * The bar of actions belongs under the verse it acts on. It used to be the *last item
+ * in the list*, which is a bar under whatever the reader had scrolled to - in
+ * Al-Baqarah, a tap on the first verse put the bar roughly 280 verses and a full sajdah
+ * later, off screen, so tapping a verse looked like it had done nothing at all. The
+ * block the verse is printed in is where the reader is looking, so the bar goes there.
+ *
+ * -1 is a real answer and not a fallback: a selection is cleared when the position
+ * moves to another page, but the surah can change under it, and a bar drawn under
+ * *some* block would be acting on a verse the reader cannot see. The list drops a -1
+ * rather than clamping it to a block.
+ */
+internal fun selectionBlockIndex(blocks: List<List<Ayah>>, selection: QuranRef?): Int {
+    if (selection == null) return -1
+    return blocks.indexOfFirst { group ->
+        group.any {
+            it.surahNumber == selection.surah && it.ayahNumber == selection.ayah
+        }
+    }
+}
+
+/**
  * A hairline and a page number, between the text of one mushaf page and the next.
  *
  * A rule with the number on it answers both without reintroducing a break: nothing
@@ -563,7 +628,6 @@ internal fun Modifier.selectableVerse(
 }
 
 internal const val HEADING_KEY = "surah_heading"
-internal const val SELECTION_KEY = "selected_verse"
 
 /** How many non-verse items sit above the verses in the continuous list. */
 internal const val HEADING_ITEMS = 1
