@@ -45,6 +45,7 @@ import com.example.data.repository.SalahRepository
 import com.example.engine.HijriCalendarEngine
 import com.example.engine.MagneticFieldStatus
 import com.example.engine.PlaybackTap
+import com.example.engine.nextPlaybackSpeed
 import com.example.engine.PrayerCalculationEngine
 import com.example.engine.PrayerNotificationManager
 import com.example.engine.QiblaEngine
@@ -228,6 +229,17 @@ data class SalahUiState(
      * ignores it is how a promise rots.
      */
     val currentAudioReciter: String? = null,
+
+    /**
+     * The speed the recitation is played at, mirrored from the reader's
+     * preference flow.
+     *
+     * The banner pill that cycles the speed shows this, and the tap behind it
+     * writes to the preference - the player is commanded from the flow, not
+     * from this copy. A copy of the speed, not the speed itself, is what the
+     * surface can read without reaching past the state.
+     */
+    val versePlaybackSpeed: Float = 1f,
     /**
      * The reader's own preferences, as one value.
      */
@@ -428,6 +440,16 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         viewModelScope.launch {
             repository.reciterFlow.collectLatest { rec ->
                 _uiState.value = _uiState.value.copy(reciter = rec)
+            }
+        }
+
+        // The speed is commanded from the preference flow, and the player's
+        // apply-at-every-prepare makes it reach the whole chain; the state copy
+        // is what the banner's pill draws.
+        viewModelScope.launch {
+            repository.playbackSpeedFlow.collectLatest { speed ->
+                audioPlayer.setSpeed(speed)
+                _uiState.value = _uiState.value.copy(versePlaybackSpeed = speed)
             }
         }
 
@@ -1242,6 +1264,21 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     fun stopAudio() {
         audioPlayer.stop()
+    }
+
+    /**
+     * One tap, one step: the speed pill cycles the offer.
+     *
+     * The cycle is asked of the engine's pure offer ([nextPlaybackSpeed]) and
+     * written to the preference - the flow tells the player, the state copy
+     * tells the pill. A tap that bypassed the preference would go stale on the
+     * next session; a tap that bypassed the cycle would drift from the five
+     * speeds the banner can actually describe.
+     */
+    fun cyclePlaybackSpeed() {
+        repository.setPlaybackSpeed(
+            nextPlaybackSpeed(_uiState.value.versePlaybackSpeed)
+        )
     }
 
     // SensorEventListener

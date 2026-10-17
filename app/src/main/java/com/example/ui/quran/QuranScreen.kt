@@ -50,6 +50,7 @@ fun QuranScreen(
     onToggleBookmark: (Ayah) -> Unit,
     onTogglePlayAyah: (Ayah) -> Unit,
     onStopAudio: () -> Unit,
+    onCycleSpeed: () -> Unit,
     onOptionsChange: (QuranReadingOptions) -> Unit,
     onImmersiveChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
@@ -124,6 +125,7 @@ fun QuranScreen(
         onToggleBookmark = onToggleBookmark,
         onTogglePlayAyah = onTogglePlayAyah,
         onStopAudio = onStopAudio,
+        onCycleSpeed = onCycleSpeed,
         options = state.quranReadingOptions,
         onOptionsChange = onOptionsChange,
         immersive = state.isQuranImmersive,

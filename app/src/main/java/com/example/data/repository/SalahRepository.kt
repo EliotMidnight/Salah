@@ -115,6 +115,16 @@ class SalahRepository(
     private val _reciterFlow = MutableStateFlow(prefs.getString("pref_reciter", "Mishary Rashid Alafasy") ?: "Mishary Rashid Alafasy")
     val reciterFlow: StateFlow<String> = _reciterFlow.asStateFlow()
 
+    /**
+     * The speed the reader's verse recitation is played at.
+     *
+     * A reader preference like the reciter it sits beside: chosen once, applied
+     * to every verse afterwards, and not re-asked at the next session. The player
+     * receives it as a command and carries no opinion of its own.
+     */
+    private val _playbackSpeedFlow = MutableStateFlow(prefs.getFloat("pref_verse_speed", 1f))
+    val playbackSpeedFlow: StateFlow<Float> = _playbackSpeedFlow.asStateFlow()
+
     private val _globalSilentFlow = MutableStateFlow(prefs.getBoolean("pref_global_silent", false))
     val globalSilentFlow: StateFlow<Boolean> = _globalSilentFlow.asStateFlow()
 
@@ -368,6 +378,11 @@ class SalahRepository(
     fun setReciter(reciter: String) {
         prefs.edit().putString("pref_reciter", reciter).apply()
         _reciterFlow.value = reciter
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        prefs.edit().putFloat("pref_verse_speed", speed).apply()
+        _playbackSpeedFlow.value = speed
     }
 
     // Room DB delegated methods

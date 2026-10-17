@@ -91,6 +91,7 @@ fun QuranReader(
     onToggleBookmark: (Ayah) -> Unit,
     onTogglePlayAyah: (Ayah) -> Unit,
     onStopAudio: () -> Unit,
+    onCycleSpeed: () -> Unit,
     options: QuranReadingOptions,
     onOptionsChange: (QuranReadingOptions) -> Unit,
     immersive: Boolean,
@@ -309,6 +310,10 @@ fun QuranReader(
                         // being heard. They were the same value only while the stream
                         // ignored the choice.
                         reciter = state.currentAudioReciter.orEmpty(),
+                        // The speed the preference flow carries: the same value the
+                        // player was told, so the pill shows what is applied.
+                        speed = state.versePlaybackSpeed,
+                        onCycleSpeed = onCycleSpeed,
                         onStop = onStopAudio,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -590,10 +595,17 @@ private fun AudioStrip(
      */
     ref: QuranRef,
     reciter: String,
+    /**
+     * The speed the recitation is playing at, as the reader's preference names
+     * it. The pill shows what is applied, not a menu: the value is the state.
+     */
+    speed: Float,
+    onCycleSpeed: () -> Unit,
     onStop: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val strings = LocalStrings.current
+    val space = Space.current
     val preferArabicName = isArabicInterface(LocalLanguage.current)
 
     StatusBanner(
@@ -612,10 +624,23 @@ private fun AudioStrip(
         },
         icon = Icons.AutoMirrored.Filled.MenuBook,
         action = {
-            BannerPill(
-                label = strings.more.stopAudio,
-                onClick = onStop
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(space.sm),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Speed and stop are both actions this strip owns, and one row
+                // of pills is what the banner's slot is for: the two verbs a
+                // recitation supports while it sounds.
+                BannerPill(
+                    label = "%.1f\u00d7".format(speed),
+                    onClick = onCycleSpeed,
+                    description = strings.more.playbackSpeedLabel
+                )
+                BannerPill(
+                    label = strings.more.stopAudio,
+                    onClick = onStop
+                )
+            }
         },
         modifier = modifier
     )
@@ -662,7 +687,16 @@ private fun AudioFailureStrip(
 @Composable
 private fun BannerPill(
     label: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    /**
+     * The whole meaning of the pill, for a reader listening to it.
+     *
+     * Needed when the visible label is a bare value - a speed pill reads
+     * "1.5×", which tells a listener nothing about what will change. When it
+     * is set the description is announced instead of the text, the way a
+     * labelled control is announced.
+     */
+    description: String? = null
 ) {
     val space = Space.current
 
@@ -673,6 +707,13 @@ private fun BannerPill(
             .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
             .clip(QuranShape.pill)
             .clickable(role = Role.Button, onClick = onClick)
+            .then(
+                if (description != null) {
+                    Modifier.semantics { contentDescription = description }
+                } else {
+                    Modifier
+                }
+            )
     ) {
         Text(
             text = label,

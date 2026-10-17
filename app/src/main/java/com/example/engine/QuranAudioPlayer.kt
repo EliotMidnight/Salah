@@ -322,6 +322,15 @@ class QuranAudioPlayer(private val context: Context) {
     private var prefetchWatchdogJob: Job? = null
 
     /**
+     * The speed every stream is recited at.
+     *
+     * Written by [setSpeed], read at every prepare - so a chain keeps its speed
+     * across the seams (each player is told before it starts) - and applied to a
+     * sounding player at once, so the change is heard, not queued.
+     */
+    private var playbackSpeed = 1f
+
+    /**
      * Play one verse, and - when given a next-verse finder - the rest of its
      * surah after it, without a download stall at the seam.
      *
@@ -413,6 +422,10 @@ class QuranAudioPlayer(private val context: Context) {
                     // made a sound - and a callback already on its way must not
                     // start a player that is gone.
                     if (!asQueued && active?.player === mp) {
+                        // The speed is set before the start: a player whose params
+                        // are already right starts at the right speed, and the
+                        // platforms' quirks with params set mid-flight never fire.
+                        applySpeed(mp)
                         mp.start()
                         _playbackState.value = _playbackState.value.copy(
                             isPlaying = true,
@@ -584,6 +597,37 @@ class QuranAudioPlayer(private val context: Context) {
         val reciter = chainedReciter ?: return
         val next = findNextAfter(stream) ?: return
         startStream(next.first, next.second, reciter, asQueued = true)
+    }
+
+    /**
+     * Change how fast the recitation plays.
+     *
+     * The stored value reaches the next prepare; a sounding player is told now,
+     * because the pill's promise - the next verse *and this one* at the new
+     * speed - would be a half-lie if the speed landed only after the seam.
+     * Valid only on prepared-or-later states, so an attempt on a still-preparing
+     * player is skipped: the prepared listener applies the stored speed to every
+     * player the chain makes, and one apply per player is the whole contract.
+     */
+    fun setSpeed(speed: Float) {
+        playbackSpeed = speed
+        applySpeed(active?.player)
+    }
+
+    /**
+     * Tell one player the speed. Skipped quietly on the states the platform
+     * refuses the call in - a player still preparing is told at its prepared
+     * callback, and the skip is what keeps a rejected call from taking down a
+     * recitation it was meant to describe.
+     */
+    private fun applySpeed(player: MediaPlayer?) {
+        player ?: return
+        try {
+            val params = player.playbackParams
+            params.setSpeed(playbackSpeed)
+            player.playbackParams = params
+        } catch (_: Exception) {
+        }
     }
 
     /**

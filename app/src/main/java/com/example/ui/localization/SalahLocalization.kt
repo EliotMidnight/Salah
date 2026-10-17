@@ -494,6 +494,14 @@ data class UiStringsMore(
     val recitingLabel: String = "Reciting",
     val stopAudio: String = "Stop",
     /**
+     * What the recitation banner's speed pill does, for a reader listening to
+     * it.
+     *
+     * The pill's visible label is the value itself - "1.5×" - which is honest
+     * on screen and meaningless read aloud; this is the announced phrase.
+     */
+    val playbackSpeedLabel: String = "Playback speed",
+    /**
      * Told to the reader when a verse's recitation could not be streamed.
      *
      * The player used to answer a failed stream with a synthesized chime and
@@ -977,6 +985,7 @@ reader = ReaderStrings(
         showTranslation = "إظهار الترجمة", // verify
         silentModeLabel = "كتم كل التنبيهات", // verify
         stopAudio = "إيقاف", // verify
+        playbackSpeedLabel = "سرعة التلاوة", // verify
         storageLabel = "التخزين",
         sunAligned = "الشمس شبه متجهة نحو القبلة. استقبلها للتأكد.", // verify
         sunAltitude = "الشمس",
@@ -1275,6 +1284,7 @@ reader = ReaderStrings(
         showTranslation = "Afficher la traduction", // verify
         silentModeLabel = "Silence pour toutes les alertes", // verify
         stopAudio = "Arrêter", // verify
+        playbackSpeedLabel = "Vitesse de lecture", // verify
         storageLabel = "Stockage",
         sunAligned = "Le soleil est presque dans la direction de la qibla. Tournez-vous vers lui pour confirmer.", // verify
         sunAltitude = "Soleil",
@@ -1573,6 +1583,7 @@ reader = ReaderStrings(
         showTranslation = "Tampilkan terjemahan", // verify
         silentModeLabel = "Senyapkan semua pengingat", // verify
         stopAudio = "Hentikan", // verify
+        playbackSpeedLabel = "Kecepatan pemutaran", // verify
         storageLabel = "Penyimpanan",
         sunAligned = "Matahari hampir searah kiblat. Hadapi untuk memastikan.", // verify
         sunAltitude = "Matahari",
@@ -1871,6 +1882,7 @@ reader = ReaderStrings(
         showTranslation = "Çeviriyi göster", // verify
         silentModeLabel = "Tüm uyarıları sessize al", // verify
         stopAudio = "Durdur", // verify
+        playbackSpeedLabel = "Oynatma hızı", // verify
         storageLabel = "Depolama",
         sunAligned = "Güneş neredeyse kıble yönünde. Doğrulamak için ona dönün.", // verify
         sunAltitude = "Güneş",
@@ -2169,6 +2181,7 @@ reader = ReaderStrings(
         showTranslation = "ترجمہ دکھائیں", // verify
         silentModeLabel = "تمام الرٹس خاموش کریں", // verify
         stopAudio = "روکیں", // verify
+        playbackSpeedLabel = "تلاوت کی رفتار", // verify
         storageLabel = "اسٹوریج",
         sunAligned = "سورج قبلہ کی سمت میں تقریباً ہے۔ تصدیق کے لیے اس کی طرف منہ کریں۔", // verify
         sunAltitude = "سورج",
@@ -2467,6 +2480,7 @@ reader = ReaderStrings(
         showTranslation = "Tunjukkan terjemahan", // verify
         silentModeLabel = "Senyapkan semua peringatan", // verify
         stopAudio = "Berhenti", // verify
+        playbackSpeedLabel = "Kelajuan main balik", // verify
         storageLabel = "Storan",
         sunAligned = "Matahari hampir mengikut arah kiblat. Hadapkan diri untuk sahkan.", // verify
         sunAltitude = "Matahari",
@@ -2765,6 +2779,7 @@ reader = ReaderStrings(
         showTranslation = "অনুবাদ দেখান", // verify
         silentModeLabel = "সমস্ত সতর্কতা নীরব করুন", // verify
         stopAudio = "থামান", // verify
+        playbackSpeedLabel = "প্লেব্যাকের গতি", // verify
         storageLabel = "সঞ্চয়",
         sunAligned = "সূর্য প্রায় কিবলার দিকে। নিশ্চিত করতে এর দিকে মুখ করুন।", // verify
         sunAltitude = "সূর্য",
@@ -3063,6 +3078,7 @@ reader = ReaderStrings(
         showTranslation = "Показать перевод", // verify
         silentModeLabel = "Выключить все оповещения", // verify
         stopAudio = "Остановить", // verify
+        playbackSpeedLabel = "Скорость воспроизведения", // verify
         storageLabel = "Хранилище",
         sunAligned = "Солнце почти в направлении киблы. Повернитесь к нему, чтобы подтвердить.", // verify
         sunAltitude = "Солнце",
@@ -3361,6 +3377,7 @@ reader = ReaderStrings(
         showTranslation = "Übersetzung einblenden", // verify
         silentModeLabel = "Alle Warnungen stummschalten", // verify
         stopAudio = "Stopp", // verify
+        playbackSpeedLabel = "Wiedergabegeschwindigkeit", // verify
         storageLabel = "Speicher",
         sunAligned = "Die Sonne steht fast in Qibla-Richtung. Drehen Sie sich ihr zu, um zu bestätigen.", // verify
         sunAltitude = "Sonne",
@@ -3659,6 +3676,7 @@ reader = ReaderStrings(
         showTranslation = "Mostrar la traducción", // verify
         silentModeLabel = "Silenciar todas las alertas", // verify
         stopAudio = "Detener", // verify
+        playbackSpeedLabel = "Velocidad de reproducción", // verify
         storageLabel = "Almacenamiento",
         sunAligned = "El sol está casi en la dirección de la qibla. Enfréntalo para confirmar.", // verify
         sunAltitude = "Sol",

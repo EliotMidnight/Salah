@@ -382,6 +382,7 @@ private fun SalahApp(viewModel: SalahViewModel) {
                         onToggleBookmark = viewModel::toggleBookmark,
                         onTogglePlayAyah = viewModel::togglePlayAyah,
                         onStopAudio = viewModel::stopAudio,
+                        onCycleSpeed = viewModel::cyclePlaybackSpeed,
                         onOptionsChange = viewModel::setQuranReadingOptions,
                         onImmersiveChange = viewModel::setQuranImmersive
                     )

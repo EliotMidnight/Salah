@@ -76,6 +76,7 @@ class HorizontalAxisDirectionTest {
                         onToggleBookmark = {},
                         onTogglePlayAyah = {},
                         onStopAudio = {},
+                        onCycleSpeed = {},
                         onOptionsChange = {},
                         immersive = false,
                         onImmersiveChange = {},
