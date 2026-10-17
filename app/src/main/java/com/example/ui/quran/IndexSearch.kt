@@ -78,6 +78,16 @@ internal fun LazyListScope.searchIndex(
     referenceKind: ReferenceKind?,
     onKindChange: (ReferenceKind?) -> Unit,
     results: VerseResults,
+    /**
+     * The taps that widen the windows.
+     *
+     * The windows themselves are not arguments here - the rows shown so far
+     * are exactly [results]/[surahHits]' own windows, grown from rank zero, so
+     * the list knows the rows it has and the caller knows the window behind
+     * them. Only the widening is an event, and events are callbacks.
+     */
+    onShowMoreSurahs: () -> Unit,
+    onShowMoreVerses: () -> Unit,
     referenceNumbers: List<Int>,
     surahHits: SurahResults,
     currentSurah: Int,
@@ -192,6 +202,14 @@ internal fun LazyListScope.searchIndex(
                 onClick = { onSelectSurah(surah.number) }
             )
         }
+        if (surahHits.isTruncated) {
+            item(key = "show_more_surahs") {
+                ShowMoreRow(
+                    label = labels.showMore,
+                    onClick = onShowMoreSurahs
+                )
+            }
+        }
     }
 
     if (results.hits.isNotEmpty()) {
@@ -218,6 +236,37 @@ internal fun LazyListScope.searchIndex(
                 onClick = { onSelectAyah(hit) }
             )
         }
+        if (results.isTruncated) {
+            item(key = "show_more_verses") {
+                ShowMoreRow(
+                    label = labels.showMore,
+                    onClick = onShowMoreVerses
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The "show more" row, centred on its own line so the pill reads as an
+ * affordance and not as one result among the rest.
+ *
+ * Both tiers' tails are this one row rather than two that can differ: the
+ * appearance is a shared decision, the label is the string the search face
+ * carries.
+ */
+@Composable
+private fun ShowMoreRow(
+    label: String,
+    onClick: () -> Unit
+) {
+    Row(
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Space.current.lg, vertical = Space.current.xs)
+    ) {
+        ShowMorePill(label = label, onClick = onClick)
     }
 }
 /**

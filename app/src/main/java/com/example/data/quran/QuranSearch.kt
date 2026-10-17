@@ -65,8 +65,17 @@ object QuranSearch {
 
     /**
      * Surahs whose name matches, best first.
+     *
+     * [skip] and [limit] are a window into one ranked order, not two searches:
+     * every window slices the same [SurahResults.total] matches the reader was
+     * shown the first of, so "more" can extend a list the reader is already
+     * reading without its rows ever moving. The total does not answer a skip -
+     * it is how many match at all - and it is the same number at every window,
+     * which is what stops a header from renaming the list mid-read.
      */
-    fun searchSurahs(query: String, limit: Int = PAGE_SIZE): SurahResults {
+    fun searchSurahs(query: String, limit: Int = PAGE_SIZE, skip: Int = 0): SurahResults {
+        require(skip >= 0) { "skip is a number of rows to pass over, not $skip" }
+        require(limit >= 0) { "limit is a number of rows, not $limit" }
         val trimmed = query.trim()
         if (trimmed.isEmpty()) return SurahResults(emptyList(), 0)
         val folded = QuranText.normaliseQuery(trimmed)
@@ -79,7 +88,10 @@ object QuranSearch {
             }
             .sortedWith(compareBy({ it.second }, { it.first.number }))
 
-        return SurahResults(scored.take(limit).map { it.first }, scored.size)
+        return SurahResults(
+            scored.drop(skip).take(limit).map { it.first },
+            scored.size
+        )
     }
 
     private fun surahNameScore(
@@ -104,16 +116,26 @@ object QuranSearch {
     }
 
     /**
-     * Verses matching [query], best first, capped at [limit].
+     * Verses matching [query], best first.
+     *
+     * [skip] and [limit] are a window into one ranked order: `searchVerses(q,
+     * skip = 50)` holds the matches the reader was not shown the first time -
+     * the same ranks, none re-decided, none repeating a row already rendered.
+     * [VerseResults.total] is the count before the window is taken, so it says
+     * how many verses match rather than how many this window fit, and does not
+     * answer [skip] - the same total at every window is what keeps a header
+     * honest while the reader asks for more.
      */
-    fun searchVerses(query: String, limit: Int = PAGE_SIZE): VerseResults {
+    fun searchVerses(query: String, limit: Int = PAGE_SIZE, skip: Int = 0): VerseResults {
+        require(skip >= 0) { "skip is a number of rows to pass over, not $skip" }
+        require(limit >= 0) { "limit is a number of rows, not $limit" }
         val terms = QuranText.terms(query)
         if (terms.isEmpty()) return VerseResults(emptyList(), 0)
 
         val arabic = QuranText.normalised
         val english = QuranText.lowerEnglish
         val ayahs = QuranCorpus.ayahs
-        val matches = ArrayList<Match>(limit * 2)
+        val matches = ArrayList<Match>(minOf(limit, ayahs.size) * 2)
 
         for (index in ayahs.indices) {
             val inArabic = allPresent(arabic[index], terms)
@@ -144,11 +166,12 @@ object QuranSearch {
             matches += Match(index = index, ayah = ayah, surah = surah, field = field, rank = rank)
         }
 
-        // The total is the *count before the page is taken*, so a caller can say how
-        // many there are rather than how many it was given. See [VerseResults].
+        // The total is the *count before the window is taken*, so a caller can say
+        // how many there are rather than how many it was given. See [VerseResults].
         val total = matches.size
         val page = matches
             .sortedWith(compareBy({ it.rank }, { it.ayah.surahNumber }, { it.ayah.ayahNumber }))
+            .drop(skip)
             .take(limit)
             // Only the returned rows get their highlight computed. A broad query
             // matches thousands of verses and shows fifty, and the ranges of the
@@ -219,18 +242,29 @@ object QuranSearch {
  * One page of search results, and how many there really are.
  */
 data class VerseResults(
-    /** The best [VerseResults.total] matches, capped at the requested limit. */
+    /**
+     * One window of the matches, ranked best first - the first window opens at
+     * the best, later windows at [com.example.data.quran.QuranSearch.searchVerses]'s skip.
+     */
     val hits: List<QuranSearchHit>,
     /** How many verses match at all. */
     val total: Int
 ) {
-    /** True when [hits] is a strict subset — the case a caller must not describe as "all". */
+    /**
+     * True when [hits] is a strict subset — the case a caller must not describe as "all".
+     *
+     * "More remain" only for the first window, where a caller's skip is 0:
+     * while paging, more remain exactly when `skip + hits.size < total`, and
+     * the caller's own window is the thing to compare.
+     */
     val isTruncated: Boolean get() = total > hits.size
 }
 
 /** One page of surah-name matches, and how many there really are. See [VerseResults]. */
 data class SurahResults(
-    /** The best [SurahResults.total] matches, capped at the requested limit. */
+    /**
+     * One window of the matches, ranked best first. See [VerseResults.hits].
+     */
     val hits: List<Surah>,
     /** How many surahs' names match at all. */
     val total: Int

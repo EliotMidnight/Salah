@@ -120,14 +120,45 @@ fun QuranIndexSheet(
     // the scan is still tens of milliseconds over the corpus (and, the first time
     // in a process, the fold pass that builds it), and none of that belongs on
     // the frame clock.
+    //
+    // ### The two-stage key, and why a listed window is not a debounce
+    //
+    // "Show more" re-asks the *same* question with a bigger window, and a
+    // reader who asks for more must not wait out a debounce that answers a
+    // keystroke they did not make. So the scan does not key on the query at
+    // all: [LaunchedEffect] below publishes the query into [committedQuery]
+    // after the debounce, and the scan effect keys on what was committed plus
+    // the window - a settled question, or a bigger window, each re-runs the
+    // scan exactly once, and half-typed noise never reaches it.
+    var shownSurahs by rememberSaveable { mutableStateOf(QuranSearch.PAGE_SIZE) }
+    var shownVerses by rememberSaveable { mutableStateOf(QuranSearch.PAGE_SIZE) }
     var results by remember { mutableStateOf(VerseResults(emptyList(), 0)) }
+    var committedQuery by remember { mutableStateOf("") }
+    var committedKind by remember { mutableStateOf<ReferenceKind?>(null) }
+
     LaunchedEffect(query, referenceKind) {
+        // A new question closes both windows: the windows belong to an answer,
+        // and there is no answer yet.
+        shownSurahs = QuranSearch.PAGE_SIZE
+        shownVerses = QuranSearch.PAGE_SIZE
         if (query.isBlank() || referenceKind != null) {
+            committedQuery = ""
+            committedKind = referenceKind
             results = VerseResults(emptyList(), 0)
             return@LaunchedEffect
         }
         delay(SEARCH_DEBOUNCE_MILLIS)
-        results = withContext(Dispatchers.Default) { QuranSearch.searchVerses(query) }
+        // The kind is published first: a scan effect that relaunches mid-write
+        // sees a kind it cannot scan under and waits, and no committed pair is
+        // ever ?stale-kind, fresh-query".
+        committedKind = referenceKind
+        committedQuery = query
+    }
+    LaunchedEffect(committedQuery, committedKind, shownVerses) {
+        if (committedKind != null || committedQuery.isBlank()) return@LaunchedEffect
+        results = withContext(Dispatchers.Default) {
+            QuranSearch.searchVerses(committedQuery, limit = shownVerses)
+        }
     }
 
     // Strings for the list builders.
@@ -150,6 +181,7 @@ fun QuranIndexSheet(
         juzOf = strings.more.juzOf,
         surahsFound = strings.more.surahsFound,
         searchShowingFirst = strings.more.searchShowingFirst,
+        showMore = strings.more.searchShowMore,
         // The row shows both names whichever language the interface is in, so which one
         // leads is a decision about the reader rather than about the data.
         preferArabicName = isArabicInterface(LocalLanguage.current),
@@ -173,9 +205,11 @@ fun QuranIndexSheet(
     val referenceNumbers = remember(referenceKind, query) {
         browseNumbers(referenceKind, query)
     }
-    val surahHits = remember(query, referenceKind) {
+    val surahHits = remember(query, referenceKind, shownSurahs) {
         if (referenceKind != null) SurahResults(emptyList(), 0)
-        else QuranSearch.searchSurahs(query)
+        // The surah tier is a 114-row sort - cheap enough to re-slice in
+        // composition, so "more surahs" is immediate with no debounce to skip.
+        else QuranSearch.searchSurahs(query, limit = shownSurahs)
     }
 
     OptionListSheet(
@@ -230,8 +264,18 @@ fun QuranIndexSheet(
                 referenceKind = referenceKind,
                 onKindChange = { referenceKind = it },
                 results = results,
-                referenceNumbers = referenceNumbers,
                 surahHits = surahHits,
+                // The taps that widen the windows. The totals they clamp
+                // against are the windows' own: [QuranSearch]'s totals do not
+                // answer a skip, so min() keeps a grown window from promising
+                // rows the question never had.
+                onShowMoreSurahs = {
+                    shownSurahs = minOf(shownSurahs + QuranSearch.PAGE_SIZE, surahHits.total)
+                },
+                onShowMoreVerses = {
+                    shownVerses = minOf(shownVerses + QuranSearch.PAGE_SIZE, results.total)
+                },
+                referenceNumbers = referenceNumbers,
                 currentSurah = currentSurah,
                 onSelectSurah = onSelectSurah,
                 onSelectAyah = { hit ->

@@ -113,6 +113,42 @@ internal fun FilterPill(
 }
 
 /**
+ * The control that asks the search for more: one tap, one more window.
+ *
+ * A different kind of control from the filter pill above it, which is a radio
+ * - this is a button, and it is the tier's only "get more" affordance, so it
+ * takes the container colour rather than the muted one: the reader who
+ * finishes a window must not have to hunt for how the window widens.
+ */
+@Composable
+internal fun ShowMorePill(
+    label: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        shape = QuranShape.pill,
+        modifier = Modifier
+            .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
+            .clip(QuranShape.pill)
+            .clickable(role = Role.Button, onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = Space.current.md, vertical = Space.current.sm),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+/**
  * The labels the index's lists need, gathered once.
  *
  * A `LazyListScope` extension cannot read `LocalStrings` - it is not called from a
@@ -136,6 +172,7 @@ internal data class IndexLabels(
     val juzOf: String,
     val surahsFound: String,
     val searchShowingFirst: String,
+    val showMore: String,
     val preferArabicName: Boolean,
     val versesFound: String,
     val selected: String,
