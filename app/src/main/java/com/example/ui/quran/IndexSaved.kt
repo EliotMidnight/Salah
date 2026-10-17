@@ -44,7 +44,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.local.BookmarkEntity
-import com.example.data.model.QuranFontFace
 import com.example.data.model.QuranRef
 import com.example.data.model.RevelationType
 import com.example.data.model.Surah
@@ -60,7 +59,6 @@ import com.example.ui.localization.LocalStrings
 import com.example.ui.localization.isArabicInterface
 import com.example.ui.localization.LocalLanguage
 import com.example.ui.theme.ArabicFamily
-import com.example.ui.theme.QuranFonts
 import com.example.ui.theme.QuranShape
 import com.example.ui.theme.Space
 import com.example.ui.theme.Spacing
@@ -87,21 +85,18 @@ internal fun LazyListScope.savedIndex(
         return
     }
 
-    // The preview is rendered in Amiri whatever the reader's mushaf face is: it is
-    // not inside the reader, and a preview that changed typeface with a setting
-    // elsewhere would be pretending to be part of a reading it is not in.
-    item(key = "saved_list") {
-        QuranFonts.Provide(QuranFontFace.AMIRI) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                bookmarks.forEach { bookmark ->
-                    SavedVerseRow(
-                        bookmark = bookmark,
-                        preferArabicName = labels.preferArabicName,
-                        onSelect = { onSelect(bookmark) }
-                    )
-                }
-            }
-        }
+    // One row per bookmark, keyed by the reference the unique bookmark index
+    // can never duplicate: rows scroll in and out as rows, not as one unwieldy
+    // column that composes every saved verse to draw any of them. The row's
+    // Arabic faces the default local anyway - the reader's typeface does not
+    // have a meaning here, where what is saved is a place in the book, not a
+    // page it was some other time.
+    items(bookmarks, key = { "saved_${it.surahNumber}_${it.ayahNumber}" }) { bookmark ->
+        SavedVerseRow(
+            bookmark = bookmark,
+            preferArabicName = labels.preferArabicName,
+            onSelect = { onSelect(bookmark) }
+        )
     }
 }
 
