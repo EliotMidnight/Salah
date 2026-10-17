@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.example.data.model.QuranReadingLayout
 import com.example.data.model.QuranReadingOptions
@@ -82,10 +83,10 @@ class QuranNavigationTest {
      */
     private var mounted by mutableStateOf(true)
 
-    private fun mount() {
+    private fun mount(language: String = "English") {
         compose.setContent {
             SalahTheme {
-                ProvideAppLanguage(language = "English") {
+                ProvideAppLanguage(language = language) {
                     val holder = rememberSaveableStateHolder()
                     if (mounted) {
                         holder.SaveableStateProvider("quran") {
@@ -292,6 +293,33 @@ class QuranNavigationTest {
             "An-Nisa to Al-Ma'idah Page 106",
             pillText()
         )
+    }
+
+    @Test
+    fun `the Arabic interface names a surah in Arabic on the pill and in the recitation banner`() {
+        // The two surfaces in the reader that print a surah's *name*: the pill beside
+        // the page number, and the banner that says what is being recited. Both named
+        // in transliteration in every language, so an Arabic reader reading an Arabic
+        // mushaf was told where they were in Latin letters.
+        mount(language = "Arabic")
+
+        assertEquals(
+            "the pill does not name its page's surah in Arabic",
+            "الفاتحة صفحة 1",
+            pillText()
+        )
+
+        // The banner reports the *audio*'s surah, which this test puts on a page the
+        // reader is not on, so the two names cannot come from one another.
+        state.value = state.value.copy(
+            isAudioPlaying = true,
+            currentAudioRef = QuranBrowse.ref(2, 255)!!,
+            currentAudioReciter = "Alafasy"
+        )
+        compose.waitForIdle()
+        compose.onNodeWithText("يتلو البقرة 2:255 · Alafasy")
+            .assertExists("the recitation banner does not name its surah in Arabic")
+            .assertIsDisplayed()
     }
 
     @Test

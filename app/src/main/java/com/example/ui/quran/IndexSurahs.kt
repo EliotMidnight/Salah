@@ -183,7 +183,7 @@ internal fun SurahIndexRow(
                 // It is not only aesthetic: `searchSurahs` matches the Arabic name, so a
                 // reader who searched الفاتحة was handed a row whose largest text was
                 // not the thing they typed.
-                text = if (strings.preferArabicName) surah.arabicName else surah.englishName,
+                text = surahDisplayName(surah, strings.preferArabicName),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontFamily = if (strings.preferArabicName) ArabicFamily else null,
@@ -215,7 +215,7 @@ internal fun SurahIndexRow(
 
         Text(
             // The other name, on the far side, quiet — so whichever leads, both are shown.
-            text = if (strings.preferArabicName) surah.englishName else surah.arabicName,
+            text = surahDisplayName(surah, !strings.preferArabicName),
             style = if (strings.preferArabicName) {
                 MaterialTheme.typography.titleMedium
             } else {

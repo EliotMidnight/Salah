@@ -61,8 +61,10 @@ import com.example.ui.SalahUiState
 import com.example.ui.components.EmptyState
 import com.example.ui.components.StatusBanner
 import com.example.ui.components.BannerTone
+import com.example.ui.localization.LocalLanguage
 import com.example.ui.localization.LocalStrings
 import com.example.ui.localization.ReaderStrings
+import com.example.ui.localization.isArabicInterface
 import com.example.ui.quran.gesture.readerPinch
 import com.example.ui.quran.reader.ContinuousReader
 import com.example.ui.quran.reader.MushafPager
@@ -465,14 +467,24 @@ private fun ImmersiveToggle(
  * The ends are joined with this language's own range mark, the same one the page
  * announcement ranges surah numbers with, so the reader looking at the page and the
  * reader hearing it are told the same thing. [ReaderStrings.range] owns the single
- * case: a range whose ends are the same is one end.
+ * case: a range whose ends are the same is one end. Each end is the name this
+ * interface has for its surah ([surahDisplayName]).
  *
  * An empty page - which the corpus does not have - names nothing rather than throwing
  * on a surface a reader is looking at.
  */
-internal fun pageSurahLabel(reader: ReaderStrings, surahs: List<Surah>): String =
+internal fun pageSurahLabel(
+    reader: ReaderStrings,
+    surahs: List<Surah>,
+    preferArabicName: Boolean
+): String =
     surahs.firstOrNull()
-        ?.let { reader.range(it.englishName, surahs.last().englishName) }
+        ?.let {
+            reader.range(
+                surahDisplayName(it, preferArabicName),
+                surahDisplayName(surahs.last(), preferArabicName)
+            )
+        }
         .orEmpty()
 
 /**
@@ -489,8 +501,9 @@ private fun LocationPill(
 ) {
     val space = Space.current
     val strings = LocalStrings.current
+    val preferArabicName = isArabicInterface(LocalLanguage.current)
     val pageLabel = "${strings.more.pageWord} $page"
-    val surahLabel = pageSurahLabel(strings.more.reader, pageSurahs)
+    val surahLabel = pageSurahLabel(strings.more.reader, pageSurahs, preferArabicName)
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
@@ -581,12 +594,17 @@ private fun AudioStrip(
     modifier: Modifier = Modifier
 ) {
     val strings = LocalStrings.current
+    val preferArabicName = isArabicInterface(LocalLanguage.current)
 
     StatusBanner(
         message = buildString {
             append(strings.more.recitingLabel)
             append(' ')
-            append(QuranBrowse.surah(ref.surah)?.englishName.orEmpty())
+            append(
+                QuranBrowse.surah(ref.surah)
+                    ?.let { surahDisplayName(it, preferArabicName) }
+                    .orEmpty()
+            )
             append(' ')
             append(ref)
             append(" · ")

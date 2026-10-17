@@ -212,7 +212,11 @@ internal fun LazyListScope.searchIndex(
             )
         }
         itemsIndexed(results.hits, key = { _, hit -> "hit_${hit.ref.surah}_${hit.ref.ayah}" }) { _, hit ->
-            VerseResultRow(hit = hit, onClick = { onSelectAyah(hit) })
+            VerseResultRow(
+                hit = hit,
+                preferArabicName = labels.preferArabicName,
+                onClick = { onSelectAyah(hit) }
+            )
         }
     }
 }
@@ -224,10 +228,15 @@ internal fun LazyListScope.searchIndex(
  * check the search worked.
  */
 @Composable
-private fun VerseResultRow(hit: QuranSearchHit, onClick: () -> Unit) {
+private fun VerseResultRow(
+    hit: QuranSearchHit,
+    preferArabicName: Boolean,
+    onClick: () -> Unit
+) {
     val space = Space.current
     val ayah = hit.ayah
     val surah = hit.surah
+    val surahName = surahDisplayName(surah, preferArabicName)
 
     Row(
         modifier = Modifier
@@ -237,13 +246,13 @@ private fun VerseResultRow(hit: QuranSearchHit, onClick: () -> Unit) {
             .padding(horizontal = space.lg, vertical = space.md)
             .testTag("result_${hit.ref.surah}_${hit.ref.ayah}")
             .semantics {
-                contentDescription = "${surah.englishName}, ${hit.ref.surah}:${hit.ref.ayah}"
+                contentDescription = "$surahName, ${hit.ref.surah}:${hit.ref.ayah}"
             },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "${surah.englishName} · ${hit.ref.surah}:${hit.ref.ayah}",
+                text = "$surahName · ${hit.ref.surah}:${hit.ref.ayah}",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
@@ -289,12 +298,15 @@ private fun ReferenceIndexRow(
     val space = Space.current
 
     val detail: String? = when (kind) {
-        ReferenceKind.PAGE -> QuranBrowse.surahsOnPage(number).joinToString(", ") { it.englishName }
+        ReferenceKind.PAGE -> QuranBrowse.surahsOnPage(number)
+            .joinToString(", ") { surahDisplayName(it, labels.preferArabicName) }
             .takeIf { it.isNotBlank() }
 
         ReferenceKind.JUZ -> QuranBrowse.ayahsInJuz(number).firstOrNull()?.let { first ->
-            "${QuranBrowse.surah(first.surahNumber)?.englishName.orEmpty()} · " +
-                labels.verseReference.format(first.surahNumber, first.ayahNumber)
+            val name = QuranBrowse.surah(first.surahNumber)
+                ?.let { surahDisplayName(it, labels.preferArabicName) }
+                .orEmpty()
+            "$name · " + labels.verseReference.format(first.surahNumber, first.ayahNumber)
         }
 
         ReferenceKind.HIZB -> QuranBrowse.ayahsInHizb(number).firstOrNull()?.let { first ->

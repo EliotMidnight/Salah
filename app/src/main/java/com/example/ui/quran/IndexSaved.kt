@@ -96,6 +96,7 @@ internal fun LazyListScope.savedIndex(
                 bookmarks.forEach { bookmark ->
                     SavedVerseRow(
                         bookmark = bookmark,
+                        preferArabicName = labels.preferArabicName,
                         onSelect = { onSelect(bookmark) }
                     )
                 }
@@ -106,10 +107,15 @@ internal fun LazyListScope.savedIndex(
 
 /** One saved verse, with enough of it to recognise. */
 @Composable
-private fun SavedVerseRow(bookmark: BookmarkEntity, onSelect: () -> Unit) {
+private fun SavedVerseRow(
+    bookmark: BookmarkEntity,
+    preferArabicName: Boolean,
+    onSelect: () -> Unit
+) {
     val space = Space.current
     val ayah = QuranBrowse.ayah(bookmark.surahNumber, bookmark.ayahNumber)
     val surah = QuranBrowse.surah(bookmark.surahNumber)
+    val surahName = surah?.let { surahDisplayName(it, preferArabicName) }.orEmpty()
 
     Row(
         modifier = Modifier
@@ -122,7 +128,7 @@ private fun SavedVerseRow(bookmark: BookmarkEntity, onSelect: () -> Unit) {
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "${surah?.englishName.orEmpty()} · ${bookmark.surahNumber}:${bookmark.ayahNumber}",
+                text = "$surahName · ${bookmark.surahNumber}:${bookmark.ayahNumber}",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
