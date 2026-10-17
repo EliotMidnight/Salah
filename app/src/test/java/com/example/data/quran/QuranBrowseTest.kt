@@ -146,13 +146,6 @@ class QuranBrowseTest {
     }
 
     @Test
-    fun `every surah's start page agrees with the curated index`() {
-        // The surah list is curated (the names are), but its *facts* are the
-        // metadata's. This is the assertion that keeps the two from drifting.
-        QuranDataSource.assertMatchesCorpus()
-    }
-
-    @Test
     fun `the first verse of a surah is on the page the surah index claims`() {
         QuranDataSource.SURAHS.forEach { surah ->
             assertEquals(
