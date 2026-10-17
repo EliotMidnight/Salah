@@ -15,6 +15,7 @@ internal object QuranCorpus {
     const val TEXT_HASH = "6933e133dd56db778c801bf738848454e43648105a151e8d84d86a7cae39ec5f"
     const val METADATA_HASH = "8867c1d88191472adec9db694b3cd9f135b1a2ef580574d32cf888dcb22c5c7a"
     const val EN_SAHIH_HASH = "f090ed258e647a393ddaa0b48f1e81ab7a5ccd5ad7d72d0da498e151bc0dbc18"
+    const val MUSHAF_LAYOUT_HASH = "b8816389c4d5d4d9a1951690f30a4bbdc0b7029f7e1e86ab6814ebcb2bef96dc"
 
     /**
      * The one translation this app ships.
@@ -53,13 +54,17 @@ internal object QuranCorpus {
      * in the Quran, and no amount of correct pagination or correct rendering makes that
      * acceptable. So the digest is checked on every load and a mismatch throws.
      *
+     * `MushafLayout` verifies `mushaf_layout.txt` through this same gate: the layout is
+     * the one dataset that could silently move a verse onto a different page, so it
+     * rides the same check rather than getting a weaker copy of it.
+     *
      * ### Why the hex is formatted with [Locale.ROOT]
      *
      * `Locale.ROOT` makes the check depend on the bytes and nothing else. Every other
      * number in the app follows the device locale on purpose (see [ArabicDigits] for why
      * the ayah marker does not); this one must not.
      */
-    private fun resource(name: String, hash: String): ByteArray {
+    internal fun resource(name: String, hash: String): ByteArray {
         val bytes = requireNotNull(javaClass.getResourceAsStream("/quran/$name")) {
             "Missing Quran resource: $name"
         }.use { it.readBytes() }

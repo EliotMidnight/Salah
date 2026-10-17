@@ -507,6 +507,7 @@ install is not the only one that reads correctly.
 - Quran Arabic (Uthmani 1.1) and partition metadata: **Tanzil Project** (CC BY 3.0) — https://tanzil.net — see `app/src/main/resources/quran/SOURCES.md` for hashes and notices.
 - English translation: **Saheeh International**, shown in-app as “English — Saheeh International”.
 - Verse audio: **everyayah.com**, streamed on demand in the reciter the reader chooses (Mishary Rashid Alafasy, Abdul Basit Abdus Samad, Mahmoud Khalil Al-Husary, Saud Ash-Shuraim).
+- Mushaf layout data (which words print on which line of the 604 pages): derived from **quran.com's published digitization of the KFGQPC V2 (1421H) Madinah print** (mirrored at the `zonetecde/mushaf-layout` repository), cross-checked against the **Quranic Universal Library**'s export of the same print. The mushaf's composition belongs to the King Fahd Glorious Qur'an Printing Complex; this app bundles no part of the Complex's own copyrighted output - only the independently derived positional data, which points at the Tanzil text above for every verse's words. See README, "The Madinah mushaf".
 
 ## Tests
 
@@ -524,8 +525,9 @@ desktop session, a parallel Compose build gets OOM-killed, so it runs without
 parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
 JDK and memory for it.
 
-431 tests. The pure-JVM suites (Quran corpus integrity, page fitting, gesture
-maths, search, prayer maths, Qibla bearing and guidance, localisation coverage,
+555 tests. The pure-JVM suites (Quran corpus integrity, the Madinah layout's
+corpus-wide properties, page fitting, gesture maths, search, prayer maths, Qibla
+bearing and guidance, localisation coverage,
 sky-text contrast) run on any host, including ARM64 Linux/Termux.
 
 The Robolectric classes need an **x86_64 Linux or macOS** host: Robolectric 4.15+
@@ -823,6 +825,56 @@ shadda, fatha and dagger alif are. The field was deleted rather than wired up.
 `QuranFontFaceProbeTest` records a baseline for every face on that dense page, so a
 future change to leading shows up in a diff instead of in a bug report, and a face
 added to the picker without one is a visible omission.
+
+### The Madinah mushaf
+
+The reader's Madinah view is the 1:1 KFGQPC V2 mushaf - the 604-page, 15-line Madinah
+print: the same page you would hold. (Pages 1 and 2 carry 8 lines; the print's two
+opening pages genuinely do.) Its data lives in `mushaf_layout.txt` and
+`MushafLayout`: for every one of the print's 9,046 lines, which of the corpus's
+77,881 letter words sit on it. **The words are not stored twice.** The layout stores
+positions only and points at the bundled corpus for the text itself, so verse text
+keeps exactly one source, and an edited layout cannot quietly show you a different
+verse on a different page without failing the digest gate or failing to tile the
+corpus - both a red build and a device that refuses to open rather than guess.
+
+Provenance, honestly: the print is the King Fahd Glorious Qur'an Printing Complex
+V2 (1421H), the print quran.com renders. The line structure is quran.com's own
+published digitization of that print (mirrored at `zonetecde/mushaf-layout`), and
+the Quranic Universal Library's export of the same print - cross-checked here line
+by line, 0 mismatches - supplies which rows the print centres. The two sources
+agree on everything except one stray marker entry, discussed on its page below.
+
+Where the corpus keeps a pause mark (`ۚ`, `ٰ`) or a prostration sign (`۩`) as its
+own whitespace token, the print paints it on the word before it; the layout's word
+count is the corpus's tokens that hold letters, with marks fused on. That is why
+82,260 - the corpus's bare whitespace-token count - would be a wrong number
+anywhere else: the print's word is a positioning unit, not a tokenizer's
+convenience.
+
+The print's ayah markers are not words, so they are not stored either; they derive
+from the geometry. A marker either hangs on the word that closes its verse, or -
+where a verse ends exactly at a line break - prints alone at the head of the next
+line (573 do). Every one of the 6,236 markers renders exactly once, and the test
+proves it over all verses. The one exception in the digitization is ayah 84:21:
+its marker prints as a stray mid-line entry on page 589, line 13, while the verse
+itself continues onto line 14 - no edition puts a verse marker mid-verse, so the
+layout registers that marker where the verse actually ends.
+
+Similarly the basmalah: 112 of the surahs print their own large basmalah row
+between the surah name and the first verse, and the layout points that row at the
+corpus's own first four words - because Tanzil (already digested by `BASMALAH_COUNT`)
+carries the basmalah inside verse 1, and printing it a second time would double it.
+Al-Fatihah's opening *is* 1:1, and At-Tawbah has none; those two get no row.
+
+**The print's pagination and metadata.xml's differ, deliberately.** Tanzil's page
+table serves the flowing view - "which page does this verse fall on". The print's
+answer is its own, and on 25 of the 604 pages the two disagree about which verse
+starts the page (mostly pages carrying a surah opening, where metadata credits the
+page to the surah its header names while the first verse-opening word on the page
+still belongs to the previous surah). Both tables stay, each serving its own view,
+and the 25 boundaries are pinned by `MushafLayoutTest` so neither can drift
+unknowingly.
 
 ## Notes on the port
 

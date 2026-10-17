@@ -38,7 +38,8 @@ class QuranResourceIntegrityTest {
     private val resources = listOf(
         "uthmani.txt" to QuranCorpus.TEXT_HASH,
         "en_sahihintl.txt" to QuranCorpus.EN_SAHIH_HASH,
-        "metadata.xml" to QuranCorpus.METADATA_HASH
+        "metadata.xml" to QuranCorpus.METADATA_HASH,
+        "mushaf_layout.txt" to QuranCorpus.MUSHAF_LAYOUT_HASH
     )
 
     private fun bytesOf(name: String): ByteArray =

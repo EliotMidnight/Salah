@@ -26,7 +26,23 @@
   converts; published by Dar Abul-Qasim. Displayed in-app with the credit line
   "English — Saheeh International". No tafsir text is bundled yet.
 
+## Mushaf line layout
+- File: `mushaf_layout.txt` — where every word of the bundled Uthmani text sits on the
+  604 pages of the **King Fahd Complex (KFGQPC) V2 mushaf, the 1421H Madinah print**
+  (the same print quran.com serves in its page view).
+- SHA-256: `b8816389c4d5d4d9a1951690f30a4bbdc0b7029f7e1e86ab6814ebcb2bef96dc`
+- Generated in-house by `tools/madinah_layout.py` from the print's line/word structure:
+  quran.com's published digitization of the V2 print (mirrored at the
+  `zonetecde/mushaf-layout` repo) supplies which words print on which line, and the
+  Quranic Universal Library export of the same print supplies the line-shape cross-check
+  and which rows the print centres. Words are not stored here — the file points at the
+  verified Tanzil corpus above, so the verse text still has one source. The mushaf layout
+  is positional data; the text it positions belongs to the Uthmani file's copyright.
+  Provenance, invariants and the derivation are documented in the top-level
+  `README.md`, "The Madinah mushaf".
+
 ## Integrity
 `QuranCorpus` verifies each file's SHA-256 at load and asserts 114 suras, 6,236
 verses in canonical order, and 604 page / 30 juz / 240 hizb-quarter partitions before
-the corpus is served.
+the corpus is served. `mushaf_layout.txt` rides the same gate, and its own loader
+refuses to tile the corpus if the layout does not place every word exactly once.
