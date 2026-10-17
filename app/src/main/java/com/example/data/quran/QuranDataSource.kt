@@ -201,6 +201,21 @@ object QuranDataSource {
     fun getSurahByNumber(number: Int): Surah? =
         if (number in 1..SURAHS.size) SURAHS[number - 1] else null
 
+    /**
+     * A surah's name in an interface, from the names table, without compiling [SURAHS].
+     *
+     * [SURAHS] recomposes these rows with the corpus's facts - verse counts, revelation
+     * places, start pages - and compiling one parses both text files and verifies their
+     * digests. Today's Continue Reading card names a surah on the app's first screen, and
+     * a name is not worth the corpus; the strings live in [NAMES], so this reads the same
+     * rows the compiled list carries.
+     *
+     * Null for a number no surah has, so a display site can choose its own empty string
+     * rather than a throw on a screen a reader is looking at.
+     */
+    fun surahName(number: Int, preferArabicName: Boolean): String? =
+        NAMES.getOrNull(number - 1)?.let { if (preferArabicName) it.arabic else it.english }
+
     // -----------------------------------------------------------------------
     //
     // Three `@Deprecated` forwarders lived here - `normalizeArabic`,

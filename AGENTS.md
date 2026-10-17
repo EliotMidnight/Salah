@@ -83,7 +83,7 @@ trust the executable source; several prose claims have drifted.
 
 ## Room (the reader's only user data)
 
-- `SalahDatabase` is version 4, `exportSchema = false`; migrations are hand-written and
+- `SalahDatabase` is version 6, `exportSchema = false`; migrations are hand-written and
   `SalahMigrationTest` runs them against a real old-schema SQLite. Any version bump needs
   a migration; the destructive fallback in `getDatabase` is for downgrades only and
   costs the reader's bookmarks and reading position.

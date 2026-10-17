@@ -13,7 +13,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ContinueReadingEntity::class,
         BookmarkEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class SalahDatabase : RoomDatabase() {
@@ -132,6 +132,46 @@ abstract class SalahDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * **5 to 6.** Drops `continue_reading.surahName`.
+         *
+         * It was the surah's English name, written on every verse the reader settled on
+         * and printed back by the Continue Reading card - so the card named the surah in
+         * English in every one of the eleven languages, and the name was a stored copy of
+         * a fact the names table already owns. The card resolves the name from that table
+         * in the interface's own language now; the row keeps the reference, the page and
+         * the time.
+         *
+         * The table is recreated rather than the column dropped for the reason spelled
+         * out on [MIGRATION_3_4] - `DROP COLUMN` needs SQLite 3.35, which is Android 12.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `continue_reading_new` (
+                        `id` INTEGER NOT NULL,
+                        `surahNumber` INTEGER NOT NULL,
+                        `ayahNumber` INTEGER NOT NULL,
+                        `pageNumber` INTEGER NOT NULL,
+                        `timestamp` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `continue_reading_new`
+                        (`id`, `surahNumber`, `ayahNumber`, `pageNumber`, `timestamp`)
+                    SELECT `id`, `surahNumber`, `ayahNumber`, `pageNumber`, `timestamp`
+                    FROM `continue_reading`
+                    """.trimIndent()
+                )
+                db.execSQL("DROP TABLE `continue_reading`")
+                db.execSQL("ALTER TABLE `continue_reading_new` RENAME TO `continue_reading`")
+            }
+        }
+
         fun getDatabase(context: Context): SalahDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -139,7 +179,7 @@ abstract class SalahDatabase : RoomDatabase() {
                     SalahDatabase::class.java,
                     "salah_quiet.db"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     // Only reached when there is no path from the installed version -
                     // which for a shipped app means a downgrade or a version nobody
                     // wrote a migration for. It is still destructive, and that is now a

@@ -72,7 +72,8 @@ class SalahMigrationTest {
         // The schema exactly as version 3 generated it, including the two columns that
         // version 4 removes and the unique index that version 3 added. Version 4 did not
         // touch `bookmarks`, so this is also the table version 5 starts from - the two
-        // columns it drops included.
+        // columns it drops included. `continue_reading` keeps `surahName` through both,
+        // which is where version 6 starts.
         db.execSQL(
             """
             CREATE TABLE IF NOT EXISTS `continue_reading` (
@@ -260,8 +261,8 @@ class SalahMigrationTest {
     fun `the migration is idempotent in the only sense that matters`() {
         // Room runs a migration exactly once per upgrade, so running it twice is not a
         // scenario. What *is* a scenario is a reader who installed a build that took the
-        // destructive fallback and is now on version 4 with no row at all - and then the
-        // entity's defaults are the whole of their history. That has to work.
+        // destructive fallback and is now on the current version with no row at all - and
+        // then the entity's defaults are the whole of their history. That has to work.
         SalahDatabase.MIGRATION_3_4.migrate(db)
         val rows = db.query("SELECT COUNT(*) FROM continue_reading").use { c ->
             c.moveToFirst()
@@ -399,6 +400,90 @@ class SalahMigrationTest {
         assertTrue(
             "the migration lost the bookmarks table: $tables",
             tables.contains("bookmarks")
+        )
+    }
+
+    // --- 5 to 6 ---------------------------------------------------------------
+
+    /**
+     * A database at version 5: the version-3 plant, migrated through 4.
+     *
+     * `continue_reading` still carries `surahName` here - the column version 6 drops -
+     * so the tests below run on the table a reader who installed every version since 3
+     * actually has.
+     */
+    private fun reachVersion5() {
+        plantReaderData()
+        SalahDatabase.MIGRATION_3_4.migrate(db)
+        SalahDatabase.MIGRATION_4_5.migrate(db)
+    }
+
+    @Test
+    fun `the reading position survives the 5 to 6 migration`() {
+        reachVersion5()
+        SalahDatabase.MIGRATION_5_6.migrate(db)
+
+        db.query("SELECT surahNumber, ayahNumber, pageNumber, timestamp " +
+            "FROM continue_reading").use { cursor ->
+            assertTrue("the reader's position was lost", cursor.moveToFirst())
+            assertEquals(112, cursor.getInt(0))
+            assertEquals(4, cursor.getInt(1))
+            assertEquals(604, cursor.getInt(2))
+            assertEquals(1700000000000L, cursor.getLong(3))
+            assertFalse(
+                "the migration left a second row behind",
+                cursor.moveToNext()
+            )
+        }
+    }
+
+    @Test
+    fun `the stored English name is gone from the reading position`() {
+        reachVersion5()
+        SalahDatabase.MIGRATION_5_6.migrate(db)
+
+        assertFalse(
+            "surahName is still a column: it was the English name on every reader's " +
+                "device, so the card could only name the surah in one language, and the " +
+                "names table resolves it in the interface's own language now",
+            columnsOf("continue_reading").contains("surahName")
+        )
+    }
+
+    @Test
+    fun `the migrated continue_reading table is exactly the one the entity describes`() {
+        // The reason the column list is spelled out in the migration: Room validates the
+        // schema when the database is opened, on the user's device. A mismatch here is
+        // that crash, moved into a test.
+        reachVersion5()
+        SalahDatabase.MIGRATION_5_6.migrate(db)
+
+        assertEquals(
+            "the migrated continue_reading table does not match ContinueReadingEntity. " +
+                "Room would refuse to open the database on a user's device.",
+            listOf("id", "surahNumber", "ayahNumber", "pageNumber", "timestamp"),
+            columnsOf("continue_reading")
+        )
+    }
+
+    @Test
+    fun `the 5 to 6 migration leaves no staging table behind`() {
+        // A recreated table whose rename failed leaves `_new` sitting next to the real
+        // one, and the next migration would then find two of everything.
+        reachVersion5()
+        SalahDatabase.MIGRATION_5_6.migrate(db)
+
+        val tables = mutableListOf<String>()
+        db.query("SELECT name FROM sqlite_master WHERE type = 'table'").use { c ->
+            while (c.moveToNext()) tables += c.getString(0)
+        }
+        assertFalse(
+            "the migration left a staging table behind: $tables",
+            tables.any { it.contains("continue_reading_new") }
+        )
+        assertTrue(
+            "the migration lost the continue_reading table: $tables",
+            tables.contains("continue_reading")
         )
     }
 

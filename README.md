@@ -149,8 +149,8 @@ carries Eastern Arabic-Indic digits in every language — see `ArabicDigits`.
 ### A hand-typed copy of Quranic text, which had already drifted
 
 `ContinueReadingEntity` carried a `snippetAr` — the Arabic of 1:1 — written on every verse
-the reader viewed. **Nothing ever read it.** The Continue Reading card says `surahName` and
-`surahNumber:ayahNumber`, and no screen touched the rest.
+the reader viewed. **Nothing ever read it.** The Continue Reading card said the surah's name
+and `surahNumber:ayahNumber`, and no screen touched the rest.
 
 So the app had one field holding Quranic text that the corpus did not supply and the
 SHA-256 gate did not cover: a hand-typed copy of 1:1 in a Room entity, one `SELECT` from a
@@ -161,12 +161,20 @@ indistinguishable; not the same string; not the text of the Book.
 Rather than fix the copy, `MIGRATION_3_4` removes it and the unread `surahNameAr` beside it.
 That is a stronger guarantee than a test asserting the copy is currently right: there is no
 second copy of the Book anywhere in the app to drift. The test left behind asserts the
-*property* — no field of the row may be Quranic text — so the column cannot return under
-another name.
+*property* — no field of the row may hold more than a reference, a page and a time — so the
+column cannot return under another name.
 
-It stays a copy rather than a corpus read because it is a Room entity's field initialiser,
-and reading the corpus there would parse 6,236 verses and verify three digests inside a UI
-state's defaults. Same reason `LocationStore` reads preferences in a field initialiser.
+The row's other stored string was the surah name the card printed, and it was the same
+mistake one step quieter. It was read — unlike the snippet — but it was still one language's
+copy of a fact the names table owns, so an Arabic interface read "Al-Baqarah 2:255" and no
+later reader could change it. `MIGRATION_5_6` drops the column; the card resolves the name
+in the interface's own language at the point of drawing.
+
+That resolution does not go through `QuranBrowse.surah`, and the row's defaults are not read
+from the corpus either, for one reason: compiling a surah parses 6,236 verses and verifies
+three digests, and the Continue Reading card is on the screen a cold start draws first.
+`QuranDataSource.surahName` answers a number with a name and no verses. Same reason
+`LocationStore` reads preferences in a field initialiser rather than the database.
 
 ### The sideways axes ran the wrong way, and the continuous one overflowed
 

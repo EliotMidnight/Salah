@@ -16,7 +16,12 @@ data class PrayerLogEntity(
 )
 
 /**
- * Where the reader was last left.
+ * Where the reader was last left: the verse's reference, its page, and the time.
+ *
+ * Nothing here is a string. The surah's name shown beside it comes from the names table
+ * (`QuranDataSource.surahName`), in the interface's own language, at the point the card is
+ * drawn - a stored name is one language's copy of a fact the table owns, and the language
+ * it was always copied in was English.
  */
 @Entity(tableName = "continue_reading")
 data class ContinueReadingEntity(
@@ -24,7 +29,6 @@ data class ContinueReadingEntity(
     val id: Int = 1,
     val surahNumber: Int = 1,
     val ayahNumber: Int = 1,
-    val surahName: String = "Al-Fatihah",
     val pageNumber: Int = 1,
     val timestamp: Long = System.currentTimeMillis()
 )

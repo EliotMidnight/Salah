@@ -61,6 +61,7 @@ import com.example.data.model.PrayerAdjustments
 import com.example.data.model.PrayerTimesDay
 import com.example.data.model.UserLocation
 import com.example.data.model.HijriDate
+import com.example.data.quran.QuranDataSource
 import com.example.engine.HijriCalendarEngine
 import com.example.engine.PrayerCalculationEngine
 import com.example.engine.QiblaEngine
@@ -113,8 +114,15 @@ fun TodayScreen(
     val date = base.plusDays(dayOffset.toLong())
     val isToday = date == today
     val isArabicUi = isArabicInterface(state.language)
-    val continueReadingRef = "${state.continueReading.surahName} " +
-        "${state.continueReading.surahNumber}:${state.continueReading.ayahNumber}"
+    // The surah's name is resolved at the point of drawing, in the interface's own
+    // language, from the names table (`QuranDataSource.surahName`): the row stores no
+    // name, because a stored one is a copy in one language. It does not go through
+    // `QuranBrowse.surah` either, which compiles the whole corpus on first access - and
+    // Today is the first screen a cold start draws.
+    val continueReading = state.continueReading
+    val continueReadingRef =
+        "${QuranDataSource.surahName(continueReading.surahNumber, isArabicUi).orEmpty()} " +
+            "${continueReading.surahNumber}:${continueReading.ayahNumber}"
     val day: PrayerTimesDay = remember(date, state.location, state.method, state.madhhab, state.adjustments) {
         state.todayPrayerTimes
             ?.takeIf { it.date == date }

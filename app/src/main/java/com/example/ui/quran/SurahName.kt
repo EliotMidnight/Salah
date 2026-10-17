@@ -14,6 +14,10 @@ import com.example.data.model.Surah
  *
  * Which languages are Arabic interfaces is `isArabicInterface`'s question - the
  * language, not the script, so an Urdu interface still reads the transliteration.
+ *
+ * A surface that holds a surah *number* without the corpus - Today's Continue Reading
+ * card - gets the same answer from `QuranDataSource.surahName`, and
+ * `SurahDisplayNameTest` holds the two doors to the same strings.
  */
 internal fun surahDisplayName(surah: Surah, preferArabicName: Boolean): String =
     if (preferArabicName) surah.arabicName else surah.englishName

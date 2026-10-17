@@ -1197,12 +1197,10 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
      */
     fun onAyahViewed(ayah: Ayah) {
         viewModelScope.launch {
-            val surah = QuranBrowse.surah(ayah.surahNumber)
             repository.saveContinueReading(
                 ContinueReadingEntity(
                     surahNumber = ayah.surahNumber,
                     ayahNumber = ayah.ayahNumber,
-                    surahName = surah?.englishName.orEmpty(),
                     pageNumber = ayah.pageNumber,
                     timestamp = System.currentTimeMillis()
                 )

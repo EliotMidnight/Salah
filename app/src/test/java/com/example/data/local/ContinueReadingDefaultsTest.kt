@@ -3,13 +3,11 @@ package com.example.data.local
 import com.example.data.quran.QuranBrowse
 import com.example.data.quran.QuranCorpus
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.util.Locale
 
 /**
- * The first-run Continue Reading row says what the corpus says, and holds no Quranic text.
+ * The first-run Continue Reading row says what the corpus says, and holds no copy of it.
  *
  * ### The defect
  *
@@ -20,8 +18,8 @@ import java.util.Locale
  *
  * It is **not** a legitimate reason for the row to hold a hand-typed copy of Quranic text.
  * It had a `snippetAr` carrying the Arabic of 1:1, written on every verse viewed — and
- * **read by nothing**. The Continue Reading card says `surahName` and
- * `surahNumber:ayahNumber`, and nothing else on any screen touched it.
+ * **read by nothing**. The Continue Reading card said the surah's name and
+ * `surahNumber:ayahNumber`, and no screen touched the rest.
  *
  * Worse, the copy had **already drifted**. The corpus spells الرحمن with a tatweel before
  * the dagger alif — U+0640 then U+0670, `ٱلرَّحْمَـٰنِ` — and the hand-typed default had
@@ -33,63 +31,59 @@ import java.util.Locale
  *
  * Fixing the copy would have made it correct today. Deleting it means there is **no second
  * copy of the Book anywhere in the app to drift** — a stronger guarantee than a test
- * asserting the copy is currently right, and the reason `the row holds no Quranic text`
- * below is a test at all rather than a one-off edit.
+ * asserting the copy is currently right, and the reason the property test below exists at
+ * all rather than being a one-off edit.
+ *
+ * ### The name was the same mistake, one step quieter
+ *
+ * The row also carried `surahName`, the English transliteration written on every verse. It
+ * *was* read — the card printed it — but stored text is one language, so an Arabic
+ * interface still read "Al-Baqarah 2:255", and no later reader could change that. The
+ * names table owns the name (`QuranDataSource.surahName`) and the card asks it in the
+ * interface's own language at the point of drawing; the column is gone and the row is
+ * numbers. The property test below is the durable half — a string cannot come back under
+ * another name.
  *
  * ### Why it was a copy rather than a read
  *
  * Because it was a Room entity's field initialiser. Reading the corpus there would parse
  * 6,236 verses and verify three digests inside a UI state's defaults, on every
  * construction. `LocationStore` reads `SharedPreferences` in a field initialiser for the
- * same reason and keeps the database off that path.
- *
- * The surah *name* stays, because a reader needs to recognise where they were and unlike
- * verse text it is a label rather than the Book — pinned below so it cannot drift either.
+ * same reason and keeps the database off that path. The card's own read is the names
+ * table — 114 rows and no verses — which is why it can afford to ask per language instead
+ * of storing an answer.
  */
 class ContinueReadingDefaultsTest {
 
     /** The row a first run has: the default-constructed entity. */
     private val defaults = ContinueReadingEntity()
 
-    private val firstVerse = QuranBrowse.ayah(1, 1)!!
-
-    private val firstSurah = QuranBrowse.surah(1)!!
-
     @Test
-    fun `the row holds no Quranic text`() {
-        // The durable version of the fix. A field whose value is a verse of the Book is a
-        // second copy of the corpus, and a second copy drifts: this one had already lost a
-        // tatweel. Rather than assert the particular column is gone, this asserts the
-        // *property* - no field of this row may be Quranic text - so the column cannot
-        // come back under another name.
-        val arabic = Regex("[\\u0600-\\u06FF]")
-
+    fun `the row carries a reference and a time, and nothing to read`() {
+        // The durable version of the fix. A field whose value copies something the app's
+        // own table or the corpus owns is a second copy, and a second copy drifts:
+        // `snippetAr` had already lost a tatweel, and `surahName` could only ever name one
+        // language. Rather than assert two columns are gone, this asserts the *property* -
+        // every field is a number - so neither can come back under another name.
+        //
+        // The leading-`$` skip is the compiler's own field (`$stable`), not the row's.
+        var checked = 0
         for (field in ContinueReadingEntity::class.java.declaredFields) {
-            val value = defaults.let { entity ->
-                runCatching {
-                    field.isAccessible = true
-                    field.get(entity)
-                }.getOrNull()
-            }
-            if (value !is String) continue
-            assertFalse(
-                "`${field.name}` holds Quranic text (\"${value.take(40)}\"). Verse text " +
-                    "comes from the bundled corpus and from nowhere else - a second copy " +
-                    "is how it drifts, and this one already had. A label is fine; the Book " +
-                    "is not.",
-                arabic.containsMatchIn(value)
+            if (field.name.startsWith("$")) continue
+            checked++
+            val type = field.type
+            assertTrue(
+                "`${field.name}` is a ${type.simpleName}. The card's surah name and the " +
+                    "verse's text come from the names table and the bundled corpus, in " +
+                    "the reader's own language; a stored string is how the copy drifts. " +
+                    "A reference number, a page and a timestamp are the facts this row " +
+                    "may hold.",
+                type == Int::class.javaPrimitiveType || type == Long::class.javaPrimitiveType
             )
         }
-    }
-
-    @Test
-    fun `the default names the surah the corpus names`() {
-        assertEquals(
-            "the first-run Continue Reading card names surah " +
-                "\"${defaults.surahName}\" where the corpus names it " +
-                "\"${firstSurah.englishName}\"",
-            firstSurah.englishName,
-            defaults.surahName
+        assertTrue(
+            "the entity's fields could not be read, so the property was never checked",
+            checked > 0
         )
     }
 
@@ -121,24 +115,6 @@ class ContinueReadingDefaultsTest {
             "a first run has no stored row, so the default's id must be the single row's",
             1,
             defaults.id
-        )
-    }
-
-    @Test
-    fun `the name the row stores is the one a reader would recognise`() {
-        // Not "the row holds no Arabic" - the surah's name *is* Arabic for most of the
-        // book's readers, and stripping it would make the card unreadable for them. This
-        // pins that the stored name is the corpus's name rather than a hand-typed one, by
-        // checking the default against the corpus.
-        assertEquals(
-            "the stored name is not the corpus's name for surah 1",
-            firstSurah.englishName.lowercase(Locale.ROOT),
-            defaults.surahName.lowercase(Locale.ROOT)
-        )
-        assertEquals(
-            "Al-Fatihah is 1:1's surah and its name must not be a translation of it",
-            "Al-Fatihah",
-            QuranBrowse.surah(1)?.englishName
         )
     }
 }
