@@ -105,10 +105,12 @@ class QuranReadingOptionsTest {
     // --- Defaults -------------------------------------------------------
 
     @Test
-    fun `the default is the canonical mushaf, unbroken text, vertical`() {
+    fun `the default is the Madinah print, unbroken text, vertical`() {
+        // The print is the opening surface for a reader who has chosen nothing;
+        // an install with stored options keeps what it stored.
         val options = QuranReadingOptions()
 
-        assertEquals(QuranReadingLayout.PER_PAGE, options.layout)
+        assertEquals(QuranReadingLayout.MADINAH, options.layout)
         assertFalse(options.perVerse)
         assertEquals(QuranScrollDirection.VERTICAL, options.scroll)
     }
@@ -226,20 +228,21 @@ class QuranReadingOptionsTest {
         }
         assertEquals(
             "an unknown key must not throw",
-            QuranReadingLayout.PER_PAGE,
+            QuranReadingLayout.MADINAH,
             QuranReadingLayout.fromKey("something-from-the-future")
         )
-        assertEquals(QuranReadingLayout.PER_PAGE, QuranReadingLayout.fromKey(null))
+        assertEquals(QuranReadingLayout.MADINAH, QuranReadingLayout.fromKey(null))
     }
 
     @Test
     fun `the retired per ayah key is not selectable as a layout`() {
-        // It must migrate rather than resolve. If `fromKey("per_ayah")` ever
-        // returned a real layout, the flag migration in normalise would stop
-        // running and the reader would silently lose its per-verse setting.
+        // It must migrate rather than resolve. No entry carries the key, so the
+        // parse falls to the default; the repair itself is normalise's, keyed
+        // off the raw string - which is what keeps the flag migration running
+        // whatever the fallback answer is.
         assertFalse(QuranReadingLayout.entries.any { it.key == "per_ayah" })
         assertEquals(
-            QuranReadingLayout.PER_PAGE,
+            QuranReadingLayout.MADINAH,
             QuranReadingLayout.fromKey("per_ayah")
         )
     }

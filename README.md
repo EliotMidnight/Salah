@@ -531,7 +531,7 @@ desktop session, a parallel Compose build gets OOM-killed, so it runs without
 parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
 JDK and memory for it.
 
-569 tests. The pure-JVM suites (Quran corpus integrity, the Madinah layout's
+570 tests. The pure-JVM suites (Quran corpus integrity, the Madinah layout's
 corpus-wide properties, page fitting, gesture maths, search, prayer maths, Qibla
 bearing and guidance, localisation coverage,
 sky-text contrast) run on any host, including ARM64 Linux/Termux.
@@ -897,6 +897,12 @@ basmalah rows, and every line of the two opening pages — are never stretched,
 because a heading with a stretched letter in it reads as a mistake. The bundled
 faces stay the reader's rendering choice rather than part of the print: the
 typeface picker works on this surface even where the size does not.
+
+**The print is also where the reader opens.** A reader who has chosen nothing
+lands on the Madinah mushaf: the layout row in the reading options answers
+Madinah by default, with the per-page mushaf and the continuous text as the
+alternatives around it. A stored choice still wins - the default answers only
+the absence of one, so a reader who has picked a view keeps the view they picked.
 
 Taps and turns navigate by the print's own attribution. A tap resolves through the
 row's own word extents and hands on the reference the print itself attributes; a

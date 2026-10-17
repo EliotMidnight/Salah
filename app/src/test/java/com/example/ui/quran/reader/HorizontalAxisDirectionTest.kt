@@ -5,6 +5,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.junit4.createComposeRule
+import com.example.data.quran.MushafLayout
 import com.example.data.quran.QuranBrowse
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.hasTestTag
@@ -15,7 +16,6 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import com.example.data.model.QuranReadingLayout
 import com.example.data.model.QuranReadingOptions
-import com.example.data.model.QuranRef
 import com.example.data.model.QuranScrollDirection
 import com.example.ui.SalahUiState
 import com.example.ui.localization.ProvideAppLanguage
@@ -71,7 +71,7 @@ class HorizontalAxisDirectionTest {
                 ProvideAppLanguage(language = language) {
                     QuranReader(
                         state = SalahUiState(),
-                        position = ReaderPosition(QuranRef(2, 120, 42)),
+                        position = ReaderPosition(QuranBrowse.ref(2, 120)!!),
                         options = options,
                         onToggleBookmark = {},
                         onTogglePlayAyah = {},
@@ -94,11 +94,18 @@ class HorizontalAxisDirectionTest {
         compose.onNodeWithTag("quran_reader", useUnmergedTree = true)
             .fetchSemanticsNode().boundsInRoot.right
 
-    /** Which mushaf pages are currently composed. */
-    private fun composedPages(): List<Int> {
+    /**
+     * Which pages are currently composed around [centre].
+     *
+     * The pager composes its neighbours as well as the settled page, so the
+     * scan is a window - and it is a window *around the seat in question*,
+     * because the seat is the test's own fact: where the verse actually
+     * prints, not where a hand-written number hoped it would.
+     */
+    private fun composedPages(tagPrefix: String, centre: Int): List<Int> {
         val found = ArrayList<Int>()
-        for (n in 36..50) {
-            if (compose.onAllNodes(hasTestTag("mushaf_page_$n")).fetchSemanticsNodes().isNotEmpty()) {
+        for (n in (centre - 12)..(centre + 12)) {
+            if (compose.onAllNodes(hasTestTag("${tagPrefix}_$n")).fetchSemanticsNodes().isNotEmpty()) {
                 found += n
             }
         }
@@ -157,21 +164,76 @@ class HorizontalAxisDirectionTest {
      */
     @Test
     fun `the per-page axis advances on a rightward drag, in an English interface`() {
-        reader(QuranReadingOptions(scroll = QuranScrollDirection.HORIZONTAL))
-        assertTrue("page 42 is not composed to begin with", composedPages().contains(42))
+        // The seat is the corpus ref for 2:120, named so the reader's own
+        // attribution agrees with what this test claims: entering the reader
+        // re-attributes the position's page to the corpus's page for the verse,
+        // and a seat that a hand-written number guessed would be corrected
+        // underneath the test on the way in.
+        val seat = QuranBrowse.ref(2, 120)!!
+        reader(
+            QuranReadingOptions(
+                layout = QuranReadingLayout.PER_PAGE,
+                scroll = QuranScrollDirection.HORIZONTAL
+            )
+        )
+        val onScreen = { composedPages("mushaf_page", seat.page) }
+        assertTrue(
+            "page ${seat.page} is not composed to begin with",
+            onScreen().contains(seat.page)
+        )
 
         swipeReaderRight()
         assertTrue(
             "a rightward drag did not advance the per-page axis; composed pages were " +
-                "${composedPages()}. On a right-to-left axis the first page is rightmost, " +
+                "${onScreen()}. On a right-to-left axis the first page is rightmost, " +
                 "so advancing moves the content rightward.",
-            composedPages().contains(43)
+            onScreen().contains(seat.page + 1)
         )
 
         swipeReaderLeft()
         assertTrue(
-            "a leftward drag did not go back; composed pages were ${composedPages()}",
-            composedPages().contains(42) || composedPages().contains(41)
+            "a leftward drag did not go back; composed pages were ${onScreen()}",
+            onScreen().contains(seat.page) || onScreen().contains(seat.page - 1)
+        )
+    }
+
+    /**
+     * So does the Madinah print's axis.
+     *
+     * The same defect class reached the print's surface the same way: the pager
+     * takes its direction from the composition, whatever it is paging, so an
+     * English reader dragging leftward was moving *backwards* through an Arabic
+     * book here too. The seat is the print's own attribution of the verse - the
+     * ref [MushafLayout] answers for it, not the corpus table's number - which
+     * is what the print's pager turns on.
+     */
+    @Test
+    fun `the Madinah axis advances on a rightward drag, in an English interface`() {
+        val seat = MushafLayout.ref(2, 120)
+        reader(
+            QuranReadingOptions(
+                layout = QuranReadingLayout.MADINAH,
+                scroll = QuranScrollDirection.HORIZONTAL
+            )
+        )
+        val onScreen = { composedPages("madinah_page", seat.page) }
+        assertTrue(
+            "the print's sheet ${seat.page} for 2:120 is not composed to begin with",
+            onScreen().contains(seat.page)
+        )
+
+        swipeReaderRight()
+        assertTrue(
+            "a rightward drag did not advance the Madinah axis; composed sheets were " +
+                "${onScreen()}. On a right-to-left axis the first sheet is rightmost, " +
+                "so advancing moves the content rightward.",
+            onScreen().contains(seat.page + 1)
+        )
+
+        swipeReaderLeft()
+        assertTrue(
+            "a leftward drag did not go back; composed sheets were ${onScreen()}",
+            onScreen().contains(seat.page) || onScreen().contains(seat.page - 1)
         )
     }
 

@@ -18,8 +18,11 @@ enum class QuranReadingLayout(val key: String) {
     CONTINUOUS("continuous");
 
     companion object {
+        // An unrecognised key falls to the current default. The one retired key
+        // that still has to move - per_ayah - is repaired by normalise from the
+        // raw string, never through this parse.
         fun fromKey(key: String?): QuranReadingLayout =
-            entries.firstOrNull { it.key == key } ?: PER_PAGE
+            entries.firstOrNull { it.key == key } ?: MADINAH
     }
 }
 
@@ -145,7 +148,8 @@ enum class QuranFontFace(
  * The reader's preferences, as one value.
  */
 data class QuranReadingOptions(
-    val layout: QuranReadingLayout = QuranReadingLayout.PER_PAGE,
+    /** The Madinah print is what the reader opens on; the rest are the alternatives. */
+    val layout: QuranReadingLayout = QuranReadingLayout.MADINAH,
     /** Break every verse out as its own selectable unit. Works in either layout. */
     val perVerse: Boolean = false,
     val scroll: QuranScrollDirection = QuranScrollDirection.VERTICAL,

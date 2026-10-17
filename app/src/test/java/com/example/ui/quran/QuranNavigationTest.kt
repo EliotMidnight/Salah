@@ -237,7 +237,16 @@ class QuranNavigationTest {
         mount()
         deliver(ref)
 
-        compose.onNodeWithTag("mushaf_page_${ref.page}").assertIsDisplayed()
+        // Each mushaf surface tags the page it draws with that page's number -
+        // the corpus's on the flowing pager, the print's on the Madinah sheet -
+        // so the node is asked for under the tag of whichever surface the
+        // reader's own options have put on screen.
+        val surfaceTag = if (state.value.quranReadingOptions.layout == QuranReadingLayout.MADINAH) {
+            "madinah_page"
+        } else {
+            "mushaf_page"
+        }
+        compose.onNodeWithTag("${surfaceTag}_${ref.page}").assertIsDisplayed()
         assertEquals(ref.page, pillPage())
     }
 
@@ -425,12 +434,17 @@ class QuranNavigationTest {
     /** Turn the page through the page's own accessibility action. */
     private fun nextPage() {
         val page = pillPage()
-        // The page-turn actions ride on the page's text node - the same node
-        // that carries the page's state description - and the pager composes its
-        // neighbours, so the right node is picked by what it says it is.
-        val node = compose.onAllNodesWithTag("mushaf_page_text", useUnmergedTree = true)
-            .fetchSemanticsNodes()
-            .first {
+        // The page-turn actions ride on the page's node - the same node that
+        // carries the page's state description - and the pager composes its
+        // neighbours, so the right node is picked by what it says it is. The
+        // flowing pager carries that contract on the page's text node; the
+        // Madinah sheet carries it on the sheet's own root.
+        val node = (
+            compose.onAllNodesWithTag("mushaf_page_text", useUnmergedTree = true)
+                .fetchSemanticsNodes() +
+                compose.onAllNodesWithTag("madinah_page_$page", useUnmergedTree = true)
+                    .fetchSemanticsNodes()
+            ).first {
                 it.config.getOrNull(SemanticsProperties.StateDescription) == "Page $page"
             }
         val turn = node.config[SemanticsActions.CustomActions]
