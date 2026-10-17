@@ -139,7 +139,6 @@ class QuranAudioPlayer(private val context: Context) {
     private val _playbackState = MutableStateFlow(AudioPlaybackState())
     val playbackState: StateFlow<AudioPlaybackState> = _playbackState.asStateFlow()
 
-    private var mediaPlayer: MediaPlayer? = null
     private var synthJob: Job? = null
     private var prepareTimeoutJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Main)
@@ -273,10 +272,96 @@ class QuranAudioPlayer(private val context: Context) {
         }
     }
 
-    fun playAyah(surahNumber: Int, ayahNumber: Int, reciter: Reciter, onAyahCompleted: (() -> Unit)? = null) {
+    /**
+     * One verse in flight, holding its player and the identity its callbacks
+     * check against: every event a [MediaPlayer] posts must be answered by the
+     * verse it belongs to *at the moment it arrives*, because the player behind
+     * the field it is read from may have been replaced, handed off, or dropped
+     * since.
+     *
+     * [prepared] is set by the platform's prepared callback and read by the
+     * watchdog after it - the same data, written where the event lands.
+     * [attached] is true once this player has been armed as another one's next
+     * player, which is a one-way trip: the platform will start it at the other
+     * player's end-of-stream, and the player must never be started by hand
+     * afterwards.
+     */
+    private class VerseStream(
+        val surahNumber: Int,
+        val ayahNumber: Int,
+        val player: MediaPlayer,
+        var prepared: Boolean = false,
+        var attached: Boolean = false,
+    )
+
+    /** The verse that is sounding, or about to. */
+    private var active: VerseStream? = null
+
+    /**
+     * The verse prepared for the seam while [active] sounds.
+     *
+     * Null most of the lifetimes that matter: no chain, chain finished, prefetch
+     * failed, or - after a hand-off - the queued verse *becoming* the active one.
+     */
+    private var queued: VerseStream? = null
+
+    /**
+     * Who answers "what plays after this verse", or null when the caller asked
+     * for one verse and no chain.
+     *
+     * The player does not hold the corpus, so it cannot know that 255 is not
+     * the last verse of Baqarah; the caller - the view model, via `QuranBrowse`
+     * - answers, and this field is where the answer lives for the whole chain
+     * the [playAyah] started. One play, one finder.
+     */
+    private var nextVerseFinder: ((Int, Int) -> Pair<Int, Int>?)? = null
+
+    /** The reciter the chain was started with, for every verse it prepares. */
+    private var chainedReciter: Reciter? = null
+
+    private var prefetchWatchdogJob: Job? = null
+
+    /**
+     * Play one verse, and - when given a next-verse finder - the rest of its
+     * surah after it, without a download stall at the seam.
+     *
+     * The chain used to live in the caller's completion callback: every verse
+     * completion tore the player down (stop, release) and built a fresh one for
+     * the next verse, so each seam carried the next verse's whole prepare delay
+     * - a connection stall between verses the reader hears as dead air, or, on
+     * a slow connection, as a silence long enough to be mistaken for the end.
+     *
+     * Now the *current* verse's successor is prepared in a second player while
+     * the first still sounds, and armed onto it with
+     * `MediaPlayer.setNextMediaPlayer`: the platform then starts the successor
+     * itself at end-of-stream, as seamlessly as it can. Three honest fallbacks
+     * keep the chain alive when the seam is lost:
+     *
+     * - a prefetch that cannot even be set up (offline, refused) is dropped and
+     *   leaves the current verse sounding - a bad future must not stop a good
+     *   present;
+     * - a prefetch that loses the race (current completes before it is
+     *   prepared) falls back to the old sequential start - the old cost, at
+     *   the rare seam the network made it reach;
+     * - a stalled prefetch fails like any other stream and the fallback
+     *   re-run - which is the same download, from the same dead connection -
+     *   fails into [playbackFailed] like the current verse would, and the
+     *   reader is told.
+     *
+     * @param nextVerse the seam: given (surah, ayah) now sounding, the verse
+     *   that follows, or null when this is the last.
+     */
+    fun playAyah(
+        surahNumber: Int,
+        ayahNumber: Int,
+        reciter: Reciter,
+        nextVerse: ((Int, Int) -> Pair<Int, Int>?)? = null,
+    ) {
         stop()
         pausedForFocusLoss = false
         requestFocus()
+        chainedReciter = reciter
+        nextVerseFinder = nextVerse
 
         _playbackState.value = _playbackState.value.copy(
             isPlaying = true,
@@ -286,74 +371,285 @@ class QuranAudioPlayer(private val context: Context) {
             ayahNumber = ayahNumber,
             reciter = reciter,
         )
+        startStream(surahNumber, ayahNumber, reciter, asQueued = false)
+    }
 
-        // Try online audio stream (EveryAyah public domain audio).
-        //
-        // The directory is the reciter's own, from [Reciter]: the same enum the
-        // Settings picker offers, so the selection and the stream are the one
-        // fact. The banner can only name a reciter whose stream is real, because
-        // it names the [Reciter] recorded here and not the preference stored
-        // beside it.
-        val url = reciter.verseUrl(surahNumber, ayahNumber)
-
+    /**
+     * Prepare a verse's stream. `asQueued` decides the role, and the role
+     * decides what failure and completion *mean*:
+     *
+     * - A queued stream that fails is dropped, non-fatally - the current verse
+     *   keeps sounding, and the completion path falls back to a sequential
+     *   start.
+     * - The active stream that fails fails the whole chain: there is nothing
+     *   sounding to fall back from.
+     */
+    private fun startStream(
+        surahNumber: Int,
+        ayahNumber: Int,
+        reciter: Reciter,
+        asQueued: Boolean,
+    ) {
+        val stream = VerseStream(surahNumber, ayahNumber, MediaPlayer())
         try {
-            var prepared = false
-            val player = MediaPlayer().apply {
+            with(stream.player) {
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                         .setUsage(AudioAttributes.USAGE_MEDIA)
                         .build()
                 )
-                setDataSource(appContext, Uri.parse(url))
+                // The directory is the reciter's own, from [Reciter]: the same
+                // enum the Settings picker offers, so the selection and the stream
+                // are the one fact. The banner can only name a reciter whose
+                // stream is real, because it names the [Reciter] recorded here
+                // and not the preference stored beside it.
+                setDataSource(appContext, Uri.parse(reciter.verseUrl(surahNumber, ayahNumber)))
                 setOnPreparedListener { mp ->
-                    prepared = true
-                    prepareTimeoutJob?.cancel()
+                    stream.prepared = true
+                    cancelWatchdog(asQueued)
                     // The reader may have released this attempt while it prepared -
                     // by tapping pause, which cannot pause a stream that has not
                     // made a sound - and a callback already on its way must not
                     // start a player that is gone.
-                    if (mediaPlayer === mp) {
+                    if (!asQueued && active?.player === mp) {
                         mp.start()
                         _playbackState.value = _playbackState.value.copy(
                             isPlaying = true,
                             isPaused = false,
                         )
                     }
+                    attachQueued()
+                    if (!asQueued && active?.player === mp) {
+                        schedulePrefetchAfter(stream)
+                    }
                 }
-                setOnCompletionListener {
-                    prepareTimeoutJob?.cancel()
-                    _playbackState.value = _playbackState.value.copy(
-                        isPlaying = false,
-                        isPaused = false,
-                    )
-                    // The verse is finished, so the claim has no sound behind it
-                    // until the next one prepares - the chain's next verse re-claims
-                    // through playAyah, and a chain that ends here leaves nothing
-                    // outstanding.
-                    abandonFocus()
-                    onAyahCompleted?.invoke()
+                setOnCompletionListener { mp ->
+                    // A hand-off leaves the finished player superseded; only the
+                    // player whose verse the state names may answer completion.
+                    if (active !== stream) return@setOnCompletionListener
+                    verseCompleted(stream)
                 }
-                setOnErrorListener { _, _, _ ->
-                    playbackFailed()
+                setOnErrorListener { mp, _, _ ->
+                    if (active?.player === mp) {
+                        playbackFailed()
+                    } else if (queued?.player === mp) {
+                        dropQueued("the prefetch was refused")
+                    }
+                    true
+                }
+                // The hand-off signal arrives on the *queued* player when the
+                // platform starts it to bridge the seam. Promotion from here is
+                // redundancy in disguise: the completed player's own completion
+                // callback is expected to promote first, and this is the idempotent
+                // second chance for the platforms whose event order differs.
+                setOnInfoListener { mp, what, _ ->
+                    if (what == MediaPlayer.MEDIA_INFO_STARTED_AS_NEXT && queued?.player === mp) {
+                        promoteQueued()
+                    }
                     true
                 }
                 prepareAsync()
             }
-            mediaPlayer = player
-            // Watchdog: a stream that never arrives - a hanging connection rather
-            // than an error the platform reported - fails like any other. The
-            // identity guard keeps a superseded attempt from taking down the
-            // stream that replaced it.
-            prepareTimeoutJob?.cancel()
-            prepareTimeoutJob = scope.launch {
-                delay(12_000)
-                if (!prepared && mediaPlayer === player) {
-                    playbackFailed()
-                }
+        } catch (e: Exception) {
+            if (asQueued) {
+                dropQueued("the prefetch could not even be set up: offline or refused")
+            } else {
+                playbackFailed()
             }
+            return
+        }
+        if (asQueued) {
+            queued = stream
+        } else {
+            active = stream
+            // A new active stream is a new verse on the banner. For playAyah the
+            // state was already moved; this is for the sequential fallback, whose
+            // verses are started from inside the chain and would otherwise leave
+            // the recitation banner naming the verse that just ended.
+            _playbackState.value = _playbackState.value.copy(
+                isPlaying = true,
+                surahNumber = surahNumber,
+                ayahNumber = ayahNumber,
+                reciter = reciter,
+            )
+        }
+        armWatchdog(stream, asQueued)
+    }
+
+    /**
+     * Arm the hand-off: tell the platform that [queued] starts when [active]
+     * reaches its end.
+     *
+     * Guarded on the *current player actually sounding*, because an armed
+     * hand-off is the platform's, not ours: attaching a next player onto a
+     * paused or still-preparing stream would promise a seamless start on a
+     * player whose continuation we ourselves control, and the seam would then
+     * depend on the pause resolving rather than on the recitation finishing.
+     * So the attach waits for the resumption (see [resume]), and stays lawful
+     * under the platform rule that a next player must be prepared - but never
+     * started by hand - before the player it is attached to completes.
+     */
+    private fun attachQueued() {
+        val active = active ?: return
+        val queued = queued ?: return
+        if (queued.attached) return
+        if (!active.player.isPlaying) return
+        try {
+            // Deprecated since 34, and unreplaceable below 34: the modern
+            // setNextMediaItem lives behind a media-session surface this app
+            // does not have, and minSdk 24 forbids requiring it. Chaining plain
+            // players is exactly what this method is for.
+            @Suppress("DEPRECATION")
+            active.player.setNextMediaPlayer(queued.player)
+            queued.attached = true
         } catch (_: Exception) {
-            playbackFailed()
+            // An unarmed seam is a lost race, answered at completion by the
+            // sequential fallback - never by stopping the sounding verse.
+        }
+    }
+
+    /**
+     * The queued verse's turn: the platform started it (or, in the redundancy
+     * path, it is started here), the finished player is released, and the
+     * state moves to the verse the reader is now hearing.
+     */
+    private fun promoteQueued() {
+        val queued = queued ?: return
+        val finished = active
+        active = queued
+        this.queued = null
+        releaseQuietly(finished?.player)
+        if (!queued.player.isPlaying) {
+            // Some platforms post the completion and the start-as-next out of
+            // order; a prepared stream that was never 'released into' by the
+            // hand-off has to be started by hand or it will sit silent forever,
+            // with no completion to ever fire.
+            try {
+                queued.player.start()
+            } catch (_: Exception) {
+            }
+        }
+        prefetchWatchdogJob?.cancel()
+        _playbackState.value = _playbackState.value.copy(
+            isPlaying = true,
+            isPaused = false,
+            failed = false,
+            surahNumber = queued.surahNumber,
+            ayahNumber = queued.ayahNumber,
+        )
+        schedulePrefetchAfter(queued)
+    }
+
+    /**
+     * The verse that was sounding finished. The armed hand-off is answered by
+     * starting its beneficiary; anything else keeps the chain alive the way it
+     * has always kept it alive - a sequential start for the next verse, or
+     * silence at the surah's end.
+     *
+     * Either way the finished player is done: a hand-off releases it (the
+     * framework has moved on), a fallback releases it before preparing the
+     * next, and the end of the chain releases everything.
+     */
+    private fun verseCompleted(stream: VerseStream) {
+        val queued = queued
+        if (queued != null && queued.attached) {
+            promoteQueued()
+            return
+        }
+        // The prefetch never made it: drop it in flight and prepare the next
+        // verse the old way.
+        dropQueued("the prefetch lost the race")
+        releaseQuietly(stream.player)
+        this.active = null
+        val next = findNextAfter(stream)
+        if (next != null) {
+            startStream(next.first, next.second, chainedReciter ?: return, asQueued = false)
+        } else {
+            endChain()
+        }
+    }
+
+    /**
+     * Ask the injected finder what follows, tolerant of being called at the
+     * moment a play was never given a finder at all.
+     */
+    private fun findNextAfter(stream: VerseStream): Pair<Int, Int>? {
+        val finder = nextVerseFinder ?: return null
+        return finder(stream.surahNumber, stream.ayahNumber)
+    }
+
+    /** Prepare the verse after the one now sounding, into the queued slot. */
+    private fun schedulePrefetchAfter(stream: VerseStream) {
+        val reciter = chainedReciter ?: return
+        val next = findNextAfter(stream) ?: return
+        startStream(next.first, next.second, reciter, asQueued = true)
+    }
+
+    /**
+     * Drop the queued verse without touching the sounding one.
+     *
+     * Whatever went wrong - refused, stalled, lost the race - the fault is the
+     * *future's*: the verse now sounding is fine, and the seam will be answered
+     * when it completes by the fallback path this drop leaves standing.
+     */
+    private fun dropQueued(why: String) {
+        releaseQuietly(queued?.player)
+        prefetchWatchdogJob?.cancel()
+        queued = null
+    }
+
+    /**
+     * The chain is over, and so is its equipment: the last verse released, the
+     * queued slot empty, the watchdogs cold. The state is a finished verse -
+     * sounding nothing, holding no pause, so the next tap on the verse starts
+     * it over rather than 'resuming' a player that ended.
+     */
+    private fun endChain() {
+        releaseQuietly(active?.player)
+        active = null
+        dropQueued("end of chain")
+        prepareTimeoutJob?.cancel()
+        prefetchWatchdogJob?.cancel()
+        abandonFocus()
+        _playbackState.value = _playbackState.value.copy(
+            isPlaying = false,
+            isPaused = false,
+        )
+    }
+
+    /**
+     * Watchdogs. Two roles, one timer each: the active stream that never
+     * prepares fails the chain; a queued stream that never prepares only loses
+     * the seam - it is answered at completion by the sequential fallback.
+     */
+    private fun armWatchdog(stream: VerseStream, asQueued: Boolean) {
+        val job = scope.launch {
+            delay(12_000)
+            if (stream.prepared) return@launch
+            if (asQueued && queued === stream) {
+                dropQueued("the prefetch stalled")
+            } else if (!asQueued && active === stream) {
+                playbackFailed()
+            }
+        }
+        if (asQueued) {
+            prefetchWatchdogJob?.cancel()
+            prefetchWatchdogJob = job
+        } else {
+            prepareTimeoutJob?.cancel()
+            prepareTimeoutJob = job
+        }
+    }
+
+    private fun cancelWatchdog(asQueued: Boolean) {
+        if (asQueued) prefetchWatchdogJob?.cancel() else prepareTimeoutJob?.cancel()
+    }
+
+    private fun releaseQuietly(player: MediaPlayer?) {
+        try {
+            player?.release()
+        } catch (_: Exception) {
         }
     }
 
@@ -370,12 +666,15 @@ class QuranAudioPlayer(private val context: Context) {
      */
     private fun playbackFailed() {
         prepareTimeoutJob?.cancel()
+        prefetchWatchdogJob?.cancel()
         try {
-            mediaPlayer?.reset()
-            mediaPlayer?.release()
+            active?.player?.reset()
+            active?.player?.release()
         } catch (_: Exception) {
         }
-        mediaPlayer = null
+        releaseQuietly(queued?.player)
+        active = null
+        queued = null
         pausedForFocusLoss = false
         abandonFocus()
         _playbackState.value = _playbackState.value.copy(
@@ -395,9 +694,13 @@ class QuranAudioPlayer(private val context: Context) {
      * is what the old two-way tap asked of a reader on a slow connection. Nothing
      * is held, so the next tap on the verse starts it over rather than resuming a
      * stream that is gone.
+     *
+     * A focus claim is *not* released here. The pause exists so the next play can
+     * continue this stream; the claim stands for the whole held stretch, and
+     * re-claiming on resume would be a new favour asked for an old sound.
      */
     fun pause() {
-        val player = mediaPlayer
+        val player = active?.player
         val held = player != null && try {
             player.pause()
             true
@@ -425,8 +728,13 @@ class QuranAudioPlayer(private val context: Context) {
      */
     fun resume() {
         pausedForFocusLoss = false
-        val player = mediaPlayer ?: return
+        val player = active?.player ?: return
         player.start()
+        // A resumption is the moment a paused seam can be sealed: the queued
+        // prefetch, if it prepared while the stream sat paused, was refused its
+        // attach by the not-sounding guard, and this is its second chance
+        // before the end-of-stream that it must be armed for.
+        attachQueued()
         _playbackState.value = _playbackState.value.copy(isPlaying = true, isPaused = false)
     }
 
@@ -505,11 +813,13 @@ class QuranAudioPlayer(private val context: Context) {
     fun stop() {
         synthJob?.cancel()
         prepareTimeoutJob?.cancel()
+        releaseQuietly(queued?.player)
+        queued = null
         try {
-            mediaPlayer?.stop()
-            mediaPlayer?.release()
+            active?.player?.stop()
+            active?.player?.release()
         } catch (_: Exception) {}
-        mediaPlayer = null
+        active = null
         pausedForFocusLoss = false
         abandonFocus()
         _playbackState.value = _playbackState.value.copy(

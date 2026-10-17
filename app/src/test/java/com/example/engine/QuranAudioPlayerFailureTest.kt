@@ -3,6 +3,7 @@ package com.example.engine
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.model.Reciter
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -28,8 +29,9 @@ import org.robolectric.annotation.Config
  *
  * The player is driven into the failure the way an offline phone reaches it: the
  * stream cannot be opened, so the attempt throws and the failure path runs. What
- * must hold afterwards is the state - not playing, failed - and the completion
- * callback silent, because the marching was the chime's.
+ * must hold afterwards is the state - not playing, failed - and the verse it
+ * names is still the one asked for, because the failure is where the chain ends:
+ * no autoplay, no substitute sound, and no verse but the one the reader tapped.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -39,9 +41,8 @@ class QuranAudioPlayerFailureTest {
     fun `a stream that cannot be prepared ends failed, plays no substitute, and does not march on`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val player = QuranAudioPlayer(context)
-        var completed = false
 
-        player.playAyah(2, 255, Reciter.ALAFASY) { completed = true }
+        player.playAyah(2, 255, Reciter.ALAFASY)
 
         val state = player.playbackState.value
         assertFalse(
@@ -52,9 +53,11 @@ class QuranAudioPlayerFailureTest {
             "the failure was not in the state, so no surface could tell the reader",
             state.failed
         )
-        assertFalse(
-            "the failure marched on to the next verse, which is how an offline reader heard the whole surah",
-            completed
+        assertEquals(
+            "the failure marched on: the player moved to another verse of its own",
+            255,
+            state.ayahNumber
         )
+        assertEquals(2, state.surahNumber)
     }
 }

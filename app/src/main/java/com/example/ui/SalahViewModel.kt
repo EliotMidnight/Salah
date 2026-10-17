@@ -1220,16 +1220,22 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
                 // the same registry the picker offers, so an old or foreign stored
                 // name cannot make the player stream something the banner will not
                 // describe.
-                audioPlayer.playAyah(ayah.surahNumber, ayah.ayahNumber, Reciter.from(_uiState.value.reciter)) {
-                    // Autoplay the next ayah of **this verse's** surah.
-                    //
-                    // It used to walk `_uiState.currentSurahAyahs` and stop at
-                    // `selectedSurah.totalVerses` - the surah the reader had *open*, which
-                    // is not necessarily the surah being recited. Playing 114:6 would try
-                    // to continue into a surah that was not being read.
-                    QuranBrowse.ayah(ayah.surahNumber, ayah.ayahNumber + 1)
-                        ?.let { next -> togglePlayAyah(next) }
-                }
+                audioPlayer.playAyah(
+                    ayah.surahNumber,
+                    ayah.ayahNumber,
+                    Reciter.from(_uiState.value.reciter),
+                    // What plays after 2:255 is 2:256, and after a surah's last
+                    // ayah nothing does: the corpus's own answer, injected as the
+                    // seam. The player owns the *timing* hands these facts - so
+                    // that it can prepare the next verse while this one sounds,
+                    // instead of the old chain, where this callback tore the
+                    // player down and a fresh prepare carried the next verse's
+                    // whole download delay into every seam.
+                    nextVerse = { surah, ayahNumber ->
+                        QuranBrowse.ayah(surah, ayahNumber + 1)
+                            ?.let { it.surahNumber to it.ayahNumber }
+                    }
+                )
             }
         }
     }
