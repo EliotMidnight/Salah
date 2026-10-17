@@ -93,16 +93,21 @@ fun ReadingOptionsSheet(
         SegmentedOptions(
             options = listOf(
                 strings.more.reader.layoutPerPage,
+                strings.more.reader.layoutMadinah,
                 strings.more.reader.layoutContinuousSurah
             ),
-            selectedIndex = if (options.layout == QuranReadingLayout.PER_PAGE) 0 else 1,
+            selectedIndex = when (options.layout) {
+                QuranReadingLayout.PER_PAGE -> 0
+                QuranReadingLayout.MADINAH -> 1
+                QuranReadingLayout.CONTINUOUS -> 2
+            },
             onSelect = { index ->
                 onOptionsChange(
                     options.copy(
-                        layout = if (index == 0) {
-                            QuranReadingLayout.PER_PAGE
-                        } else {
-                            QuranReadingLayout.CONTINUOUS
+                        layout = when (index) {
+                            0 -> QuranReadingLayout.PER_PAGE
+                            1 -> QuranReadingLayout.MADINAH
+                            else -> QuranReadingLayout.CONTINUOUS
                         }
                     )
                 )
@@ -146,16 +151,26 @@ fun ReadingOptionsSheet(
         )
 
         // --- Arabic text ------------------------------------------------------
-        Spacer(Modifier.height(space.xl))
-        GroupLabel(strings.more.reader.arabicTextSize)
-        Spacer(Modifier.height(space.xs))
-        LabeledSlider(
-            label = strings.more.reader.arabicTextSize,
-            valueText = "${(options.arabicScale * 100).toInt()}%",
-            value = options.arabicScale,
-            onValueChange = { onOptionsChange(options.copy(arabicScale = it)) },
-            valueRange = QuranReadingOptions.ArabicScaleRange
-        )
+        //
+        // Not offered on the Madinah mushaf. Its type size is the print's own
+        // proportion - the page's own row count divides the whole space into
+        // bands, so the size relative to the page is a fact of the object,
+        // like the rule colour, and no slider can express a different answer
+        // to it. Hiding the row rather than leaving a control that would do
+        // nothing is the same reasoning that took the explanatory lines off
+        // the axis rows: a control that does not apply is not offered.
+        if (options.layout != QuranReadingLayout.MADINAH) {
+            Spacer(Modifier.height(space.xl))
+            GroupLabel(strings.more.reader.arabicTextSize)
+            Spacer(Modifier.height(space.xs))
+            LabeledSlider(
+                label = strings.more.reader.arabicTextSize,
+                valueText = "${(options.arabicScale * 100).toInt()}%",
+                value = options.arabicScale,
+                onValueChange = { onOptionsChange(options.copy(arabicScale = it)) },
+                valueRange = QuranReadingOptions.ArabicScaleRange
+            )
+        }
 
         // --- Typeface ---------------------------------------------------------
         Spacer(Modifier.height(space.xl))
@@ -192,6 +207,9 @@ fun ReadingOptionsSheet(
         SegmentedOptions(
             options = listOf(strings.more.reader.pinchZoomView, strings.more.reader.pinchTextSize),
             selectedIndex = if (options.pinchTarget == QuranPinchTarget.VIEW_SCALE) 0 else 1,
+            // The text-size pinch re-derives nothing on the Madinah page - its
+            // size is the sheet's - but a pinch that zooms the view modes the
+            // same object on every layout, so the choice is left as chosen.
             onSelect = { index ->
                 onOptionsChange(
                     options.copy(

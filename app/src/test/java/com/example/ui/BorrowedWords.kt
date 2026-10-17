@@ -107,6 +107,10 @@ internal object BorrowedWords {
         "Surah" to setOf("Indonesian", "Malay"),
         // A school of transmission. A proper noun in practice.
         "Riwayah" to setOf("French", "Indonesian", "Malay"),
+        // The city the Madinah print is named after. Indonesian and Malay write
+        // the city's name with the same Latin letters English does, and the
+        // name of the print follows; German writes *Medina*, so it translates.
+        "Madinah" to setOf("Indonesian", "Malay"),
 
         // --- Prayer names -----------------------------------------------------
         //

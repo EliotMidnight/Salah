@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.example.data.model.Ayah
+import com.example.data.model.QuranReadingLayout
 import com.example.data.model.QuranReadingOptions
 import com.example.data.model.QuranRef
 import com.example.data.model.QuranScrollDirection
@@ -75,7 +76,11 @@ internal fun MushafPager(
             .collect { index ->
                 val page = index + 1
                 if (page != position.page) {
-                    position.turnTo(QuranBrowse.placeAtPage(page).verse)
+                    // The turn writes this surface's own attribution of the page
+                    // it landed on - the print's opener on the Madinah mushaf,
+                    // the corpus's on the flowing ones - so the ref on screen is
+                    // always the page the reader is actually looking at.
+                    position.turnToPage(page)
                 }
             }
     }
@@ -121,7 +126,10 @@ internal fun MushafPager(
                     pageSpacing = space.lg,
                     contentPadding = PaddingValues(horizontal = space.sm)
                 ) { index ->
-                    PageAt(index + 1, requestedScale, ink, accent, selected, onSelectVerse, topInset, turn)
+                    PageAt(
+                        index + 1, options.layout, requestedScale,
+                        ink, accent, selected, onSelectVerse, topInset, turn
+                    )
                 }
             }
         } else {
@@ -131,7 +139,10 @@ internal fun MushafPager(
                 pageSpacing = space.lg,
                 contentPadding = PaddingValues(vertical = space.sm)
             ) { index ->
-                PageAt(index + 1, requestedScale, ink, accent, selected, onSelectVerse, topInset, turn)
+                PageAt(
+                    index + 1, options.layout, requestedScale,
+                    ink, accent, selected, onSelectVerse, topInset, turn
+                )
             }
         }
 
@@ -183,6 +194,7 @@ private fun ayahOnPageOrNull(ref: QuranRef): com.example.data.model.Ayah? =
 @Composable
 private fun PageAt(
     page: Int,
+    layout: QuranReadingLayout,
     requestedScale: Float,
     ink: Color,
     accent: Color,
@@ -204,6 +216,25 @@ private fun PageAt(
     // The page knows which span a tap fell in, and a span knows its own surah, so
     // the reference is assembled there from the verse. There is nothing left for a
     // caller to fill in, and so nothing left to get wrong.
+    if (layout == QuranReadingLayout.MADINAH) {
+        // The Madinah mushaf draws the print's own pages rather than the corpus
+        // table's, so its slot is not behind the flowing page's guard: every one
+        // of the print's 604 pages has its lines regardless of what the other
+        // table attributes to the number, and a selection on it carries the
+        // print's attribution end to end.
+        MadinahPage(
+            pageNumber = page,
+            selected = selected,
+            ink = ink,
+            accent = accent,
+            onSelectVerse = onSelectVerse,
+            onTurn = onTurn,
+            topInset = topInset,
+            modifier = Modifier.fillMaxSize()
+        )
+        return
+    }
+
     if (QuranBrowse.ayahsOnPage(page).isEmpty()) return
 
     MushafPage(

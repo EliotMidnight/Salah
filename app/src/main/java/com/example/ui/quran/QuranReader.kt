@@ -128,6 +128,16 @@ fun QuranReader(
         state.bookmarks.mapTo(HashSet()) { it.surahNumber to it.ayahNumber }
     }
 
+    // The position is one ref, and its page is the page the surface on screen
+    // shows it on. When the reading surface changes - entering the reader, or
+    // moving between the flowing layouts and the Madinah print's own pages -
+    // the verse stays and its page attribution is re-answered by the surface
+    // it now belongs to. A selection travels the same way, and survives where
+    // the verse it names still starts on the page the new surface shows.
+    LaunchedEffect(options.layout) {
+        position.alignTo(options.layout)
+    }
+
     // A layout change drops the magnification.
     //
     // `resetMagnification` was documented as doing this and nothing called it, so a
@@ -205,7 +215,13 @@ fun QuranReader(
                 }
 
                 when (options.layout) {
-                    QuranReadingLayout.PER_PAGE -> {
+                    // The pager shows both of the paginated surfaces - the
+                    // flowing canon and the Madinah print - and defers to each
+                    // page to draw its own ([MushafPager.PageAt]); only the
+                    // flowing verse-per-screen reader differs from it. The
+                    // pinch applies to both, and on the Madinah page its
+                    // text-size end does nothing by design.
+                    QuranReadingLayout.PER_PAGE, QuranReadingLayout.MADINAH -> {
                         val pagerState = rememberPagerState(
                             initialPage = (position.page - 1)
                                 .coerceIn(0, QuranBrowse.TOTAL_PAGES - 1),

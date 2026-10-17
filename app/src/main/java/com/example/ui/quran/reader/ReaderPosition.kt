@@ -13,7 +13,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntSize
 import com.example.data.model.QuranRef
+import com.example.data.model.QuranReadingLayout
 import com.example.data.model.QuranReadingOptions
+import com.example.data.quran.MushafLayout
 import com.example.data.quran.QuranBrowse
 import com.example.ui.quran.gesture.PinchMath
 import kotlinx.coroutines.FlowPreview
@@ -46,6 +48,17 @@ import kotlinx.coroutines.flow.onEach
  * field, it is not persisted, and turning a page clears it - because a selection
  * on the page behind is not a selection at all, and carrying it forward would
  * highlight a verse on a page that does not contain it.
+ *
+ * ### Two paginations, and who answers the page questions
+ *
+ * The flowing layouts and the Madinah print attribute verses to pages
+ * differently - 25 page starts and the 56 verses that follow. The reader's
+ * position is one ref, so the attribution has to live on the position itself:
+ * [layout] says *which pagination this position speaks*, every turn writes the
+ * attribution's own opener, and compared pages are compared within it. A
+ * selection made on one surface then behaves identically on both, because the
+ * question each surface asks - is this verse's start on my page? - is one
+ * question with two answers, both of which live here.
  */
 @Stable
 class ReaderPosition internal constructor(
@@ -55,6 +68,17 @@ class ReaderPosition internal constructor(
     /** The page on screen. Derived, and the only page number in the reader. */
     var ref: QuranRef by mutableStateOf(ref)
         private set
+
+    /**
+     * The layout whose pagination this position is a position for.
+     *
+     * Written by the reader when the reader's chosen layout becomes known and
+     * when it changes - a switch between surfaces re-attributes the position
+     * to the page the new surface shows, not to a page number written by a
+     * different surface's accounting. Never read from composition; the turns
+     * that need it run in effects and gestures.
+     */
+    var layout: QuranReadingLayout = QuranReadingLayout.PER_PAGE
 
     /** The selected verse on this surface, or null. Never persisted. */
     var selection: QuranRef? by mutableStateOf(null)
@@ -75,6 +99,26 @@ class ReaderPosition internal constructor(
     }
 
     /**
+     * The one way anything outside a reading surface moves the reader.
+     *
+     * A request arrives as a verse reference, attributed by whoever built it -
+     * usually the corpus's page table. The destination honours it against
+     * *this* position's pagination, so opening by verse lands on the page this
+     * surface actually shows the verse's opening word on - which after the
+     * print's own line breaks is not always the number the request came with.
+     *
+     * A request naming a verse this build does not show - a stored row written
+     * by a build whose partition differed, a corrupt bookmark - is ignored:
+     * it does not move the reader. Opening "nowhere" is worse than standing
+     * still, and a page number a request happened to carry is not an answer
+     * about anything.
+     */
+    fun openRef(next: QuranRef) {
+        if (QuranBrowse.ayah(next.surah, next.ayah) == null) return
+        goTo(next.onSurfacePage(layout))
+    }
+
+    /**
      * Moves to [next] *keeping* the selection, where the selection is still valid.
      */
     fun turnTo(next: QuranRef) {
@@ -82,21 +126,46 @@ class ReaderPosition internal constructor(
         // A selection is only meaningful on the page that contains it. Page 604
         // holds three surahs, so ayah 1 selected there is not ayah 1 anywhere
         // else.
-        selection = selection?.takeIf { QuranBrowse.ayahOnPage(it, next.page) }
+        selection = selection?.takeIf { verse -> verseOnPage(verse, next.page) }
     }
 
     /**
-     * The page's own first verse, which is what a turn lands on.
+     * The reference a page turn writes for the page it shows.
      *
-     * A page turn writes the *first* verse of the page, not the first verse of
-     * the reader's surah. That was the previous bug: turning from page 2 to page 3
-     * wrote 2:1, so "continue reading" put the reader back on page 2 forever.
+     * A page turn writes the page's own opener, not the first verse of the
+     * reader's surah - that was the previous bug, where turning from page 2 to
+     * page 3 wrote 2:1 and "continue reading" never left page 2. The opener is
+     * this position's own attribution's opener, so the turn and the page on
+     * screen are one fact per surface.
      */
+    fun turnToPage(target: Int) {
+        val page = target.coerceIn(1, QuranBrowse.TOTAL_PAGES)
+        val opener = when (layout) {
+            QuranReadingLayout.MADINAH -> MushafLayout.openingVerse(page)
+            else -> QuranBrowse.placeAtPage(page).verse
+        }
+        turnTo(opener)
+    }
+
     fun turnPage(delta: Int): Boolean {
         val target = (ref.page + delta).coerceIn(1, QuranBrowse.TOTAL_PAGES)
         if (target == ref.page) return false
-        turnTo(QuranBrowse.placeAtPage(target).verse)
+        turnToPage(target)
         return true
+    }
+
+    /**
+     * Changes the surface this position is for, and follows the verse it was
+     * reading onto the page the new surface shows it on.
+     *
+     * The verse travels whole; only its page attribution is re-answered. That
+     * is why a position restored under a different layout still opens on the
+     * reader's own verse rather than on a page number written by the other
+     * surface's accounting.
+     */
+    fun alignTo(nextLayout: QuranReadingLayout) {
+        layout = nextLayout
+        turnTo(ref.onSurfacePage(nextLayout))
     }
 
     /** Selects [verse], or clears the selection when it is already selected. */
@@ -111,6 +180,17 @@ class ReaderPosition internal constructor(
 
     fun clearSelection() {
         selection = null
+    }
+
+    /**
+     * Whether the verse's opening word prints on [page] - the question each
+     * surface asks of a selection, answered within this position's own
+     * attribution: the print's pages for the Madinah mushaf, the corpus's for
+     * the flowing layouts.
+     */
+    private fun verseOnPage(verse: QuranRef, page: Int): Boolean = when (layout) {
+        QuranReadingLayout.MADINAH -> MushafLayout.pageOfVerse(verse.surah, verse.ayah) == page
+        else -> QuranBrowse.ayahOnPage(verse, page)
     }
 
     // -----------------------------------------------------------------------

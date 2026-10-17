@@ -73,7 +73,7 @@ class QuranReadingOptionsTest {
     }
 
     @Test
-    fun `all four layout axis and verse combinations are distinct and reachable`() {
+    fun `every layout axis and scroll combination is distinct and reachable`() {
         // Guards against the shape of the old model, where some pairs could be
         // expressed but not all, and the ones that could not were repaired into
         // each other by normalise().
@@ -81,10 +81,12 @@ class QuranReadingOptionsTest {
             QuranScrollDirection.entries.map { scroll -> layout to scroll }
         }
 
-        assertEquals(4, reachable.size)
+        // Total and collision-free: pairing each layout with each axis gives
+        // exactly one options state - normalise() collapses none of them into
+        // another.
         assertEquals(
             "each layout must offer both axes exactly once",
-            4,
+            QuranReadingLayout.entries.size * QuranScrollDirection.entries.size,
             reachable.toSet().size
         )
         reachable.forEach { (layout, scroll) ->

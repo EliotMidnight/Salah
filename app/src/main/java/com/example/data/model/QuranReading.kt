@@ -5,11 +5,16 @@ package com.example.data.model
  *
  * - [PER_PAGE] is the real mushaf: the canonical 604-page partition, one page at
  *   a time. A page may begin or end mid-surah, exactly as the printed one does.
+ * - [MADINAH] is the print *itself*: the KFGQPC V2 (1421H) Madinah mushaf's own
+ *   line breaks, one printed page at a time, filled to its own margins. Its
+ *   pagination is the print's, which is not always the corpus page table's -
+ *   `MushafLayout` carries the difference, and the surface navigates by it.
  * - [CONTINUOUS] is a whole surah as one unbroken flow, with no page breaks at
  *   all - which is what reading straight through actually feels like.
  */
 enum class QuranReadingLayout(val key: String) {
     PER_PAGE("per_page"),
+    MADINAH("madinah"),
     CONTINUOUS("continuous");
 
     companion object {

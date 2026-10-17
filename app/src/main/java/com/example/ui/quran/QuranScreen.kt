@@ -15,6 +15,7 @@ import com.example.data.model.QuranRef
 import com.example.data.quran.QuranBrowse
 import com.example.data.quran.QuranCorpus
 import com.example.ui.SalahUiState
+import com.example.ui.quran.reader.onSurfacePage
 import com.example.ui.quran.reader.rememberReaderPosition
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -83,8 +84,26 @@ fun QuranScreen(
     // Seeded from the ViewModel's `pendingOpen` on first composition - which is where
     // Continue Reading and a first run both arrive - and thereafter owned entirely
     // here, so that nothing outside the destination has to hold a copy of it.
+    //
+    // The seed is attributed by this reader's own pagination *before* the pager
+    // composes: the pager reads `position.page` in this same composition, and the
+    // effect that would re-answer a flowing-view page number for the print runs
+    // only after - the delay would be visible as one wrong first frame. A
+    // position restored from a save is re-answered by the reader's own effect.
     val position = rememberReaderPosition(
-        initial = state.pendingOpen ?: QuranRef.Start,
+        initial = state.pendingOpen
+            // A stored row from a build whose partition differed, or a corrupt
+            // bookmark, names no verse this build shows: it opens nowhere, and
+            // the reader starts where its own save put it.
+            ?.takeIf { QuranBrowse.ayah(it.surah, it.ayah) != null }
+            // The seed is attributed by this reader's own pagination *before*
+            // the pager composes: the pager reads `position.page` in this same
+            // composition, and the effect that would re-answer a flowing-view
+            // page number for the print runs only after - the delay would be
+            // visible as one wrong first frame. A position restored from a
+            // save is re-answered by the reader's own effect.
+            ?.onSurfacePage(state.quranReadingOptions.layout)
+            ?: QuranRef.Start,
         // The position is resolved against the corpus before it is persisted, so a
         // stored row can never name a verse this build does not have.
         onPosition = { ref -> QuranBrowse.ayah(ref.surah, ref.ayah)?.let(onAyahViewed) }
@@ -107,7 +126,10 @@ fun QuranScreen(
     // mailbox and the reader's own place stands.
     LaunchedEffect(state.pendingOpen) {
         state.pendingOpen?.let { ref ->
-            position.goTo(ref)
+            // Honoured against this reader's own pagination, so a verse opened
+            // in the Madinah mushaf lands on the page the print shows it on -
+            // not on the number the request's flowing-view attribution wrote.
+            position.openRef(ref)
             onOpenConsumed()
         }
     }
