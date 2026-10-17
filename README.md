@@ -457,9 +457,15 @@ the classes it was not covering. `BorrowedWords` is the one list of words a lang
 may keep as English — French *page* and *Silence*, German *Sand* and *NO* for
 north-east, the translator's name in a credit line — and both tests read it, because
 two allowlists for one fact is the defect this whole rebuild has been about.
+Indonesian and Malay hold a deliberate entry with its reason recorded: both
+languages spell the city's name in Latin letters the same way English does, so
+their reader string *Madinah* is each language's own spelling of the proper noun,
+not a field left on its English default.
 
-Screenshot baselines live in `app/src/test/screenshots/` — 32 of them, including one
-per bundled Quran face. They are only meaningful if a recording is reproducible, so
+Screenshot baselines live in `app/src/test/screenshots/` — 37 of them, including one
+per bundled Quran face and five for the Madinah mushaf (page 1, page 2 in light and
+dark, page 2's other scroll axis, and a dense Najm→Qamar page). They are only
+meaningful if a recording is reproducible, so
 every screen they cover is fed state rather than reading the wall clock: the Today
 page reads its countdown and its current prayer from the state the one-second ticker
 maintains, which is what a page should have been doing anyway. Two consecutive
@@ -525,7 +531,7 @@ desktop session, a parallel Compose build gets OOM-killed, so it runs without
 parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
 JDK and memory for it.
 
-555 tests. The pure-JVM suites (Quran corpus integrity, the Madinah layout's
+569 tests. The pure-JVM suites (Quran corpus integrity, the Madinah layout's
 corpus-wide properties, page fitting, gesture maths, search, prayer maths, Qibla
 bearing and guidance, localisation coverage,
 sky-text contrast) run on any host, including ARM64 Linux/Termux.
@@ -675,7 +681,10 @@ bookmark that stored only `ayah = 1` could not say which one.
 
 Every layout resolves that same reference into its own coordinates, so switching
 layout keeps your place instead of throwing you to the top of the surah, and there
-is no second "where am I" cursor anywhere.
+is no second "where am I" cursor anywhere. The two surfaces also differ about what
+a page *is* — deliberately — and each re-anchors your place through the table of the
+surface you entered (the Madinah section has the why), so a page number never
+changes meaning under a reader mid-turn.
 
 **The Quran destination owns the position, not the reader.** `ReaderPosition` used to
 be created inside `QuranReader`, with the ViewModel holding a copy of the same fact
@@ -875,6 +884,29 @@ page to the surah its header names while the first verse-opening word on the pag
 still belongs to the previous surah). Both tables stay, each serving its own view,
 and the 25 boundaries are pinned by `MushafLayoutTest` so neither can drift
 unknowingly.
+
+On screen the room is the page. The Madinah surface does not paste the print into a
+smaller card letterboxed inside the screen: the padded space under the controls is
+the page, the page's own row count divides it into bands, and a row's type size is
+the largest at which the page's widest row fills its ink width — the print's
+proportions set the type, which is why the options sheet hides the reader's size
+slider on this surface. Text rows fill that width by elongating letters (the same
+`Kashida` the flowing view justifies with, asked here to fill a *finished* row, one
+row being a page of its own); the rows the print itself centres — the name rows, the
+basmalah rows, and every line of the two opening pages — are never stretched,
+because a heading with a stretched letter in it reads as a mistake. The bundled
+faces stay the reader's rendering choice rather than part of the print: the
+typeface picker works on this surface even where the size does not.
+
+Taps and turns navigate by the print's own attribution. A tap resolves through the
+row's own word extents and hands on the reference the print itself attributes; a
+page turn lands on the verse whose opening word prints highest
+(`MushafLayout.openingVerse`), because that is where the page visibly begins — and
+25 pages' worth
+of metadata answers would say otherwise. The flowing surfaces keep the metadata
+table for the same job, and the position maps a place through the table of the
+surface it enters: one position, two paginations, neither asked to make the other's
+answer.
 
 ## Notes on the port
 
