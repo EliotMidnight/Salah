@@ -2,10 +2,13 @@ package com.example.engine
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioTrack
 import android.media.MediaPlayer
 import android.net.Uri
+import android.os.Build
 import com.example.data.model.Reciter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -94,6 +97,43 @@ internal fun previewToneHz(reciter: Reciter): Double = when (reciter) {
     Reciter.SHURAIM -> 349.23 // F4
 }
 
+/** What a system audio-focus change means for the stream that holds sound. */
+internal enum class FocusAction { PAUSE_UNTIL_REGAIN, RESUME_HELD, STOP_ALL, NOTHING }
+
+/**
+ * The meaning of a system audio-focus change, from the state the player keeps.
+ *
+ * Recitation is the kind of sound that claims the phone's audio, so the player
+ * claims focus and answers the system when something else needs it. The four
+ * answers:
+ *
+ * - `GAIN` with [pausedForFocusLoss] resumes *our own* loss-pause. Without the
+ *   flag a gain is noise arriving late - without it the flag, the player would
+ *   "resume" a stream the user paused themselves, which is how a patient phone
+ *   call ends and the surah plays over the confusion.
+ * - A transient loss pauses and remembers. A duckable loss is answered the same
+ *   way rather than by lowering the volume: a voice reciting quietly is not a
+ *   thing you can hear at 20% anyway; for a *voice*, ducking is a pause played
+ *   badly.
+ * - A permanent loss stops everything. The system asserted another app owns the
+ *   audio until further notice.
+ * - Anything unknown, and gains while nothing was lost to the system: nothing.
+ *   An unrecognised change must not be an opportunity to move a stream.
+ *
+ * Pure so the branch table is testable without an `AudioManager` to argue with.
+ */
+internal fun focusActionFor(
+    change: Int,
+    pausedForFocusLoss: Boolean
+): FocusAction = when (change) {
+    AudioManager.AUDIOFOCUS_GAIN ->
+        if (pausedForFocusLoss) FocusAction.RESUME_HELD else FocusAction.NOTHING
+    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> FocusAction.PAUSE_UNTIL_REGAIN
+    AudioManager.AUDIOFOCUS_LOSS -> FocusAction.STOP_ALL
+    else -> FocusAction.NOTHING
+}
+
 class QuranAudioPlayer(private val context: Context) {
 
     private val _playbackState = MutableStateFlow(AudioPlaybackState())
@@ -105,8 +145,138 @@ class QuranAudioPlayer(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Main)
     private val appContext: Context get() = context.applicationContext
 
+    private val audioManager =
+        appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+    /**
+     * True while the player holds audio focus - the system's word that this sound
+     * matched the phone's.
+     *
+     * Recitation is claimed with [AudioManager.AUDIOFOCUS_GAIN], not the transient
+     * kinds, because a verse is not a notification-length sound: while it plays,
+     * the phone's audio is the reader's.
+     *
+     * A refusal does not stop it. The refusals that arrive in practice are delays
+     * - a call dialing, another app negotiating - and pausing a recitation the
+     * reader *tapped* because a permission clerk said no would be the reader
+     * serving the system instead of the other way round. The state records only
+     * whether a claim is outstanding, which is what [abandonFocus] must know.
+     */
+    private var holdsFocus = false
+
+    /**
+     * True after a transient focus loss paused the stream, consumed by the
+     * following gain.
+     *
+     * This side of the value is what keeps the focus listener from "resuming" a
+     * stream the user paused on purpose: the flag records that *the system* asked
+     * for the pause, and only its own contradiction - the gain when the other
+     * sound left - may answer it with a start.
+     */
+    private var pausedForFocusLoss = false
+
+    /**
+     * The attributes focus is claimed with. Habit for media volume; nothing
+     * stream-specific - the players carry their own playback attributes already.
+     */
+    private val focusAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_MEDIA)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+        .build()
+
+    /**
+     * Answers the system on the shared listener. The *decision* lives in
+     * [focusActionFor], pure and tested; this is only the wiring, with one
+     * small bookkeeping duty: [pause] can pause nothing (a stream still
+     * preparing has not made a sound), so after the call the flag is reread
+     * from the state rather than trusted. A loss that paused nothing leaves
+     * no value a later gain would resume.
+     */
+    private val focusListener =
+        AudioManager.OnAudioFocusChangeListener { change ->
+            when (focusActionFor(change, pausedForFocusLoss)) {
+                FocusAction.PAUSE_UNTIL_REGAIN -> {
+                    pause()
+                    pausedForFocusLoss = _playbackState.value.isPaused
+                }
+                FocusAction.RESUME_HELD -> resume()
+
+                FocusAction.STOP_ALL -> stop()
+
+                FocusAction.NOTHING -> Unit
+            }
+        }
+
+    /**
+     * The focus claim itself, on API 26+, where the deprecated call became a
+     * request and its listener lives inside it. `AudioFocusRequest` cannot be
+     * *built* below 26 - not merely deprecated - so the field is null there and
+     * [abandonFocus]/[requestFocus] fall back to `AudioManager`'s direct calls
+     * with the same listener. Both paths keep [focusListener] as the one
+     * listener; there is never a second answerer to drift apart.
+     */
+    private val focusRequest: AudioFocusRequest? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(focusAttributes)
+                .setOnAudioFocusChangeListener(focusListener)
+                .build()
+        } else {
+            null
+        }
+
+    /**
+     * Claim focus for the sound that is about to be made. Called before a
+     * player prepares, so the claim is outstanding before the first sample,
+     * and released again at every point where the sound stops existing:
+     * [stop], [playbackFailed], and the last verse of a chain (there, by
+     * the completion handler, since nothing remains to hold it).
+     */
+    private fun requestFocus() {
+        holdsFocus =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val request = checkNotNull(focusRequest) {
+                    "AudioFocusRequest is built on every release from O, and the " +
+                        "version branch above proves the device is one of them"
+                }
+                audioManager.requestAudioFocus(request) ==
+                    AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager.requestAudioFocus(
+                    focusListener,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN
+                ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            }
+    }
+
+    /**
+     * Give the claim back when the sound that justified it is gone. No-op without
+     * an outstanding claim, because [stop] is called at the start of every new
+     * play as well as by the reader, and releasing focus nobody holds is not
+     * an error the platform minds - but it is also not an event that happened.
+     */
+    private fun abandonFocus() {
+        if (!holdsFocus) return
+        holdsFocus = false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioManager.abandonAudioFocusRequest(
+                checkNotNull(focusRequest) {
+                    "AudioFocusRequest is built on every release from O, and the " +
+                        "version branch above proves the device is one of them"
+                }
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.abandonAudioFocus(focusListener)
+        }
+    }
+
     fun playAyah(surahNumber: Int, ayahNumber: Int, reciter: Reciter, onAyahCompleted: (() -> Unit)? = null) {
         stop()
+        pausedForFocusLoss = false
+        requestFocus()
 
         _playbackState.value = _playbackState.value.copy(
             isPlaying = true,
@@ -157,6 +327,11 @@ class QuranAudioPlayer(private val context: Context) {
                         isPlaying = false,
                         isPaused = false,
                     )
+                    // The verse is finished, so the claim has no sound behind it
+                    // until the next one prepares - the chain's next verse re-claims
+                    // through playAyah, and a chain that ends here leaves nothing
+                    // outstanding.
+                    abandonFocus()
                     onAyahCompleted?.invoke()
                 }
                 setOnErrorListener { _, _, _ ->
@@ -201,6 +376,8 @@ class QuranAudioPlayer(private val context: Context) {
         } catch (_: Exception) {
         }
         mediaPlayer = null
+        pausedForFocusLoss = false
+        abandonFocus()
         _playbackState.value = _playbackState.value.copy(
             isPlaying = false,
             isPaused = false,
@@ -239,15 +416,24 @@ class QuranAudioPlayer(private val context: Context) {
      *
      * Every path that releases the player clears [AudioPlaybackState.isPaused] on
      * the way, so the flag being set is the guarantee that there is a stream to
-     * start.
+     * start. Runs only when that guarantee holds, too: a resume with no stream
+     * to start used to write `isPlaying = true` over a state whose player did
+     * not exist, which is not a resume but a lie about one.
+     *
+     * Either the reader or the system's own ended loss can be the asker, so
+     * *a* resume consumes the loose-ends flag either way.
      */
     fun resume() {
-        mediaPlayer?.start()
+        pausedForFocusLoss = false
+        val player = mediaPlayer ?: return
+        player.start()
         _playbackState.value = _playbackState.value.copy(isPlaying = true, isPaused = false)
     }
 
     fun playAudioPreview(name: String, onDone: (() -> Unit)? = null) {
         stop()
+        pausedForFocusLoss = false
+        requestFocus()
         _playbackState.value = _playbackState.value.copy(
             isPlaying = true,
             // A preview is not a recitation, whatever reciter's tone it plays:
@@ -307,6 +493,9 @@ class QuranAudioPlayer(private val context: Context) {
             } catch (_: Exception) {}
 
             scope.launch(Dispatchers.Main) {
+                // The tone is over; its focus claim goes with it, the same
+                // way a finished verse releases its own.
+                abandonFocus()
                 _playbackState.value = _playbackState.value.copy(isPlaying = false)
                 onDone?.invoke()
             }
@@ -321,6 +510,8 @@ class QuranAudioPlayer(private val context: Context) {
             mediaPlayer?.release()
         } catch (_: Exception) {}
         mediaPlayer = null
+        pausedForFocusLoss = false
+        abandonFocus()
         _playbackState.value = _playbackState.value.copy(
             isPlaying = false,
             isPaused = false,
