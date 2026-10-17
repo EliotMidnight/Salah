@@ -105,16 +105,24 @@ internal fun LazyListScope.searchIndex(
                 placeholder = labels.searchSurahsAndVerses,
                 onClear = if (query.isNotEmpty()) ({ onQueryChange("") }) else null
             )
+            // The filters span the row the way the face tabs above them do:
+            // equal widths, the same gaps - one pill grammar for the sheet,
+            // not a row of natural-width lumps under an even row of tabs.
             Spacer(Modifier.height(space.sm))
-            Row(horizontalArrangement = Arrangement.spacedBy(space.xs)) {
-                FilterPill(labels.versesLabel, referenceKind == null, labels) { onKindChange(null) }
-                FilterPill(labels.pageWord, referenceKind == ReferenceKind.PAGE, labels) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(space.sm)
+            ) {
+                FilterPill(labels.versesLabel, referenceKind == null, labels, Modifier.weight(1f)) {
+                    onKindChange(null)
+                }
+                FilterPill(labels.pageWord, referenceKind == ReferenceKind.PAGE, labels, Modifier.weight(1f)) {
                     onKindChange(ReferenceKind.PAGE)
                 }
-                FilterPill(labels.juzWord, referenceKind == ReferenceKind.JUZ, labels) {
+                FilterPill(labels.juzWord, referenceKind == ReferenceKind.JUZ, labels, Modifier.weight(1f)) {
                     onKindChange(ReferenceKind.JUZ)
                 }
-                FilterPill(labels.hizbWord, referenceKind == ReferenceKind.HIZB, labels) {
+                FilterPill(labels.hizbWord, referenceKind == ReferenceKind.HIZB, labels, Modifier.weight(1f)) {
                     onKindChange(ReferenceKind.HIZB)
                 }
             }

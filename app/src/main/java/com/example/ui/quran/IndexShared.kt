@@ -76,6 +76,7 @@ internal fun FilterPill(
     label: String,
     selected: Boolean,
     labels: IndexLabels,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Surface(
@@ -90,7 +91,7 @@ internal fun FilterPill(
             MaterialTheme.colorScheme.onSurfaceVariant
         },
         shape = QuranShape.pill,
-        modifier = Modifier
+        modifier = modifier
             .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
             .clip(QuranShape.pill)
             .clickable(role = Role.RadioButton, onClick = onClick)

@@ -87,20 +87,22 @@ internal fun LazyListScope.surahIndex(
     }
 
     item(key = "surah_filters") {
+        // Same grammar as the tabs above and the search filters: one full-width
+        // row, equal widths, the same gaps.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = space.lg)
-                .padding(bottom = space.xs),
-            horizontalArrangement = Arrangement.spacedBy(space.xs)
+                .padding(bottom = space.sm),
+            horizontalArrangement = Arrangement.spacedBy(space.sm)
         ) {
-            FilterPill(labels.allSurahs, filter == SurahFilter.ALL, labels) {
+            FilterPill(labels.allSurahs, filter == SurahFilter.ALL, labels, Modifier.weight(1f)) {
                 onFilterChange(SurahFilter.ALL)
             }
-            FilterPill(labels.meccan, filter == SurahFilter.MECCAN, labels) {
+            FilterPill(labels.meccan, filter == SurahFilter.MECCAN, labels, Modifier.weight(1f)) {
                 onFilterChange(SurahFilter.MECCAN)
             }
-            FilterPill(labels.medinan, filter == SurahFilter.MEDINAN, labels) {
+            FilterPill(labels.medinan, filter == SurahFilter.MEDINAN, labels, Modifier.weight(1f)) {
                 onFilterChange(SurahFilter.MEDINAN)
             }
         }
