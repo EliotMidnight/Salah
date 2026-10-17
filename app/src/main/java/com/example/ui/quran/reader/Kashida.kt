@@ -169,7 +169,18 @@ object Kashida {
         centredRanges: List<IntRange>,
         measurer: TextMeasurer,
         density: Density,
-        layoutDirection: LayoutDirection
+        layoutDirection: LayoutDirection,
+        /**
+         * Whether the layout's final line may be filled too.
+         *
+         * The flowing surfaces leave it alone: it is a paragraph's unfinished
+         * tail, whose next words live on another screen. The Madinah print's
+         * rows are finished objects - each row is justified in its own right,
+         * whatever follows the page - so the print's page asks for its single
+         * line to be filled, and a text drawn as separate finished rows asks
+         * the same of every row.
+         */
+        fillLastLine: Boolean = false,
     ): Justified {
         if (widthPx <= 0 || text.isEmpty()) return Justified(text, spans, 0)
 
@@ -195,7 +206,7 @@ object Kashida {
                 density = density,
                 layoutDirection = layoutDirection
             )
-            val joints = plan(current, layout, widthPx, centredRanges, tatweelWidth)
+            val joints = plan(current, layout, widthPx, centredRanges, tatweelWidth, fillLastLine)
             if (joints.isEmpty()) return@repeat
 
             val result = applyInsertions(current, currentSpans, joints)
@@ -214,9 +225,12 @@ object Kashida {
         layout: TextLayoutResult,
         widthPx: Int,
         centredRanges: List<IntRange>,
-        tatweelWidth: Float
+        tatweelWidth: Float,
+        fillLastLine: Boolean
     ): Set<Int> {
-        val lastLine = layout.lineCount - 1
+        // A finished single line - the print's own row - is its own last line
+        // and still declares itself full.
+        val lastLine = if (fillLastLine) layout.lineCount else layout.lineCount - 1
         val out = LinkedHashSet<Int>()
         for (line in 0 until lastLine) {
             val start = layout.getLineStart(line)

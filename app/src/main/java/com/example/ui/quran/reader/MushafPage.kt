@@ -404,7 +404,7 @@ private fun measureHeight(
  * number and the ayah markers. Two conventions for one fact is the thing this whole
  * rebuild has been about.
  */
-private fun describePage(
+internal fun describePage(
     pageNumber: Int,
     ayahs: List<Ayah>,
     reader: ReaderStrings

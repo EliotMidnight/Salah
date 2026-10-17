@@ -41,6 +41,35 @@ class VerseSpan internal constructor(
 }
 
 /**
+ * The verse whose extent covers [offset], resolved the same way on every
+ * surface that draws [VerseSpan] extents - the flowing page and the Madinah
+ * print's rows alike. One tap rule, two surfaces: a reader who taps between
+ * verses on either surface means the verse they were reading.
+ *
+ * Matching on [VerseSpan.full] rather than [VerseSpan.text] is what makes a
+ * tap on the ayah *ornament* select that verse - the ornament is part of the
+ * verse, and a reader who taps the circle means the verse beside it.
+ *
+ * ### Offsets that fall between or outside the verses
+ *
+ * A row's surah head and basmalah come before the first verse, and a trailing
+ * space comes after the last, so an offset can legitimately be inside the row
+ * and inside no verse at all. Both ends resolve to the nearest verse - the
+ * head to the *first*, because a tap on "Al-Fatihah" is a tap at the top of
+ * Al-Fatihah, and the tail to the last.
+ *
+ * Past the end of the last verse: the nearest span *before* the offset, not
+ * unconditionally the last one. Those differ on a page whose text continues
+ * after the last recorded span, and "the last verse" is then wrong.
+ */
+internal fun verseAtIn(offset: Int, spans: List<VerseSpan>): VerseSpan? {
+    if (spans.isEmpty()) return null
+    spans.firstOrNull { offset in it.full }?.let { return it }
+    if (offset < spans.first().full.first) return spans.first()
+    return spans.lastOrNull { it.full.first <= offset } ?: spans.last()
+}
+
+/**
  * A page's text: one [AnnotatedString], plus the spans that make it navigable.
  *
  * ### Why the page is one string and not a column of `Text`s
@@ -100,15 +129,7 @@ class MushafPageText private constructor(
      * the head to the *first*, because a tap on "Al-Fatihah" is a tap at the top of
      * Al-Fatihah, and the tail to the last.
      */
-    fun verseAt(offset: Int): VerseSpan? {
-        if (spans.isEmpty()) return null
-        spans.firstOrNull { offset in it.full }?.let { return it }
-        if (offset < spans.first().full.first) return spans.first()
-        // Past the end of the last verse: the nearest span *before* the offset, not
-        // unconditionally the last one. Those differ on a page whose text continues
-        // after the last recorded span, and "the last verse" is then wrong.
-        return spans.lastOrNull { it.full.first <= offset } ?: spans.last()
-    }
+    fun verseAt(offset: Int): VerseSpan? = verseAtIn(offset, spans)
 
     companion object {
 
