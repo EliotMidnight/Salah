@@ -101,6 +101,7 @@ class QuranNavigationTest {
                                 onTogglePlayAyah = {},
                                 onStopAudio = {},
                                 onCycleSpeed = {},
+                                onCycleRepeat = {},
                                 onOptionsChange = {},
                                 onImmersiveChange = {}
                             )

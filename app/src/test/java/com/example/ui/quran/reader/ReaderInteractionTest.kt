@@ -441,6 +441,7 @@ class ReaderInteractionTest {
                         onTogglePlayAyah = {},
                         onStopAudio = {},
                         onCycleSpeed = {},
+                        onCycleRepeat = {},
                         options = options,
                         onOptionsChange = { options = it },
                         immersive = false,

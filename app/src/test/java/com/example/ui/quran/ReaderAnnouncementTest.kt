@@ -99,6 +99,7 @@ class ReaderAnnouncementTest {
                         onTogglePlayAyah = {},
                         onStopAudio = {},
                         onCycleSpeed = {},
+                        onCycleRepeat = {},
                         options = com.example.data.model.QuranReadingOptions(
                             layout = com.example.data.model.QuranReadingLayout.PER_PAGE,
                             font = QuranFontFace.AMIRI

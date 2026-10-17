@@ -501,6 +501,15 @@ data class UiStringsMore(
      * on screen and meaningless read aloud; this is the announced phrase.
      */
     val playbackSpeedLabel: String = "Playback speed",
+
+    /**
+     * What the recitation banner's repeat pill shows: the count it recites the
+     * verse before moving on, as the reader has cycled it.
+     */
+    val repeatPillFormat: String = "Repeat ×%d",
+
+    /** The loop's pill: the count that is not a count. */
+    val repeatPillLoop: String = "Repeat ∞",
     /**
      * Told to the reader when a verse's recitation could not be streamed.
      *
@@ -985,6 +994,8 @@ reader = ReaderStrings(
         showTranslation = "إظهار الترجمة", // verify
         silentModeLabel = "كتم كل التنبيهات", // verify
         stopAudio = "إيقاف", // verify
+        repeatPillFormat = "التكرار ×%d", // verify
+        repeatPillLoop = "التكرار ∞", // verify
         playbackSpeedLabel = "سرعة التلاوة", // verify
         storageLabel = "التخزين",
         sunAligned = "الشمس شبه متجهة نحو القبلة. استقبلها للتأكد.", // verify
@@ -1284,6 +1295,8 @@ reader = ReaderStrings(
         showTranslation = "Afficher la traduction", // verify
         silentModeLabel = "Silence pour toutes les alertes", // verify
         stopAudio = "Arrêter", // verify
+        repeatPillFormat = "Répéter ×%d", // verify
+        repeatPillLoop = "Répéter ∞", // verify
         playbackSpeedLabel = "Vitesse de lecture", // verify
         storageLabel = "Stockage",
         sunAligned = "Le soleil est presque dans la direction de la qibla. Tournez-vous vers lui pour confirmer.", // verify
@@ -1583,6 +1596,8 @@ reader = ReaderStrings(
         showTranslation = "Tampilkan terjemahan", // verify
         silentModeLabel = "Senyapkan semua pengingat", // verify
         stopAudio = "Hentikan", // verify
+        repeatPillFormat = "Ulangi ×%d", // verify
+        repeatPillLoop = "Ulangi ∞", // verify
         playbackSpeedLabel = "Kecepatan pemutaran", // verify
         storageLabel = "Penyimpanan",
         sunAligned = "Matahari hampir searah kiblat. Hadapi untuk memastikan.", // verify
@@ -1882,6 +1897,8 @@ reader = ReaderStrings(
         showTranslation = "Çeviriyi göster", // verify
         silentModeLabel = "Tüm uyarıları sessize al", // verify
         stopAudio = "Durdur", // verify
+        repeatPillFormat = "Tekrar ×%d", // verify
+        repeatPillLoop = "Tekrar ∞", // verify
         playbackSpeedLabel = "Oynatma hızı", // verify
         storageLabel = "Depolama",
         sunAligned = "Güneş neredeyse kıble yönünde. Doğrulamak için ona dönün.", // verify
@@ -2181,6 +2198,8 @@ reader = ReaderStrings(
         showTranslation = "ترجمہ دکھائیں", // verify
         silentModeLabel = "تمام الرٹس خاموش کریں", // verify
         stopAudio = "روکیں", // verify
+        repeatPillFormat = "دہرانا ×%d", // verify
+        repeatPillLoop = "دہرانا ∞", // verify
         playbackSpeedLabel = "تلاوت کی رفتار", // verify
         storageLabel = "اسٹوریج",
         sunAligned = "سورج قبلہ کی سمت میں تقریباً ہے۔ تصدیق کے لیے اس کی طرف منہ کریں۔", // verify
@@ -2480,6 +2499,8 @@ reader = ReaderStrings(
         showTranslation = "Tunjukkan terjemahan", // verify
         silentModeLabel = "Senyapkan semua peringatan", // verify
         stopAudio = "Berhenti", // verify
+        repeatPillFormat = "Ulang ×%d", // verify
+        repeatPillLoop = "Ulang ∞", // verify
         playbackSpeedLabel = "Kelajuan main balik", // verify
         storageLabel = "Storan",
         sunAligned = "Matahari hampir mengikut arah kiblat. Hadapkan diri untuk sahkan.", // verify
@@ -2779,6 +2800,8 @@ reader = ReaderStrings(
         showTranslation = "অনুবাদ দেখান", // verify
         silentModeLabel = "সমস্ত সতর্কতা নীরব করুন", // verify
         stopAudio = "থামান", // verify
+        repeatPillFormat = "পুনরাবৃত্তি ×%d", // verify
+        repeatPillLoop = "পুনরাবৃত্তি ∞", // verify
         playbackSpeedLabel = "প্লেব্যাকের গতি", // verify
         storageLabel = "সঞ্চয়",
         sunAligned = "সূর্য প্রায় কিবলার দিকে। নিশ্চিত করতে এর দিকে মুখ করুন।", // verify
@@ -3078,6 +3101,8 @@ reader = ReaderStrings(
         showTranslation = "Показать перевод", // verify
         silentModeLabel = "Выключить все оповещения", // verify
         stopAudio = "Остановить", // verify
+        repeatPillFormat = "Повтор ×%d", // verify
+        repeatPillLoop = "Повтор ∞", // verify
         playbackSpeedLabel = "Скорость воспроизведения", // verify
         storageLabel = "Хранилище",
         sunAligned = "Солнце почти в направлении киблы. Повернитесь к нему, чтобы подтвердить.", // verify
@@ -3377,6 +3402,8 @@ reader = ReaderStrings(
         showTranslation = "Übersetzung einblenden", // verify
         silentModeLabel = "Alle Warnungen stummschalten", // verify
         stopAudio = "Stopp", // verify
+        repeatPillFormat = "Wiederholen ×%d", // verify
+        repeatPillLoop = "Wiederholen ∞", // verify
         playbackSpeedLabel = "Wiedergabegeschwindigkeit", // verify
         storageLabel = "Speicher",
         sunAligned = "Die Sonne steht fast in Qibla-Richtung. Drehen Sie sich ihr zu, um zu bestätigen.", // verify
@@ -3676,6 +3703,8 @@ reader = ReaderStrings(
         showTranslation = "Mostrar la traducción", // verify
         silentModeLabel = "Silenciar todas las alertas", // verify
         stopAudio = "Detener", // verify
+        repeatPillFormat = "Repetir ×%d", // verify
+        repeatPillLoop = "Repetir ∞", // verify
         playbackSpeedLabel = "Velocidad de reproducción", // verify
         storageLabel = "Almacenamiento",
         sunAligned = "El sol está casi en la dirección de la qibla. Enfréntalo para confirmar.", // verify

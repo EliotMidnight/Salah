@@ -45,6 +45,7 @@ import com.example.data.repository.SalahRepository
 import com.example.engine.HijriCalendarEngine
 import com.example.engine.MagneticFieldStatus
 import com.example.engine.PlaybackTap
+import com.example.engine.VerseRepeat
 import com.example.engine.nextPlaybackSpeed
 import com.example.engine.PrayerCalculationEngine
 import com.example.engine.PrayerNotificationManager
@@ -240,6 +241,18 @@ data class SalahUiState(
      * surface can read without reaching past the state.
      */
     val versePlaybackSpeed: Float = 1f,
+
+    /**
+     * How many times the tapped verse recites before the chain moves on.
+     *
+     * Session state, not a preference: unlike the reciter and the speed, a
+     * repeat count is a decision about *this* sitting - read, not configured.
+     * The default is one, so a reader who never asks for repeats is never
+     * given one. The pill on the recitation banner draws it and cycles it;
+     * the tap writes here and tells the player, so a mid-recitation change
+     * counts from the verse it lands on.
+     */
+    val verseRepeat: VerseRepeat = VerseRepeat.ONCE,
     /**
      * The reader's own preferences, as one value.
      */
@@ -1256,7 +1269,11 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
                     nextVerse = { surah, ayahNumber ->
                         QuranBrowse.ayah(surah, ayahNumber + 1)
                             ?.let { it.surahNumber to it.ayahNumber }
-                    }
+                    },
+                    // The session's own repeat choice: not persisted, not a
+                    // preference - a reader who asks for repeats asks each
+                    // sitting.
+                    repeat = _uiState.value.verseRepeat
                 )
             }
         }
@@ -1279,6 +1296,21 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         repository.setPlaybackSpeed(
             nextPlaybackSpeed(_uiState.value.versePlaybackSpeed)
         )
+    }
+
+    /**
+     * One tap, one choice round the ring: once, three times, five, until
+     * stopped.
+     *
+     * Session state only, so the write is the state copy and the *telling* of
+     * the player - no preference is written, because the count is about this
+     * sitting. The player is told even when nothing is playing, so the next
+     * playAyah reads the choice the pill shows.
+     */
+    fun cycleVerseRepeat() {
+        val repeat = _uiState.value.verseRepeat.next()
+        _uiState.value = _uiState.value.copy(verseRepeat = repeat)
+        audioPlayer.setRepeat(repeat)
     }
 
     // SensorEventListener

@@ -331,6 +331,19 @@ class QuranAudioPlayer(private val context: Context) {
     private var playbackSpeed = 1f
 
     /**
+     * More plays the verse now sounding owes after this one ends, as the
+     * [VerseRepeat] choice resolves it: 0 means the chain moves on, a positive
+     * counts down through the choice's replays, and a negative is the loop,
+     * which no completion can spend.
+     *
+     * Set at [playAyah] from that call's choice, and on [setRepeat] when the
+     * reader changes the choice mid-verse - and a change mid-verse counts from
+     * now, because the pill on a sounding recitation can only mean *this*
+     * recitation.
+     */
+    private var playsRemaining = 0
+
+    /**
      * Play one verse, and - when given a next-verse finder - the rest of its
      * surah after it, without a download stall at the seam.
      *
@@ -365,12 +378,14 @@ class QuranAudioPlayer(private val context: Context) {
         ayahNumber: Int,
         reciter: Reciter,
         nextVerse: ((Int, Int) -> Pair<Int, Int>?)? = null,
+        repeat: VerseRepeat = VerseRepeat.ONCE,
     ) {
         stop()
         pausedForFocusLoss = false
         requestFocus()
         chainedReciter = reciter
         nextVerseFinder = nextVerse
+        playsRemaining = repeat.playsRemaining
 
         _playbackState.value = _playbackState.value.copy(
             isPlaying = true,
@@ -507,6 +522,11 @@ class QuranAudioPlayer(private val context: Context) {
         val active = active ?: return
         val queued = queued ?: return
         if (queued.attached) return
+        // A verse that owes plays keeps its own end for itself: an armed
+        // hand-off is the platform's - it cannot be un-fired - so arming one
+        // while replays remain would turn the next replay into the next verse
+        // and spend the reader's count before it was recited.
+        if (playsRemaining != 0) return
         if (!active.player.isPlaying) return
         try {
             // Deprecated since 34, and unreplaceable below 34: the modern
@@ -565,6 +585,24 @@ class QuranAudioPlayer(private val context: Context) {
      * next, and the end of the chain releases everything.
      */
     private fun verseCompleted(stream: VerseStream) {
+        // A verse that owes plays pays them first: back to its start, in place,
+        // and the chain moves on only when the count is spent. The queued
+        // successor is untouched - it stays prepared through the replays, and
+        // the hand-off onto it is armed only once, at the transition that
+        // made this play the verse's last (see below), because an armed
+        // hand-off cannot be un-fired and would recite the next verse under
+        // the count of this one.
+        if (playsRemaining != 0) {
+            if (playsRemaining > 0) playsRemaining -= 1
+            restartStream(stream)
+            if (playsRemaining == 0) {
+                // The replay just started is the verse's last; if the successor
+                // is already prepared, this is its one chance to be armed -
+                // the prepared callback and the resume have both passed.
+                attachQueued()
+            }
+            return
+        }
         val queued = queued
         if (queued != null && queued.attached) {
             promoteQueued()
@@ -590,6 +628,30 @@ class QuranAudioPlayer(private val context: Context) {
     private fun findNextAfter(stream: VerseStream): Pair<Int, Int>? {
         val finder = nextVerseFinder ?: return null
         return finder(stream.surahNumber, stream.ayahNumber)
+    }
+
+    /**
+     * Play the verse again, from its start, on the player that just finished.
+     *
+     * This is how a repeat sounds: no second player, no prepare, no re-download
+     * - the completed player is rewound and start()ed, the platform's own
+     * replay path, and the state stays on the verse it already named. A player
+     * that refuses the rewind (released underneath the completion, say) has no
+     * sound left to repeat, and fails the chain honestly rather than playing
+     * nothing while the banner claims a recitation.
+     */
+    private fun restartStream(stream: VerseStream) {
+        try {
+            stream.player.seekTo(0)
+            stream.player.start()
+        } catch (_: Exception) {
+            playbackFailed()
+            return
+        }
+        _playbackState.value = _playbackState.value.copy(
+            isPlaying = true,
+            isPaused = false,
+        )
     }
 
     /** Prepare the verse after the one now sounding, into the queued slot. */
@@ -628,6 +690,22 @@ class QuranAudioPlayer(private val context: Context) {
             player.playbackParams = params
         } catch (_: Exception) {
         }
+    }
+
+    /**
+     * Change how many times the verse recites before the chain moves on.
+     *
+     * A change counts *from now*, because the pill on a sounding recitation
+     * means this recitation: back to `once` spends nothing further (the verse
+     * finishes at its current play and the chain moves on), and a loop now
+     * loops this verse. One change is outside even this: if the seam was
+     * already armed - the verse's last play in flight, its hand-off given to
+     * the platform - the platform holds the promise and no setter can take it
+     * back, so the very next verse is recited anyway and the new choice binds
+     * from there.
+     */
+    fun setRepeat(repeat: VerseRepeat) {
+        playsRemaining = repeat.playsRemaining
     }
 
     /**

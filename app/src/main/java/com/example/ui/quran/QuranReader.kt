@@ -55,6 +55,7 @@ import com.example.data.model.QuranReadingOptions
 import com.example.data.model.QuranRef
 import com.example.data.model.Surah
 import com.example.data.quran.QuranBrowse
+import com.example.engine.VerseRepeat
 import com.example.ui.components.SafeArea
 import com.example.ui.components.isDarkSurface
 import com.example.ui.SalahUiState
@@ -92,6 +93,7 @@ fun QuranReader(
     onTogglePlayAyah: (Ayah) -> Unit,
     onStopAudio: () -> Unit,
     onCycleSpeed: () -> Unit,
+    onCycleRepeat: () -> Unit,
     options: QuranReadingOptions,
     onOptionsChange: (QuranReadingOptions) -> Unit,
     immersive: Boolean,
@@ -314,6 +316,8 @@ fun QuranReader(
                         // player was told, so the pill shows what is applied.
                         speed = state.versePlaybackSpeed,
                         onCycleSpeed = onCycleSpeed,
+                        repeat = state.verseRepeat,
+                        onCycleRepeat = onCycleRepeat,
                         onStop = onStopAudio,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -601,6 +605,12 @@ private fun AudioStrip(
      */
     speed: Float,
     onCycleSpeed: () -> Unit,
+    /**
+     * How many more times the verse recites before the chain moves on, as the
+     * session's choice resolves it.
+     */
+    repeat: VerseRepeat,
+    onCycleRepeat: () -> Unit,
     onStop: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -629,8 +639,16 @@ private fun AudioStrip(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Speed and stop are both actions this strip owns, and one row
-                // of pills is what the banner's slot is for: the two verbs a
+                // of pills is what the banner's slot is for: the three verbs a
                 // recitation supports while it sounds.
+                BannerPill(
+                    label = if (repeat == VerseRepeat.LOOP) {
+                        strings.more.repeatPillLoop
+                    } else {
+                        strings.more.repeatPillFormat.format(repeat.count)
+                    },
+                    onClick = onCycleRepeat
+                )
                 BannerPill(
                     label = "%.1f\u00d7".format(speed),
                     onClick = onCycleSpeed,

@@ -89,9 +89,10 @@ class QuranAudioChainTest {
     fun `the player advances the chain itself, without a caller at the seam`() {
         registerVerse(2, 255)
         registerVerse(2, 256)
-        player.playAyah(2, 255, Reciter.ALAFASY) { surah, ayah ->
-            if (ayah < 256) surah to (ayah + 1) else null
-        }
+        player.playAyah(
+            2, 255, Reciter.ALAFASY,
+            nextVerse = { surah, ayah -> if (ayah < 256) surah to (ayah + 1) else null }
+        )
         shadowFor(2, 255).invokePreparedListener()
         assertTrue(
             "the registered verse never reached the start of playing",
@@ -130,7 +131,10 @@ class QuranAudioChainTest {
             DataSource.toDataSource(Reciter.ALAFASY.verseUrl(2, 256)),
             IOException("offline")
         )
-        player.playAyah(2, 255, Reciter.ALAFASY) { surah, ayah -> surah to (ayah + 1) }
+        player.playAyah(
+            2, 255, Reciter.ALAFASY,
+            nextVerse = { surah, ayah -> surah to (ayah + 1) }
+        )
         shadowFor(2, 255).invokePreparedListener()
 
         // The prefetch attempt already failed with the registered exception
@@ -159,7 +163,10 @@ class QuranAudioChainTest {
     fun `stop tears down the sounding verse and the queued one`() {
         registerVerse(2, 255)
         registerVerse(2, 256)
-        player.playAyah(2, 255, Reciter.ALAFASY) { surah, ayah -> surah to (ayah + 1) }
+        player.playAyah(
+            2, 255, Reciter.ALAFASY,
+            nextVerse = { surah, ayah -> surah to (ayah + 1) }
+        )
         shadowFor(2, 255).invokePreparedListener()
         shadowFor(2, 256).invokePreparedListener()
 
@@ -177,6 +184,75 @@ class QuranAudioChainTest {
             "the queued player leaked: it was never released",
             ShadowMediaPlayer.State.END,
             shadowFor(2, 256).state
+        )
+    }
+
+    @Test
+    fun `a verse with plays owed recites again - and only its last play hands off the seam`() {
+        registerVerse(2, 255)
+        registerVerse(2, 256)
+        player.playAyah(
+            2, 255, Reciter.ALAFASY,
+            nextVerse = { surah, ayah -> surah to (ayah + 1) },
+            repeat = VerseRepeat.THRICE
+        )
+        shadowFor(2, 255).invokePreparedListener()
+        shadowFor(2, 256).invokePreparedListener()
+
+        // First end: the verse owes two more, so it recites again - the state
+        // never left it.
+        shadowFor(2, 255).invokeCompletionListener()
+        assertEquals(
+            "the first end of a three-times verse moved on to the next verse",
+            255,
+            player.playbackState.value.ayahNumber
+        )
+        assertTrue(player.playbackState.value.isPlaying)
+
+        // Second end: one more owed, still this verse.
+        shadowFor(2, 255).invokeCompletionListener()
+        assertEquals(255, player.playbackState.value.ayahNumber)
+
+        // Third end: the count is spent, the seam is the verse's last, and the
+        // hand-off (armed at the transition into the final replay, or fallen
+        // back to a sequential prepare here) recites the next verse.
+        shadowFor(2, 255).invokeCompletionListener()
+        assertEquals(
+            "the spent count did not recite the next verse",
+            256,
+            player.playbackState.value.ayahNumber
+        )
+        assertTrue(player.playbackState.value.isPlaying)
+    }
+
+    @Test
+    fun `a loop keeps its verse until it is spent by nothing but stop or a change`() {
+        registerVerse(2, 255)
+        registerVerse(2, 256)
+        player.playAyah(
+            2, 255, Reciter.ALAFASY,
+            nextVerse = { surah, ayah -> surah to (ayah + 1) },
+            repeat = VerseRepeat.LOOP
+        )
+        shadowFor(2, 255).invokePreparedListener()
+
+        shadowFor(2, 255).invokeCompletionListener()
+        assertEquals(255, player.playbackState.value.ayahNumber)
+        shadowFor(2, 255).invokeCompletionListener()
+        assertEquals(
+            "the loop was spent by a completion",
+            255,
+            player.playbackState.value.ayahNumber
+        )
+        assertTrue(player.playbackState.value.isPlaying)
+
+        // Cycling back to once spends the loop at this verse's end.
+        player.setRepeat(VerseRepeat.ONCE)
+        shadowFor(2, 255).invokeCompletionListener()
+        assertEquals(
+            "ending the loop did not hand the recitation to the next verse",
+            256,
+            player.playbackState.value.ayahNumber
         )
     }
 }
