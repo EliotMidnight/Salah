@@ -541,7 +541,13 @@ private fun LocationPill(
             .semantics { contentDescription = pageLabel }
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = space.lg, vertical = space.sm),
+            // A wrapped range label used to raise this pill a full 8dp above the
+            // circles beside it - the top row was ragged on exactly the pages
+            // whose surah range did not fit one line. 4dp of inner padding keeps
+            // two `titleSmall` lines within a rounding of the 48dp target the
+            // circles hold: what remains above them is the text's own line-box
+            // rounding - about a dp, where the row still reads as one bar.
+            modifier = Modifier.padding(horizontal = space.lg, vertical = space.xs),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -551,9 +557,10 @@ private fun LocationPill(
                 // Two lines, because a range does not fit on one: "An-Nisa to
                 // Al-Ma'idah" is 21 characters, and the pill's share of the row asks
                 // one to be dropped - the clipped "Al-Ma…" was the first attempt at
-                // this. The room is already reserved: `PageInsets.top` allows the
-                // controls `minTouchTarget + space.sm`, which is exactly two
-                // `titleSmall` lines plus the pill's vertical padding.
+                // this. `PageInsets.top` reserves `minTouchTarget + space.sm` for
+                // the row, so a wrapped label has the room, and the larger text
+                // scales, where the row does outgrow the reserve, are what the
+                // extra space is honest headroom for.
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false)

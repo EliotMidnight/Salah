@@ -531,7 +531,7 @@ desktop session, a parallel Compose build gets OOM-killed, so it runs without
 parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
 JDK and memory for it.
 
-570 tests. The pure-JVM suites (Quran corpus integrity, the Madinah layout's
+571 tests. The pure-JVM suites (Quran corpus integrity, the Madinah layout's
 corpus-wide properties, page fitting, gesture maths, search, prayer maths, Qibla
 bearing and guidance, localisation coverage,
 sky-text contrast) run on any host, including ARM64 Linux/Termux.
