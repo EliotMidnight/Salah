@@ -80,6 +80,36 @@ class MushafLayoutTest {
         Triple(600, 100 to 10, 100 to 6)
     )
 
+    /**
+     * The 56 verses the print carries on a different page than the corpus's
+     * page table does. Both tables keep the verse's own numbers; they answer a
+     * different question - which page its opening *word* prints on. Every one
+     * is a consequence of the 25 page-start disagreements above: a page the
+     * print opens one verse (or one surah) later pulls that verse's first
+     * words back to the page the print gives them.
+     *
+     * `MushafLayout.pageOfVerse` answers the print's attribution, which is the
+     * Madinah surface's own pagination; the flowing layout keeps the corpus's.
+     */
+    private val verseAttributionDiffs = listOf(
+        5 to 77, 5 to 83, 5 to 90,
+        6 to 131,
+        55 to 17, 55 to 18, 55 to 41, 55 to 68, 55 to 69,
+        68 to 16, 69 to 35, 70 to 40, 74 to 18, 79 to 16,
+        80 to 41, 80 to 42,
+        83 to 5, 83 to 6, 83 to 34,
+        84 to 25,
+        87 to 11, 87 to 12, 87 to 13, 87 to 14, 87 to 15,
+        88 to 23, 88 to 24, 88 to 25, 88 to 26,
+        89 to 23,
+        90 to 19, 90 to 20,
+        92 to 10, 92 to 11, 92 to 12, 92 to 13, 92 to 14,
+        94 to 3, 94 to 4, 94 to 5, 94 to 6, 94 to 7, 94 to 8,
+        96 to 13, 96 to 14, 96 to 15, 96 to 16, 96 to 17, 96 to 18, 96 to 19,
+        98 to 6, 98 to 7,
+        100 to 6, 100 to 7, 100 to 8, 100 to 9
+    )
+
     /** Every row of the print, in print order, with the page it sits on. */
     private val rows: List<Pair<MushafLayout.Page, MushafLayout.Line>> by lazy {
         val flat = ArrayList<Pair<MushafLayout.Page, MushafLayout.Line>>(9046)
@@ -282,9 +312,93 @@ class MushafLayoutTest {
             } else {
                 differing.add(Triple(page, metadataRef, printRef))
             }
+            assertEquals(
+                "page $page's opening verse, as the loader answers it",
+                printRef,
+                MushafLayout.openingVerse(page).surah to MushafLayout.openingVerse(page).ayah
+            )
+            assertEquals(
+                "page $page's opening verse names the page it opens",
+                page,
+                MushafLayout.pageOfVerse(
+                    MushafLayout.openingVerse(page).surah,
+                    MushafLayout.openingVerse(page).ayah
+                )
+            )
         }
         assertEquals("pages both tables start alike", 579, agreed)
         assertEquals("the boundary attributions", boundaryAttributions, differing)
+    }
+
+    @Test
+    fun `the print attributes every verse to the page its opening word prints on`() {
+        for (surah in 1..QuranCorpus.SURA_COUNT) {
+            assertEquals(
+                "surah $surah's first verse opens where the surah's ink starts",
+                MushafLayout.pageOfSurah(surah),
+                MushafLayout.pageOfVerse(surah, 1)
+            )
+        }
+        val differing = ArrayList<Pair<Int, Int>>(56)
+        for (verse in 0 until QuranCorpus.VERSE_COUNT) {
+            val ayah = QuranCorpus.ayahs[verse]
+            val printPage = MushafLayout.pageOfVerse(ayah.surahNumber, ayah.ayahNumber)
+            assertTrue(
+                "${ayah.surahNumber}:${ayah.ayahNumber} claims page $printPage",
+                printPage in 1..MushafLayout.PAGE_COUNT
+            )
+            assertEquals(
+                "${ayah.surahNumber}:${ayah.ayahNumber}'s reference and page answer differ",
+                printPage,
+                MushafLayout.ref(ayah.surahNumber, ayah.ayahNumber).page
+            )
+            if (printPage != QuranCorpus.pageOf(ayah.surahNumber, ayah.ayahNumber)) {
+                differing.add(ayah.surahNumber to ayah.ayahNumber)
+            }
+        }
+        assertEquals(
+            "the verses the print carries on another page than the corpus's table",
+            verseAttributionDiffs, differing
+        )
+    }
+
+    @Test
+    fun `the span that leaves a verse's marker to the next row says so`() {
+        var carried = 0
+        for (i in textRows.indices) {
+            val line = textRows[i].second
+            val next = textRows.getOrNull(i + 1)?.second
+            val wrappedLine = line.wrappedMarkerAyah != 0
+            if (wrappedLine) {
+                // The record walk marks the *previous* text row; this row's own
+                // spans must not claim the marker twice - though its last span
+                // may itself be marked, where the verse it closes also ends at
+                // a break and the next row wraps it (two wrap rows in a row,
+                // as on page 56).
+                assertTrue(
+                    "page ${textRows[i].first.number} slot ${line.slot}: " +
+                        "a row that wraps a marker carries no marked span of its own",
+                    line.spans.none { it.markerWrapped && it !== line.spans.lastOrNull() }
+                )
+            }
+            for (span in line.spans) {
+                if (!span.markerWrapped) continue
+                carried++
+                assertTrue(
+                    "page ${textRows[i].first.number} slot ${line.slot}: " +
+                        "a marked span is its row's last, and closes its verse",
+                    span === line.spans.last() && span.endsAyah
+                )
+                assertTrue(
+                    "${span.surah}:${span.ayah} leaves its marker, " +
+                        "but the next text row does not print it",
+                    next != null &&
+                        next.wrappedMarkerSurah == span.surah &&
+                        next.wrappedMarkerAyah == span.ayah
+                )
+            }
+        }
+        assertEquals("spans the print leaves a marker behind on", 573, carried)
     }
 
     @Test

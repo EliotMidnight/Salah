@@ -1,5 +1,7 @@
 package com.example.data.quran
 
+import com.example.data.model.QuranRef
+
 /**
  * The Madinah mushaf's printed lines: where every word of the verified corpus
  * sits on the 604 pages of the KFGQPC V2 (1421H) print.
@@ -18,10 +20,13 @@ package com.example.data.quran
  * attaching the marker to the entry that ends the verse, or - when the verse
  * ends exactly at a line break - by printing the marker alone at the start of
  * the next line. Both cases render from the geometry alone: a [Span] whose
- * last word is its verse's last word carries the marker after it, and a TEXT
+ * last word is its verse's last word carries the marker after it, unless
+ * [Span.markerWrapped] says the next text row prints it - and a TEXT
  * line with [Line.wrappedMarkerAyah] prints that marker before its first word.
  * Every marker in the corpus renders exactly once; the tests prove it over all
- * 6,236 verses.
+ * 6,236 verses, and the marking is made *here*, in the same walk that
+ * establishes the wrap, so no renderer ever has to look ahead to row it does
+ * not own and no second copy of the rule can drift.
  *
  * The one anomaly the digitization carries is documented in
  * `tools/madinah_layout.py`: page 589's line 13 holds ayah 84:21's marker as a
@@ -125,6 +130,15 @@ internal object MushafLayout {
         /** First and last of the verse's own words on this line, inclusive. */
         val firstWord: Int,
         val lastWord: Int,
+        /**
+         * Whether this row leaves the verse's end marker to the next text row:
+         * the verse ends exactly at the break, and the print sets its marker
+         * alone at the head of the row that carries the verse's continuation.
+         * Resolved once here, in the same walk that establishes the wrap, so
+         * the renderer never has to look ahead a row it does not own and no
+         * second copy of the placement rule can disagree with this one.
+         */
+        val markerWrapped: Boolean = false,
     ) {
         /** Whether the verse's final word is this span's final word. */
         val endsAyah: Boolean
@@ -137,6 +151,21 @@ internal object MushafLayout {
 
     /** All 604 pages, in order. */
     val pages: List<Page> by lazy { build() }
+
+    /**
+     * Forces the one walk that fills every table this object answers from.
+     *
+     * [pages] is a single visit over the asset, and the same visit fills
+     * [verseHeadPage], [surahHeadPage] and [pageOpener]; nothing else does.
+     * An accessor that reads one of those tables owes correctness to the
+     * walk having happened first - which a test that happens to touch
+     * [page] on its way to [openingVerse] hides, and the first caller in a
+     * running app (a page turn asking for the print's opener before any
+     * Madinah page has composed) is not such a test. This is exactly why the
+     * lazy is forced from every reader of a filled table rather than left to
+     * whoever gets there first.
+     */
+    private fun built(): List<Page> = pages
 
     /** The print's [page], 1..604. */
     fun page(page: Int): Page {
@@ -153,7 +182,59 @@ internal object MushafLayout {
      */
     fun pageOfSurah(surah: Int): Int {
         require(surah in 1..QuranCorpus.SURA_COUNT) { "not a surah: $surah" }
+        built()
         return surahHeadPage[surah]
+    }
+
+    /**
+     * The page the print sets [verse]'s opening word on.
+     *
+     * This is the print's own attribution, which is what the Madinah page
+     * surface must navigate by: it is the page whose ink actually carries the
+     * verse's start. Where the print breaks a page differently than the
+     * corpus's own page table does, this answers a page the metadata row does
+     * not - 56 verses, pinned in `MushafLayoutTest` so the seam stays a fact
+     * that is read, not a difference somebody tripped over.
+     */
+    fun pageOfVerse(surah: Int, ayah: Int): Int {
+        built()
+        val verse = QuranCorpus.indexOf(surah, ayah)
+        require(verse >= 0) { "not a verse: $surah:$ayah" }
+        return verseHeadPage[verse]
+    }
+
+    /**
+     * The verse as the print attributes it: its own numbers and the page its
+     * opening word prints on.
+     *
+     * The Madinah surface's taps and turns build references here, so a
+     * selection's page and the page on screen are one fact, not two tables
+     * that are compared and disagree.
+     */
+    fun ref(surah: Int, ayah: Int): QuranRef {
+        built()
+        val verse = QuranCorpus.indexOf(surah, ayah)
+        require(verse >= 0) { "not a verse: $surah:$ayah" }
+        return QuranRef(
+            surah = surah,
+            ayah = ayah,
+            page = verseHeadPage[verse],
+        )
+    }
+
+    /**
+     * The verse whose opening word prints highest on [page] - the verse a
+     * page turn lands on in this layout.
+     *
+     * This is the print's answer to "where does page N start", which is not
+     * always the metadata's (25 agreed disagreements, pinned in the tests);
+     * the flowing layout keeps metadata's answer, so the two surfaces each
+     * write a position whose page is the page actually being read.
+     */
+    fun openingVerse(page: Int): QuranRef {
+        require(page in 1..PAGE_COUNT) { "the print has no page $page" }
+        built()
+        return checkNotNull(pageOpener[page]) { "the print gives page $page no opening verse" }
     }
 
     /** How many words of a verse the print sets, or 0 for a reference that is none. */
@@ -228,6 +309,20 @@ internal object MushafLayout {
     // --- The record walk ---------------------------------------------------
 
     private val surahHeadPage = IntArray(QuranCorpus.SURA_COUNT + 1)
+
+    /**
+     * `verseHeadPage[verseIndex]` is the page the print sets that verse's
+     * opening word on - this layout's own attribution of every verse to the
+     * page a reader must be on to see its first printed word.
+     */
+    private val verseHeadPage = IntArray(QuranCorpus.VERSE_COUNT)
+
+    /**
+     * `pageOpener[page]` is the verse whose opening word prints highest on the
+     * page - the print's own page-start attribution, which the test pins
+     * against metadata.xml's 25 agreed disagreements.
+     */
+    private val pageOpener = arrayOfNulls<QuranRef>(PAGE_COUNT + 1)
 
     /**
      * One parsed record, before its spans and wrap verse are attached.
@@ -332,6 +427,11 @@ internal object MushafLayout {
 
         var pendingHeaderSurah = 0
         var previousEnd: Span? = null
+        // The row the previous span was built into, so a wrap can mark the span
+        // that left its marker to this row. The `Line` already holds the same
+        // list, and replacing the element, not copying the list, is what keeps
+        // them one structure.
+        var previousRowSpans: ArrayList<Span>? = null
         val wrappedVerses = HashSet<Int>()
 
         for (raw in raws) {
@@ -427,6 +527,18 @@ internal object MushafLayout {
                 }
                 wrapsSurah = ended.surah
                 wrapsAyah = ended.ayah
+                // The span that ended the verse is now leaving its marker to
+                // this row, which the renderer must know before it draws
+                // either.
+                val spansOf = requireNotNull(previousRowSpans)
+                val last = spansOf.last()
+                spansOf[spansOf.lastIndex] = Span(
+                    surah = last.surah,
+                    ayah = last.ayah,
+                    firstWord = last.firstWord,
+                    lastWord = last.lastWord,
+                    markerWrapped = true,
+                )
                 require(wrappedVerses.add(QuranCorpus.reference(wrapsSurah, wrapsAyah))) {
                     "two text rows wrap the marker of $wrapsSurah:$wrapsAyah"
                 }
@@ -436,8 +548,20 @@ internal object MushafLayout {
                 // The opener's own row is where the surah's ink starts, which
                 // is the print's answer for where a reader jumping to the
                 // surah lands.
-                if (span.firstWord == 0 && span.ayah == 1 && surahHeadPage[span.surah] == 0) {
-                    surahHeadPage[span.surah] = raw.page
+                if (span.firstWord == 0) {
+                    if (span.ayah == 1 && surahHeadPage[span.surah] == 0) {
+                        surahHeadPage[span.surah] = raw.page
+                    }
+                    if (verseHeadPage[QuranCorpus.indexOf(span.surah, span.ayah)] == 0) {
+                        verseHeadPage[QuranCorpus.indexOf(span.surah, span.ayah)] = raw.page
+                    }
+                    if (pageOpener[raw.page] == null) {
+                        pageOpener[raw.page] = QuranRef(
+                            surah = span.surah,
+                            ayah = span.ayah,
+                            page = raw.page,
+                        )
+                    }
                 }
             }
             pageLines.last().add(
@@ -451,7 +575,10 @@ internal object MushafLayout {
                     spans = spans,
                 )
             )
-            if (raw.kind == Line.Kind.TEXT) previousEnd = spans.last()
+            if (raw.kind == Line.Kind.TEXT) {
+                previousEnd = spans.last()
+                previousRowSpans = spans
+            }
         }
 
         require(pendingHeaderSurah == 0) {
@@ -464,6 +591,15 @@ internal object MushafLayout {
             require(surahHeadPage[surah] != 0) {
                 "the print does not place surah $surah's opening words"
             }
+        }
+        for (verse in 0 until QuranCorpus.VERSE_COUNT) {
+            require(verseHeadPage[verse] != 0) {
+                val ayah = QuranCorpus.ayahs[verse]
+                "the print does not place ${ayah.surahNumber}:${ayah.ayahNumber}'s opening word"
+            }
+        }
+        for (page in 1..PAGE_COUNT) {
+            require(pageOpener[page] != null) { "the print gives page $page no opening verse" }
         }
 
         return pageLines.mapIndexed { index, lines -> Page(number = index + 1, lines = lines) }
