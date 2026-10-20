@@ -117,7 +117,7 @@ fun ScreenTopBar(
             .padding(top = SafeArea.top())
             .padding(
                 start = space.lg + sides,
-                end = space.sm + sides,
+                end = space.lg + sides,
                 top = space.md,
                 bottom = space.md
             ),

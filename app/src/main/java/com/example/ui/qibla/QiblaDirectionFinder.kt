@@ -487,7 +487,7 @@ private fun DialReadout(
         modifier = modifier
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = space.lg, vertical = space.md),
+            modifier = Modifier.padding(vertical = space.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
             ReadoutFigure(

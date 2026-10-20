@@ -224,7 +224,7 @@ fun SectionGroup(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = space.lg, vertical = space.xs),
+            .padding(vertical = space.xs),
         content = { content() }
     )
 }

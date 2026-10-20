@@ -571,7 +571,7 @@ private fun LinkRow(
             .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
             .clip(MaterialTheme.shapes.extraSmall)
             .clickable(onClick = onClick)
-            .padding(vertical = space.sm, horizontal = space.xs),
+            .padding(vertical = space.sm, horizontal = space.lg),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
