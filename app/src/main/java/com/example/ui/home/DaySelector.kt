@@ -22,7 +22,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
+import com.example.ui.isolateLtr
 import com.example.ui.localization.LocalStrings
 import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
@@ -37,7 +37,6 @@ fun DaySelector(
     isToday: Boolean,
     hijriLabel: String,
     gregorianLabel: String,
-    todayLabel: String,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onToday: () -> Unit,
@@ -48,6 +47,11 @@ fun DaySelector(
     // "button, Friday 14 September, button", so the only date controls in the app
     // had no names. The month sheet's arrows carry theirs; these did not.
     val dateNav = LocalStrings.current.dateNav
+    // The Hijri date is a Latin-script, digit-first run ("3 Rabi' al-Thani
+    // 1448 AH"). In an RTL paragraph the bidi algorithm otherwise moved the day
+    // to the end of the line. It is shown without a "today" suffix so the
+    // picker reads the same on the current day as on any other.
+    val hijriRun = isolateLtr(hijriLabel)
 
     Row(
         modifier = modifier
@@ -72,21 +76,20 @@ fun DaySelector(
                 .semantics { contentDescription = "$gregorianLabel, $hijriLabel" },
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // The date is the reason this row exists, so it wraps rather than
+            // ellipsizing at large Dynamic Type. At normal sizes both lines stay
+            // single-line, which is why the arrows still frame one centred block.
             Text(
                 text = gregorianLabel,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                textAlign = TextAlign.Center
             )
             Text(
-                text = if (isToday) "$hijriLabel · ${todayLabel.lowercase()}" else hijriLabel,
+                text = hijriRun,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                textAlign = TextAlign.Center
             )
         }
 

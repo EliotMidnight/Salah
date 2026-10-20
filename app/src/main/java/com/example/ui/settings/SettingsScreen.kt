@@ -1,7 +1,11 @@
 package com.example.ui.settings
 
+import android.os.Build
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,10 +17,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
@@ -43,19 +47,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
-import com.example.data.model.AdhanSound
-import com.example.data.location.LocationFailure
 import com.example.data.model.CalculationMethod
-import com.example.ui.LocationStatus
 import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
-import com.example.data.model.Reciter
 import com.example.data.model.UserLocation
-import com.example.data.quran.QuranBrowse
 import com.example.ui.SalahUiState
+import com.example.ui.formatCoordinates
 import com.example.ui.components.ActionRow
 import com.example.ui.components.EmptyState
-import com.example.ui.components.StatusBanner
 import com.example.ui.components.ToggleRow
 import com.example.ui.components.ChipRow
 import com.example.ui.components.ConfirmDialog
@@ -72,73 +71,39 @@ import com.example.ui.components.SectionHeader
 import com.example.ui.components.SegmentedOptions
 import com.example.data.model.PrayerAdjustments
 import com.example.ui.localization.AppLanguage
+import com.example.ui.system.ExactAlarmAccess
+import com.example.ui.system.ExactAlarmAccessBanner
+import com.example.ui.system.LocationAccessBanner
+import com.example.ui.system.NotificationAccessBanner
+import com.example.ui.system.SystemAccessActions
+import com.example.ui.system.SystemAccessState
 import com.example.ui.localization.LocalStrings
 import com.example.ui.localization.UiStrings
-import com.example.ui.localization.alertModeLabel
 import com.example.ui.localization.prayerName
+import com.example.ui.theme.Accent
+import com.example.ui.theme.Glass
 import com.example.ui.theme.IconSize
-import com.example.ui.theme.Tonal
 import com.example.ui.theme.Space
+import com.example.ui.theme.accentFamily
 import com.example.ui.theme.layoutMetrics
 import androidx.compose.material3.OutlinedTextField
 
-/** The five alert levels a prayer can be set to, in cycle order. */
-private val ALERT_MODES = listOf("Full Adhan", "Takbeer Only", "Gentle Chime", "Vibrate Only", "Silent")
-
-/**
- * Sunrise's options.
- */
-private val SUNRISE_ALERT_MODES = listOf("Silent Reminder", "Vibrate Only", "Silent")
-private val AUTO_SILENCE_OPTIONS = listOf(15, 20, 30, 45)
-/**
- * The adhan sounds the picker offers.
- *
- * [AdhanSound.offered] rather than a hand-written list, because the list was one of
- * the four vocabularies and it was the one that *offered* five names while the code
- * that played them matched three. A sound added to the enum is now offered
- * automatically, and there is nothing left to keep in step.
- */
-private val ADHAN_SOUNDS: List<AdhanSound> = AdhanSound.offered
-
-/**
- * The recitations the picker offers.
- *
- * [Reciter.offered] rather than a hand-written list, for the same reason as
- * [ADHAN_SOUNDS]: the list and the player were two vocabularies and only the
- * player's copy was real. It streamed one reciter - the directory was literal
- * text in `playAyah` - so choosing "Abdul Basit Abdus Samad" renamed the
- * recitation banner while every stream stayed Alafasy's.
- */
-private val RECITERS: List<Reciter> = Reciter.offered
 private val THEMES = listOf("System Default", "Dark Mode (OLED)", "Clean Light")
+
+/**
+ * The accent options, in sheet order.
+ *
+ * "Match wallpaper" is only offered where a system palette exists; a device
+ * that never stored the choice simply never sees the row.
+ */
+private val ACCENTS: List<Accent> = Accent.entries.filter { accent ->
+    accent != Accent.WALLPAPER || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+}
+
 private val HIJRI_OFFSETS = listOf(-2, -1, 0, 1, 2)
 private val PRE_PRAYER_OFFSETS = listOf(5, 10, 15, 20, 30)
-
 /** Height of the scrollable country-capital list inside the location sheet. */
 private val CapitalsListMaxHeight = 360.dp
-
-/**
- * The play/stop control on an audio option.
- */
-@Composable
-private fun PlayPreviewButton(
-    label: String,
-    isPlaying: Boolean,
-    onToggle: () -> Unit
-) {
-    val strings = LocalStrings.current
-    IconButton(
-        onClick = onToggle,
-        modifier = Modifier.size(MaterialTheme.layoutMetrics.minTouchTarget)
-    ) {
-        Icon(
-            imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
-            contentDescription = label,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(IconSize.lg)
-        )
-    }
-}
 
 /**
  * One line in the privacy card: a check and a fact.
@@ -153,7 +118,7 @@ private fun PrivacyFact(text: String) {
         Icon(
             imageVector = Icons.Default.CheckCircle,
             contentDescription = null,
-            tint = Tonal.colors.success,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier
                 .size(IconSize.sm)
                 .clearAndSetSemantics { }
@@ -165,6 +130,40 @@ private fun PrivacyFact(text: String) {
             color = MaterialTheme.colorScheme.onSurface
         )
     }
+}
+
+/**
+ * The colour chip beside an accent option.
+ *
+ * The row's title is the accessible label; the chip repeats the colour, so it
+ * is decorative and cleared from semantics. "Match wallpaper" has no fixed
+ * colour of its own - the chip shows the accent currently in force, which is
+ * the best available preview of what choosing it does.
+ */
+@Composable
+private fun AccentSwatch(accent: Accent, isDark: Boolean) {
+    val color = if (accent == Accent.WALLPAPER) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        accentFamily(accent, dark = isDark).primary
+    }
+    Box(
+        modifier = Modifier
+            .size(20.dp)
+            .clip(CircleShape)
+            .background(color)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+            .clearAndSetSemantics { }
+    )
+}
+
+/** The localized name of a stored accent key. */
+private fun accentName(key: String, strings: UiStrings): String = when (Accent.fromKey(key)) {
+    Accent.SLATE -> strings.more.accentSlate
+    Accent.PLUM -> strings.more.accentPlum
+    Accent.TEAL -> strings.more.accentTeal
+    Accent.CLAY -> strings.more.accentClay
+    Accent.WALLPAPER -> strings.more.accentWallpaper
 }
 
 /**
@@ -181,28 +180,26 @@ fun SettingsScreen(
     onPrePrayerToggle: (Boolean) -> Unit,
     onVibrateOnlyToggle: (Boolean) -> Unit,
     onGlobalSilentToggle: () -> Unit = {},
-    onAutoSilentDuringPrayerToggle: () -> Unit = {},
-    onAutoSilentDurationChange: (Int) -> Unit = {},
     onLanguageSelect: (String) -> Unit = {},
     onThemeSelect: (String) -> Unit = {},
+    onAccentSelect: (String) -> Unit = {},
+    onReduceTransparencyChange: (Boolean) -> Unit = {},
     onTimeFormatToggle: (Boolean) -> Unit,
-    onAdhanSoundSelect: (AdhanSound) -> Unit = {},
     onHijriAdjustmentChange: (Int) -> Unit = {},
-    onReciterSelect: (String) -> Unit = {},
     onPrePrayerOffsetChange: (Int) -> Unit = {},
-    onAdhanVolumeChange: (Float) -> Unit = {},
-    onPrayerAlertModeChange: (Prayer, String) -> Unit = { _, _ -> },
-    onPlayAudioPreview: (String) -> Unit = {},
-    onStopAudioPreview: () -> Unit = {},
     onCustomLocationSave: (String, Double, Double, Double) -> Unit = { _, _, _, _ -> },
     onReschedulePrayers: () -> Unit = {},
     onResetAllSettings: () -> Unit = {},
     onFetchLocation: () -> Unit = {},
-    onOpenPrayer: () -> Unit = {},
+    systemAccess: SystemAccessState = SystemAccessState(),
+    systemAccessActions: SystemAccessActions = SystemAccessActions(),
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
     val strings = LocalStrings.current
+    // The sheets render accent chips for the mode on screen. The page is pure
+    // white or pure black, so its luminance answers the question exactly.
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
 
     // One enum instead of eighteen booleans, so only one sheet can ever be open and
     // its open/close is a single state change.
@@ -228,13 +225,32 @@ fun SettingsScreen(
                 RowDivider()
                 ActionRow(
                     title = strings.appThemeLabel,
-                    value = strings.themeLabel(state.appTheme),
+                    value = when (state.appTheme) {
+                        "System Default" -> strings.more.themeSystem
+                        "Dark Mode (OLED)" -> strings.more.themeDark
+                        else -> strings.more.themeLight
+                    },
                     onClick = { sheet = Sheet.THEME }
                 )
                 RowDivider()
                 ActionRow(
+                    title = strings.more.accentLabel,
+                    value = accentName(state.accent, strings),
+                    onClick = { sheet = Sheet.ACCENT }
+                )
+                if (Glass.capable) {
+                    RowDivider()
+                    ToggleRow(
+                        title = strings.more.reduceTransparencyLabel,
+                        checked = state.reduceTransparency,
+                        onCheckedChange = onReduceTransparencyChange,
+                        testTag = "reduceTransparency"
+                    )
+                }
+                RowDivider()
+                ActionRow(
                     title = strings.more.timeFormat24hLabel,
-                    value = if (state.timeFormat24h) "24h" else "12h",
+                    value = if (state.timeFormat24h) "24" else "12",
                     onClick = { onTimeFormatToggle(!state.timeFormat24h) }
                 )
             }
@@ -245,65 +261,18 @@ fun SettingsScreen(
                 ActionRow(
                     title = strings.locationLabel,
                     subtitle = state.location.name,
-                    // `Locale.US` for the numbers, as `AppLocationService` already
-                    // formats the same coordinates. The pair is joined with ", " and in
-                    // German, French and Spanish the decimal separator *is* that comma,
-                    // so "48,85, 2,35" read as four numbers.
-                    value = String.format(
-                        java.util.Locale.US,
-                        "%.2f, %.2f",
+                    value = formatCoordinates(
                         state.location.latitude,
-                        state.location.longitude
+                        state.location.longitude,
+                        2
                     ),
                     onClick = { sheet = Sheet.LOCATION }
                 )
-                if (state.isLocating) {
-                    StatusBanner(
-                        message = strings.more.loading,
-                        action = {
-                            OutlinedButton(
-                                onClick = onFetchLocation,
-                                modifier = Modifier.heightIn(
-                                    min = MaterialTheme.layoutMetrics.minTouchTarget
-                                )
-                            ) {
-                                Text(strings.more.useGps, style = MaterialTheme.typography.labelLarge)
-                            }
-                        }
-                    )
-                }
-                state.locationStatus?.let { status ->
-                    // Composed here, from the state and the strings, rather than read
-                    // off a `String` the ViewModel had already finished. The state
-                    // carries *which* of four things happened; this carries how to say
-                    // it, which is the only layer that knows the language.
-                    StatusBanner(
-                        message = when (status) {
-                            is LocationStatus.Acquiring ->
-                                strings.more.locationAcquiring
-
-                            is LocationStatus.Resolved -> {
-                                val template = if (status.isFresh) {
-                                    strings.more.locationResolved
-                                } else {
-                                    // Not a GPS fix, so not called one. This is the OS's
-                                    // last known reading, which may be hours old.
-                                    strings.more.locationResolvedCached
-                                }
-                                template.format(status.name, status.country)
-                            }
-
-                            is LocationStatus.Failed -> when (status.reason) {
-                                LocationFailure.PERMISSION_NOT_GRANTED ->
-                                    strings.more.locationErrorNoPermission
-                                LocationFailure.SERVICES_DISABLED ->
-                                    strings.more.locationErrorServicesOff
-                                LocationFailure.NO_SIGNAL ->
-                                    strings.more.locationErrorNoSignal
-                            }
-                        }
-                    )
-                }
+                LocationAccessBanner(
+                    status = state.locationStatus,
+                    systemAccess = systemAccess,
+                    actions = systemAccessActions
+                )
                 RowDivider()
                 ActionRow(
                     title = strings.methodLabel,
@@ -319,7 +288,7 @@ fun SettingsScreen(
                 RowDivider()
                 ActionRow(
                     title = strings.adjustmentsLabel,
-                    value = adjustmentSummary(state),
+                    value = adjustmentSummary(state, strings),
                     onClick = { sheet = Sheet.ADJUSTMENTS }
                 )
                 RowDivider()
@@ -328,22 +297,29 @@ fun SettingsScreen(
                     value = hijriSummary(state.hijriAdjustment),
                     onClick = { sheet = Sheet.HIJRI }
                 )
-                RowDivider()
-                // The Prayer screen - the month table, the vigils, and the day
-                // switcher the Today page follows - is a destination with no dock
-                // item. It was left out of the bar deliberately, "reached from
-                // Settings", and this is that route: it was never wired, so the
-                // whole screen was unreachable.
-                ActionRow(
-                    title = strings.more.prayerTimesRow,
-                    onClick = onOpenPrayer,
-                    testTag = "setting_prayer_times"
-                )
             }
 
             // -- Alerts ---------------------------------------------------
             SectionHeader(strings.more.sectionAlerts)
             SectionGroup {
+                val alertsEnabled = state.adhanNotificationEnabled ||
+                    state.prePrayerAlertEnabled
+                if (alertsEnabled && systemAccess.notificationIssue != null) {
+                    NotificationAccessBanner(
+                        systemAccess = systemAccess,
+                        alertsEnabled = alertsEnabled,
+                        actions = systemAccessActions
+                    )
+                    Spacer(Modifier.height(space.sm))
+                }
+                if (alertsEnabled && systemAccess.exactAlarms == ExactAlarmAccess.DENIED) {
+                    ExactAlarmAccessBanner(
+                        systemAccess = systemAccess,
+                        alertsEnabled = alertsEnabled,
+                        actions = systemAccessActions
+                    )
+                    Spacer(Modifier.height(space.sm))
+                }
                 ToggleRow(
                     title = strings.more.silentModeLabel,
                     checked = state.isGlobalSilentMode,
@@ -369,25 +345,7 @@ fun SettingsScreen(
                     onCheckedChange = onPrePrayerToggle,
                     onClick = { sheet = Sheet.PRE_PRAYER },
                     testTag = "setting_pre_prayer",
-                    // Opens a sheet, so it is a button, not a switch.
                     role = Role.Button
-                )
-                RowDivider()
-                ActionRow(
-                    title = strings.more.perPrayerModes,
-                    onClick = { sheet = Sheet.PRAYER_MODES }
-                )
-                RowDivider()
-                ActionRow(
-                    title = strings.adhanSoundLabel,
-                    value = state.adhanSound.label,
-                    onClick = { sheet = Sheet.ADHAN_SOUND }
-                )
-                RowDivider()
-                ActionRow(
-                    title = strings.adhanVolumeLabel,
-                    value = "${(state.adhanVolume * 100).toInt()}%",
-                    onClick = { sheet = Sheet.VOLUME }
                 )
                 RowDivider()
                 ToggleRow(
@@ -397,130 +355,17 @@ fun SettingsScreen(
                     testTag = "setting_vibrate_only"
                 )
                 RowDivider()
-                ToggleRow(
-                    title = strings.autoMasjidModeLabel,
-                    checked = state.autoSilentDuringPrayer,
-                    onCheckedChange = { onAutoSilentDuringPrayerToggle() },
-                    testTag = "setting_auto_silent"
-                )
-                if (state.autoSilentDuringPrayer) {
-                    Column(modifier = Modifier.padding(horizontal = space.md, vertical = space.sm)) {
-                        Text(
-                            text = strings.more.autoSilenceDurationLabel,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(Modifier.height(space.sm))
-                        SegmentedOptions(
-                            options = AUTO_SILENCE_OPTIONS.map { "$it ${strings.more.minutesShort}" },
-                            selectedIndex = AUTO_SILENCE_OPTIONS.indexOf(state.autoSilentDurationMinutes)
-                                .coerceAtLeast(0),
-                            onSelect = { onAutoSilentDurationChange(AUTO_SILENCE_OPTIONS[it]) }
-                        )
-                    }
-                }
-            }
-
-            // -- Quran ----------------------------------------------------
-            SectionHeader(strings.sectionQuran)
-            SectionGroup {
-                // Facts, not choices.
-                //
-                // These two rows opened pickers like the reciter's below - four
-                // riwayahs and three scripts - but the corpus is one text: one
-                // narration (Hafs 'an 'Asim) in one orthography (Uthmani). The
-                // other five answers renamed the setting and changed nothing the
-                // reader reads or hears, and the pickers made the text look like
-                // something it is not. What remains is the reader being told what
-                // the text actually is, and the one real choice beside it: the
-                // voice they hear it in.
                 ActionRow(
-                    title = strings.riwayahLabel,
-                    value = QuranBrowse.TEXT_RIWAYAH,
-                    showChevron = false,
-                    enabled = false,
-                    onClick = {}
-                )
-                RowDivider()
-                ActionRow(
-                    title = strings.scriptStyleLabel,
-                    value = QuranBrowse.TEXT_SCRIPT,
-                    showChevron = false,
-                    enabled = false,
-                    onClick = {}
-                )
-                RowDivider()
-                ActionRow(
-                    title = strings.reciterLabel,
-                    value = state.reciter,
-                    onClick = { sheet = Sheet.RECITER }
-                )
-                RowDivider()
-                // A fact, not a choice.
-                //
-                // This opened a twelve-item picker. The corpus bundles exactly one
-                // translation - `en_sahihintl.txt`, verified at load by SHA-256 and
-                // asserted to be complete - so eleven of the twelve changed nothing
-                // at all, and the choice was never persisted either, so the tick
-                // moved back to the first item on the next launch. A reader could
-                // pick Français, be shown English, and be told nothing.
-                //
-                // The two things a reader can actually do - show the translation, and
-                // how large it is - are real and live in the reader's own Reading
-                // options, which is where they are now. This row stays because a
-                // reader deserves to know *which* translation they are being shown,
-                // and saying so is not decoration; what was decoration was offering
-                // twelve answers to a question with one.
-                //
-                // The same treatment as the Arabic-size row below, and for the same
-                // reason: a control that does not do anything is worse than no
-                // control, because it is a promise.
-                ActionRow(
-                    title = strings.translationLabel,
-                    value = QuranBrowse.TRANSLATION_EDITION,
-                    subtitle = strings.more.reader.changeInReader,
-                    showChevron = false,
-                    enabled = false,
-                    onClick = {}
-                )
-                RowDivider()
-                // A summary, not a second slider.
-                //
-                // This used to be a live Arabic-size slider bound to
-                // `quranFontScale`, which the reader no longer reads - so it
-                // looked like it worked and changed nothing. The reading
-                // appearance now has exactly one home, the reader's own Reading
-                // options, and this row reports the current value and says where
-                // to change it. Two controls writing the same preference is how
-                // they drift apart.
-                ActionRow(
-                    title = strings.arabicTextSizeLabel,
-                    value = "${(state.quranReadingOptions.arabicScale * 100).toInt()}%",
-                    subtitle = strings.more.reader.changeInReader,
-                    showChevron = false,
-                    enabled = false,
-                    onClick = {}
+                    title = strings.system.testNotification,
+                    onClick = systemAccessActions.sendTestNotification,
+                    enabled = systemAccess.notificationsReady,
+                    testTag = "setting_test_notification"
                 )
             }
 
             // -- Diagnostics ----------------------------------------------
             SectionHeader(strings.more.sectionAbout)
             SectionGroup {
-                // "Prayer schedule cache" and its "Last checked" subtitle are gone.
-                //
-                // The row opened a sheet whose detail read "Last checked: Online ·
-                // Synced at 14:32 (Verified Ephemeris)", and the three sentences
-                // that could appear there were written by three different code
-                // paths, none of which contacted a server - the app has no HTTP
-                // client at all. One of them claimed 365 days were verified for a
-                // path that computes one. A prayer app telling a reader its times
-                // have been verified is not a cosmetic bug.
-                //
-                // The information a reader actually wants here is *how* their
-                // times are derived, and that is real, is already collected, and
-                // is already on the Prayer screen. So the row becomes what it
-                // always should have been: the calculation source, with a control
-                // that does something.
                 ActionRow(
                     title = strings.transparentCalculationSource,
                     subtitle = strings.more.computedOnDevice,
@@ -538,13 +383,6 @@ fun SettingsScreen(
                     onClick = { sheet = Sheet.COMPASS }
                 )
                 RowDivider()
-                // Connectivity, reported as connectivity.
-                //
-                // It is a *status*, not an action: nothing is fetched, so there is
-                // nothing to retry, and a button that re-reads the platform's own
-                // answer and reports it back is a control that only exists to be
-                // pressed. The reason it is worth showing at all is the audio
-                // stream, and that is stated in the storage sheet beside it.
                 ActionRow(
                     title = strings.networkSyncLabel,
                     subtitle = if (state.isOnline) strings.onlineStatus else strings.offlineStatus,
@@ -553,12 +391,6 @@ fun SettingsScreen(
                     onClick = {}
                 )
                 RowDivider()
-                // The privacy block, as a child of this group rather than a
-                // `SectionGroup` nested inside it. A card inside a card is a second
-                // surface deciding the same padding: it reads as nothing today
-                // because both are `surface`, and the day one of them is retinted the
-                // inner card appears with its own radius and indent. The rows above
-                // are this group's children; so is this.
                 Column(modifier = Modifier.padding(horizontal = space.md)) {
                     Text(
                         text = strings.privacyPhilosophyTitle,
@@ -578,20 +410,19 @@ fun SettingsScreen(
                     PrivacyFact(strings.more.privacyNoAccount)
                     PrivacyFact(strings.more.privacyFree)
                 }
-                RowDivider()
-                ActionRow(
-                    title = strings.more.resetAllLabel,
-                    onClick = { confirmReset = true }
-                )
             }
 
+            // Destructive and rare, so it sits outside the About group and
+            // carries the error colour instead of reading as one more detail.
             Spacer(Modifier.height(space.lg))
-            Text(
-                text = strings.more.privacyNote,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(space.xxl))
+            SectionGroup {
+                ActionRow(
+                    title = strings.more.resetAllLabel,
+                    onClick = { confirmReset = true },
+                    showChevron = false,
+                    destructive = true
+                )
+            }
         }
     }
 
@@ -621,10 +452,31 @@ fun SettingsScreen(
         ) {
             THEMES.forEach { theme ->
                 OptionRow(
-                    title = strings.themeLabel(theme),
+                    title = when (theme) {
+                        "System Default" -> strings.more.themeSystem
+                        "Dark Mode (OLED)" -> strings.more.themeDark
+                        else -> strings.more.themeLight
+                    },
                     selected = theme == state.appTheme,
                     onClick = {
                         onThemeSelect(theme)
+                        sheet = null
+                    }
+                )
+            }
+        }
+
+        Sheet.ACCENT -> OptionSheet(
+            title = strings.more.accentLabel,
+            onDismiss = { sheet = null }
+        ) {
+            ACCENTS.forEach { accent ->
+                OptionRow(
+                    title = accentName(accent.key, strings),
+                    selected = accent.key == state.accent,
+                    trailing = { AccentSwatch(accent, isDark) },
+                    onClick = {
+                        onAccentSelect(accent.key)
                         sheet = null
                     }
                 )
@@ -671,10 +523,6 @@ fun SettingsScreen(
 
             RowDivider()
 
-            // Every country's capital, so a location is a name away rather than
-            // two numbers. Bounded and lazy: the sheet's own content is a
-            // scrolling column, and 195 rows composed eagerly inside one is a
-            // visible stutter on open.
             SectionHeader(strings.more.allCountriesTitle)
             val capitals = remember(cityQuery) { CapitalLocations.search(cityQuery) }
             if (capitals.isEmpty()) {
@@ -702,12 +550,6 @@ fun SettingsScreen(
 
             RowDivider()
 
-            // Free entry. The callback existed and was wired from MainActivity
-            // but nothing ever called it, so the city list plus GPS were the only
-            // ways to set a location - and 16 preset cities is not enough for
-            // anyone who does not live in one of them. The seven orphaned
-            // strings and imports that were already in the file are what this
-            // form was always meant to consume.
             var customName by rememberSaveable { mutableStateOf("") }
             var customLat by rememberSaveable { mutableStateOf("") }
             var customLng by rememberSaveable { mutableStateOf("") }
@@ -760,10 +602,6 @@ fun SettingsScreen(
             Spacer(Modifier.height(space.sm))
             OutlinedButton(
                 onClick = {
-                    // Validate before committing. Bounds are checked here rather
-                    // than in the ViewModel so the user is told what is wrong
-                    // next to the field, instead of the app silently keeping a
-                    // location it cannot calculate with.
                     val lat = customLat.trim().toDoubleOrNull()
                     val lng = customLng.trim().toDoubleOrNull()
                     val name = customName.trim()
@@ -896,168 +734,11 @@ fun SettingsScreen(
             )
         }
 
-        Sheet.PRAYER_MODES -> OptionSheet(
-            title = strings.more.perPrayerModes,
-            onDismiss = { sheet = null }
-        ) {
-            // Sunrise is offered here because it has a real, separately
-            // configurable alert - it is not one of the five obligatory
-            // prayers, but it does sound. Its seeded value is
-            // "Silent Reminder", which is not in ALERT_MODES, so
-            // `indexOf` returned -1, `coerceAtLeast(0)` turned that into 0,
-            // and the row highlighted "Full Adhan" on first run for every
-            // user - advertising a full adhan call at sunrise that the stored
-            // setting never asked for. Sunrise therefore gets its own option
-            // list, built around the value it is actually seeded with.
-            listOf(
-                Prayer.FAJR, Prayer.DHUHR, Prayer.ASR,
-                Prayer.MAGHRIB, Prayer.ISHA, Prayer.SUNRISE
-            ).forEach { prayer ->
-                val current = state.prayerAlertModes[prayer] ?: ALERT_MODES.first()
-                val options = if (prayer == Prayer.SUNRISE) SUNRISE_ALERT_MODES else ALERT_MODES
-                Column(modifier = Modifier.padding(vertical = space.sm)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = strings.prayerName(prayer),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f)
-                        )
-                        PlayPreviewButton(
-                            label = "${strings.more.testSound}: ${strings.prayerName(prayer)}",
-                            isPlaying = state.audioPreviewPlaying == current,
-                            onToggle = { onPlayAudioPreview(current) }
-                        )
-                    }
-                    Spacer(Modifier.height(space.sm))
-                    ChipRow(
-                        // Labels are localized; the values passed back are still
-                        // the stored preference keys.
-                        labels = options.map { strings.more.alertModeLabel(it) },
-                        selectedIndex = options.indexOf(current)
-                            .takeIf { it >= 0 }
-                            ?: options.indexOfFirst { strings.more.alertModeLabel(it) == strings.more.alertModeLabel(current) },
-                        onSelect = { onPrayerAlertModeChange(prayer, options[it]) }
-                    )
-                }
-                RowDivider()
-            }
-        }
-
-        Sheet.ADHAN_SOUND -> OptionSheet(
-            title = strings.more.chooseAdhanSound,
-            onDismiss = { sheet = null; onStopAudioPreview() }
-        ) {
-            // The row shows the label; the callbacks take the sound, so the preview
-            // and the choice are the same fact rather than a label matched back into
-            // an enum. `audioPreviewPlaying` is the *label* because that is what the
-            // chip in the title row compares against - one representation, one place.
-            ADHAN_SOUNDS.forEach { sound ->
-                OptionRow(
-                    title = sound.label,
-                    selected = sound == state.adhanSound,
-                    onClick = { onAdhanSoundSelect(sound) },
-                    trailing = {
-                        PlayPreviewButton(
-                            label = "${strings.more.testSound}: ${sound.label}",
-                            isPlaying = state.audioPreviewPlaying == sound.label,
-                            onToggle = {
-                                if (state.audioPreviewPlaying == sound.label) {
-                                    onStopAudioPreview()
-                                } else {
-                                    onPlayAudioPreview(sound.label)
-                                }
-                            }
-                        )
-                    }
-                )
-            }
-        }
-
-        Sheet.RECITER -> OptionSheet(
-            title = strings.more.chooseReciter,
-            onDismiss = { sheet = null; onStopAudioPreview() }
-        ) {
-            // The selection is the reciter the stored name resolves to, through
-            // the same [Reciter.from] the player uses: a stored name the registry
-            // cannot resolve has always streamed Alafasy, so Alafasy is what the
-            // tick must be on.
-            val selected = Reciter.from(state.reciter)
-            RECITERS.forEach { reciter ->
-                OptionRow(
-                    title = reciter.displayName,
-                    selected = reciter == selected,
-                    onClick = { onReciterSelect(reciter.displayName) },
-                    trailing = {
-                        PlayPreviewButton(
-                            label = "${strings.more.testSound}: ${reciter.displayName}",
-                            isPlaying = state.audioPreviewPlaying == reciter.displayName,
-                            onToggle = {
-                                if (state.audioPreviewPlaying == reciter.displayName) {
-                                    onStopAudioPreview()
-                                } else {
-                                    onPlayAudioPreview(reciter.displayName)
-                                }
-                            }
-                        )
-                    }
-                )
-            }
-        }
-
-        Sheet.VOLUME -> OptionSheet(
-            title = strings.more.adhanVolume,
-            onDismiss = { sheet = null; onStopAudioPreview() }
-        ) {
-            LabeledSlider(
-                label = strings.more.adhanVolume,
-                valueText = "${(state.adhanVolume * 100).toInt()}%",
-                value = state.adhanVolume,
-                onValueChange = onAdhanVolumeChange,
-                valueRange = 0f..1f
-            )
-            Spacer(Modifier.height(space.md))
-            ChipRow(
-                labels = ADHAN_SOUNDS.map { it.label },
-                selectedIndex = ADHAN_SOUNDS.indexOf(state.adhanSound).coerceAtLeast(0),
-                onSelect = { onAdhanSoundSelect(ADHAN_SOUNDS[it]) }
-            )
-            Spacer(Modifier.height(space.md))
-            Row(horizontalArrangement = Arrangement.spacedBy(space.sm)) {
-                OutlinedButton(
-                    onClick = { onPlayAudioPreview(state.adhanSound.label) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
-                ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(IconSize.sm))
-                    Spacer(Modifier.width(space.xs))
-                    Text(strings.more.testSound, style = MaterialTheme.typography.labelLarge)
-                }
-                OutlinedButton(
-                    onClick = {
-                        onStopAudioPreview()
-                        sheet = null
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = MaterialTheme.layoutMetrics.minTouchTarget)
-                ) {
-                    Text(strings.more.stopAudio, style = MaterialTheme.typography.labelLarge)
-                }
-            }
-        }
-
         Sheet.CALCULATION -> OptionSheet(
             title = strings.transparentCalculationSource,
             subtitle = strings.more.computedOnDevice,
             onDismiss = { sheet = null }
         ) {
-            // Every row here is a real, current input to the engine, read from
-            // state. That is the whole reason to show this sheet: a reader whose
-            // Isha looks wrong can see which method, which madhhab, which
-            // adjustment and which coordinates produced it, and change any of them
-            // from the rows above. Nothing here is a claim about a server.
             DetailList(
                 items = listOf(
                     strings.more.methodology to state.method.title,
@@ -1070,15 +751,6 @@ fun SettingsScreen(
                 )
             )
             Spacer(Modifier.height(space.md))
-            // Re-derive today's times and re-arm the alarms.
-            //
-            // The only control in this sheet, and the only one with an effect a
-            // reader can observe: alarms are lost when a device reboots, when a
-            // battery-optimisation app is installed, and when a permission is
-            // revoked, and the app cannot always hear about it. This puts them
-            // back. It is not a "recompute 365-day schedule" - nothing is cached
-            // and nothing is 365 days; the engine computes today and tomorrow in
-            // under a millisecond and hands the result to AlarmManager.
             OutlinedButton(
                 onClick = {
                     onReschedulePrayers()
@@ -1096,21 +768,9 @@ fun SettingsScreen(
             title = strings.more.storageLabel,
             onDismiss = { sheet = null }
         ) {
-            // Read-only. The "Clear audio cache" button is gone.
-            //
-            // QuranAudioPlayer streams from everyayah.com through MediaPlayer and
-            // keeps nothing on disk; when the stream cannot be prepared it falls
-            // back to a synthesised chime. There is no cache. The button deleted
-            // nothing, reported a hardcoded "0 KB" as though it had measured
-            // something, and wrote that into `lastChecked` - the field the
-            // Ephemeris row and the "Last checked" detail both display - so
-            // pressing it made the app claim its prayer times had been verified
-            // when they had not. A control that reports a fabricated result is
-            // worse than no control.
             DetailList(
                 items = listOf(
-                    strings.sectionQuran to strings.more.corpusSummary,
-                    strings.more.audioSourceLabel to strings.more.audioStreamedNotCached
+                    strings.more.prayerLogLabel to strings.more.prayerLogStoredLocally
                 )
             )
         }
@@ -1139,80 +799,58 @@ fun SettingsScreen(
             confirmLabel = strings.more.actionReset,
             dismissLabel = strings.more.actionCancel,
             destructive = true,
+            onDismiss = { confirmReset = false },
             onConfirm = {
                 onResetAllSettings()
                 confirmReset = false
-            },
-            onDismiss = { confirmReset = false }
+            }
         )
     }
 }
 
-/** The pick-one panels, as one enum so only one can ever be open. */
-private enum class Sheet {
-    LANGUAGE, THEME, LOCATION, METHOD, MADHHAB, ADJUSTMENTS, HIJRI,
-    PRE_PRAYER, PRAYER_MODES, ADHAN_SOUND, RECITER,
-    VOLUME, CALCULATION, STORAGE, COMPASS
+internal fun adjustmentSummary(state: SalahUiState, strings: UiStrings): String {
+    val adj = state.adjustments
+    val nonZero = listOf(
+        Prayer.FAJR to adj.fajr,
+        Prayer.SUNRISE to adj.sunrise,
+        Prayer.DHUHR to adj.dhuhr,
+        Prayer.ASR to adj.asr,
+        Prayer.MAGHRIB to adj.maghrib,
+        Prayer.ISHA to adj.isha
+    ).filter { it.second != 0 }
+    // The zero state is a sign, not an English word: it reads the same in every
+    // language and matches the Hijri calibration row's "±0".
+    return if (nonZero.isEmpty()) {
+        "±0"
+    } else {
+        nonZero.joinToString(", ") { (p, m) -> "${strings.prayerName(p)} ${signed(m)}" }
+    }
 }
 
 /**
- * A minute offset, always signed.
- *
- * "+0" and "0" are different sentences, and a reader scanning a list of five
- * offsets should not have to check which convention each one uses.
+ * Per-prayer minute adjustments as a list of (prayer, minutes) pairs.
  */
-private fun signed(minutes: Int): String = if (minutes >= 0) "+$minutes" else "$minutes"
+fun appliedAdjustments(adjustments: PrayerAdjustments): List<Pair<Prayer, Int>> {
+    return listOf(
+        Prayer.FAJR to adjustments.fajr,
+        Prayer.SUNRISE to adjustments.sunrise,
+        Prayer.DHUHR to adjustments.dhuhr,
+        Prayer.ASR to adjustments.asr,
+        Prayer.MAGHRIB to adjustments.maghrib,
+        Prayer.ISHA to adjustments.isha
+    ).filter { it.second != 0 }
+}
 
-/** Per-prayer minute offsets, -15..+15. */
+/**
+ * Per-prayer minute adjustment sliders, one row per prayer.
+ */
 @Composable
 private fun AdjustmentSliders(
     adjustments: PrayerAdjustments,
     onChange: (PrayerAdjustments) -> Unit
 ) {
     val strings = LocalStrings.current
-    data class Binding(
-        val prayer: Prayer,
-        val current: Int
-    )
-
-    val bindings = listOf(
-        Binding(Prayer.FAJR, adjustments.fajr),
-        Binding(Prayer.SUNRISE, adjustments.sunrise),
-        Binding(Prayer.DHUHR, adjustments.dhuhr),
-        Binding(Prayer.ASR, adjustments.asr),
-        Binding(Prayer.MAGHRIB, adjustments.maghrib),
-        Binding(Prayer.ISHA, adjustments.isha)
-    )
-
-    bindings.forEach { binding ->
-        LabeledSlider(
-            label = strings.prayerName(binding.prayer),
-            valueText = if (binding.current >= 0) "+${binding.current}" else "${binding.current}",
-            value = binding.current.toFloat(),
-            onValueChange = { value ->
-                val minutes = value.toInt()
-                onChange(
-                    when (binding.prayer) {
-                        Prayer.FAJR -> adjustments.copy(fajr = minutes)
-                        Prayer.DHUHR -> adjustments.copy(dhuhr = minutes)
-                        Prayer.ASR -> adjustments.copy(asr = minutes)
-                        Prayer.MAGHRIB -> adjustments.copy(maghrib = minutes)
-                        Prayer.ISHA -> adjustments.copy(isha = minutes)
-                        Prayer.SUNRISE -> adjustments.copy(sunrise = minutes)
-                    }
-                )
-            },
-            valueRange = -15f..15f,
-            steps = 29
-        )
-    }
-}
-
-/**
- * The six applied offsets, in reading order, with Sunrise among them.
- */
-internal fun appliedAdjustments(adjustments: PrayerAdjustments): List<Pair<Prayer, Int>> =
-    listOf(
+    val rows = listOf(
         Prayer.FAJR to adjustments.fajr,
         Prayer.SUNRISE to adjustments.sunrise,
         Prayer.DHUHR to adjustments.dhuhr,
@@ -1220,41 +858,40 @@ internal fun appliedAdjustments(adjustments: PrayerAdjustments): List<Pair<Praye
         Prayer.MAGHRIB to adjustments.maghrib,
         Prayer.ISHA to adjustments.isha
     )
-
-/** The non-zero ones, in reading order. */
-internal fun adjustedPrayers(adjustments: PrayerAdjustments): List<Pair<Prayer, Int>> =
-    appliedAdjustments(adjustments).filter { it.second != 0 }
-
-/** The summary the Adjustments row shows: one letter per adjusted prayer, or nothing. */
-private fun adjustmentSummary(state: SalahUiState): String {
-    val parts = adjustedPrayers(state.adjustments)
-    return if (parts.isEmpty()) {
-        ""
-    } else {
-        parts.joinToString(" ") { (prayer, minutes) ->
-            "${prayer.ordinalLetter()}${minutes}"
+    Column(modifier = Modifier.fillMaxWidth()) {
+        rows.forEachIndexed { index, (prayer, minutes) ->
+            LabeledSlider(
+                label = strings.prayerName(prayer),
+                valueText = "${signed(minutes)} ${strings.more.minutesShort}",
+                value = minutes.toFloat(),
+                onValueChange = {
+                    val updated = when (prayer) {
+                        Prayer.FAJR -> adjustments.copy(fajr = it.toInt())
+                        Prayer.SUNRISE -> adjustments.copy(sunrise = it.toInt())
+                        Prayer.DHUHR -> adjustments.copy(dhuhr = it.toInt())
+                        Prayer.ASR -> adjustments.copy(asr = it.toInt())
+                        Prayer.MAGHRIB -> adjustments.copy(maghrib = it.toInt())
+                        Prayer.ISHA -> adjustments.copy(isha = it.toInt())
+                    }
+                    onChange(updated)
+                },
+                valueRange = -30f..30f
+            )
+            if (index < rows.lastIndex) RowDivider()
         }
     }
 }
 
-/**
- * The one or two letters a prayer is abbreviated to in the summary.
- */
-private fun Prayer.ordinalLetter(): String = when (this) {
-    Prayer.FAJR -> "F"
-    Prayer.SUNRISE -> "S"
-    Prayer.DHUHR -> "D"
-    Prayer.ASR -> "A"
-    Prayer.MAGHRIB -> "M"
-    Prayer.ISHA -> "I"
+private fun hijriSummary(offset: Int): String = when {
+    offset == 0 -> "±0"
+    offset > 0 -> "+$offset"
+    else -> "$offset"
 }
 
-private fun hijriSummary(offset: Int): String =
-    if (offset == 0) "±0" else if (offset > 0) "+$offset" else "$offset"
+private fun signed(minutes: Int): String = if (minutes >= 0) "+$minutes" else "$minutes"
 
-/** Human label for a stored theme preference, which is persisted as a raw string. */
-private fun UiStrings.themeLabel(theme: String): String = when (theme) {
-    "Dark Mode (OLED)" -> more.themeDark
-    "Clean Light" -> more.themeLight
-    else -> more.themeSystem
+/** The sheet that is currently open, or null. */
+private enum class Sheet {
+    LANGUAGE, THEME, ACCENT, LOCATION, METHOD, MADHHAB, ADJUSTMENTS, HIJRI, PRE_PRAYER,
+    CALCULATION, STORAGE, COMPASS
 }

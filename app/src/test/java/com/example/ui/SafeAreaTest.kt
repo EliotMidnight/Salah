@@ -283,9 +283,10 @@ class SafeAreaTest {
     /** Walks up from the working directory to the `app` module. */
     private fun moduleRoot(): String {
         var dir = File("").absoluteFile
-        while (dir.parentFile != null) {
+        while (true) {
             if (File(dir, "build.gradle.kts").isFile) return dir.path
-            dir = dir.parentFile
+            val parent = dir.parentFile ?: break
+            dir = parent
         }
         return File("").absolutePath
     }

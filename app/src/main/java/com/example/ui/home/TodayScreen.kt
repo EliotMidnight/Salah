@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -41,7 +43,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
@@ -61,19 +62,18 @@ import com.example.data.model.PrayerAdjustments
 import com.example.data.model.PrayerTimesDay
 import com.example.data.model.UserLocation
 import com.example.data.model.HijriDate
-import com.example.data.quran.QuranDataSource
 import com.example.engine.HijriCalendarEngine
 import com.example.engine.PrayerCalculationEngine
 import com.example.engine.QiblaEngine
 import com.example.ui.SalahUiState
 import com.example.ui.components.SafeArea
+import com.example.ui.components.dockContentPadding
 import com.example.ui.localization.LocalLanguage
 import com.example.ui.localization.LocalStrings
 import com.example.ui.localization.appLocale
 import com.example.ui.localization.prayerName
 import com.example.ui.localization.isArabicInterface
 import com.example.ui.localization.DateNavStrings
-import com.example.ui.theme.Motion
 import com.example.ui.theme.HandwritingFamily
 import com.example.ui.theme.Space
 import com.example.ui.theme.layoutMetrics
@@ -89,7 +89,6 @@ import java.time.format.DateTimeFormatter
 fun TodayScreen(
     state: SalahUiState,
     onLocationClick: () -> Unit,
-    onContinueReadingClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val strings = LocalStrings.current
@@ -99,30 +98,13 @@ fun TodayScreen(
     }
 
     var showMonth by rememberSaveable { mutableStateOf(false) }
-    // How far the reader has walked from the shared date with this page's own
-    // arrows. Kept as an offset rather than a second selected date, so browsing a
-    // day here cannot move the app's date: the Prayer screen owns that switch, and
-    // the notifications and the "next prayer" countdown are about *today*, which
-    // this page would otherwise be redefining.
     var dayOffset by rememberSaveable { mutableIntStateOf(0) }
 
-    // The Prayer tab owns the date. There is no switcher here: a second one
-    // meant a second answer to "which day am I looking at", and the two drifted
-    // apart the moment you used one and not the other.
     val today = state.todayPrayerTimes?.date ?: LocalDate.now()
     val base = state.selectedDate ?: today
     val date = base.plusDays(dayOffset.toLong())
     val isToday = date == today
     val isArabicUi = isArabicInterface(state.language)
-    // The surah's name is resolved at the point of drawing, in the interface's own
-    // language, from the names table (`QuranDataSource.surahName`): the row stores no
-    // name, because a stored one is a copy in one language. It does not go through
-    // `QuranBrowse.surah` either, which compiles the whole corpus on first access - and
-    // Today is the first screen a cold start draws.
-    val continueReading = state.continueReading
-    val continueReadingRef =
-        "${QuranDataSource.surahName(continueReading.surahNumber, isArabicUi).orEmpty()} " +
-            "${continueReading.surahNumber}:${continueReading.ayahNumber}"
     val day: PrayerTimesDay = remember(date, state.location, state.method, state.madhhab, state.adjustments) {
         state.todayPrayerTimes
             ?.takeIf { it.date == date }
@@ -232,7 +214,7 @@ fun TodayScreen(
                     top = SafeArea.top() + space.sm,
                     start = SafeArea.sides(),
                     end = SafeArea.sides(),
-                    bottom = space.xxl
+                    bottom = dockContentPadding()
                 ),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -288,8 +270,6 @@ fun TodayScreen(
                     dayOffset = dayOffset,
                     onShiftDate = { dayOffset = it },
                     onShowMonth = { showMonth = true },
-                    onContinueReadingClick = onContinueReadingClick,
-                    continueReadingRef = continueReadingRef,
                     sunAltitude = sunAltitude,
                     sunAzimuth = sunAzimuth,
                     isSetting = isSetting,
@@ -331,6 +311,7 @@ private val PrayerListOrder = listOf(
  * The default view: which prayer it is, when it was, what is next, and the
  * whole day as a list.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SimpleView(
     currentPrayer: Prayer,
@@ -345,8 +326,6 @@ private fun SimpleView(
     dayOffset: Int,
     onShiftDate: (Int) -> Unit,
     onShowMonth: () -> Unit,
-    onContinueReadingClick: () -> Unit,
-    continueReadingRef: String,
     sunAltitude: Float,
     sunAzimuth: Float,
     isSetting: Boolean,
@@ -359,219 +338,217 @@ private fun SimpleView(
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val accent = MaterialTheme.colorScheme.primary
 
-    Column(
-        modifier = Modifier.widthIn(max = 360.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+    Box(
+        modifier = Modifier
+            .widthIn(max = 360.dp)
+            .fillMaxWidth()
     ) {
-        // Whichever body is actually up, glowing in its own colour. Not a
-        // per-prayer emblem: the sky above you at 3am is the moon whatever
-        // prayer you are between.
-        CelestialBody(
+        // The body's halo, behind every line below it. It is the one wash
+        // in the design and it belongs to the sky, not to the page.
+        CelestialHalo(
             sunAltitude = sunAltitude,
             sunAzimuth = sunAzimuth,
-            isSetting = isSetting,
             hijriDay = hijriDay,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(148.dp)
+            modifier = Modifier.matchParentSize()
         )
 
-        Spacer(Modifier.height(space.sm))
-
-        // The prayer's name is the loudest thing on the page, in whatever
-        // language the app is actually in. Arabic leads only when the reader
-        // chose Arabic - a headline in a language you did not pick is decoration,
-        // and the Arabic belongs underneath it as the subtitle, not above it as
-        // the title.
-        //
-        // Measured, not fixed: see [HeadlineFit]. A fixed 58sp cut "Lever du
-        // soleil" and "Sonnenaufgang" off mid-word on one line, with no ellipsis,
-        // on the one line the page is built around.
-        val localisedName = strings.prayerName(currentPrayer)
-        val arabicLeads = isArabicUi
-        val headlineText = if (arabicLeads) currentPrayer.arabicName else localisedName
-        // Handwriting, not the display serif. This is the one line on the
-        // page that should read as written by a person rather than set by a
-        // typesetter, and at 58sp the difference is the whole character of
-        // the page. The Arabic subtitle below keeps the serif, because
-        // [HandwritingFamily] has no Arabic glyphs to fall back from within.
-        val headlineStyle = TextStyle(
-            fontFamily = if (arabicLeads) FontFamily.Serif else HandwritingFamily,
-            fontSize = HeadlineFit.CEILING_SP.sp,
-            lineHeight = HeadlineFit.LINE_HEIGHT_SP.sp,
-            fontWeight = FontWeight.Bold,
-            color = accent,
-            textAlign = TextAlign.Center
-        )
-        val measurer = rememberTextMeasurer()
-        val density = LocalDensity.current
-        // The box is here to read the row's width; centring is asked for
-        // explicitly, because a box lays its child out from the top-left where
-        // the column used to centre the name itself.
-        BoxWithConstraints(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
-        ) {
-            val rowWidthPx = with(density) { maxWidth.roundToPx() }
-            val fontScale = density.fontScale
-            val sizeSp = remember(headlineText, headlineStyle, rowWidthPx, fontScale) {
-                HeadlineFit.size(
-                    measuredWidthPx = measurer
-                        .measure(AnnotatedString(headlineText), headlineStyle)
-                        .size
-                        .width,
-                    availableWidthPx = rowWidthPx
-                )
-            }
-            Text(
-                text = headlineText,
-                style = headlineStyle.copy(fontSize = sizeSp.sp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.testTag("today_headline")
-            )
-        }
-        if (!arabicLeads) {
-            Text(
-                text = currentPrayer.arabicName,
-                fontFamily = FontFamily.Serif,
-                fontSize = 26.sp,
-                lineHeight = 34.sp,
-                color = muted,
-                textAlign = TextAlign.Center,
-                maxLines = 1
-            )
-        }
-
-        Spacer(Modifier.height(space.sm))
-
-        // An affordance rather than an instruction. The words "tap for the full
-        // clock" were doing two jobs badly: they sat between the prayer and its
-        // time looking like a third fact, and they spelled out a gesture on a
-        // whole-page target. A rule reads as "there is more under here", and the
-        // container still carries the instruction for anyone who cannot see it.
-        Box(
-            modifier = Modifier
-                .size(width = 64.dp, height = 20.dp)
-                .clearAndSetSemantics { },
-            contentAlignment = Alignment.Center
-        ) {
-            Canvas(Modifier.fillMaxSize()) {
-                drawLine(
-                    color = muted.copy(alpha = 0.55f),
-                    start = Offset(0f, size.height / 2f),
-                    end = Offset(size.width, size.height / 2f),
-                    strokeWidth = 1.dp.toPx()
-                )
-            }
-        }
-
-        Spacer(Modifier.height(space.lg))
-
-        if (nextPrayer != null) {
-            // One line, so it has to *be* one line - the same size throughout.
-            // Matching only the line height was not enough: a 22sp name and an
-            // 11sp label share a baseline but not a weight, and the label still
-            // read as smaller type rather than as a quiet part of the same
-            // thought. One size, differentiated by weight and colour instead.
-            val size = 20.sp
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(space.sm)
-            ) {
-                Text(
-                    text = strings.dateNav.nextPrayerPrefix.uppercase(),
-                    fontSize = size,
-                    lineHeight = size * 1.2f,
-                    fontWeight = FontWeight.Bold,
-                    color = muted.copy(alpha = 0.7f)
-                )
-                Text(
-                    text = strings.prayerName(nextPrayer),
-                    fontSize = size,
-                    lineHeight = size * 1.2f,
-                    fontFamily = FontFamily.Serif,
-                    color = onSurface
-                )
-                Text(
-                    text = nextTime?.format(timeFormatter) ?: "--:--",
-                    fontSize = size,
-                    lineHeight = size * 1.2f,
-                    color = muted
-                )
-            }
-
-            Spacer(Modifier.height(space.md))
-
-            if (isToday && countdown.isNotEmpty()) {
-                CountdownRule(accent = accent, countdown = countdown)
-            }
-
-            // The date row's own arrows, the same control the Prayer screen has. They
-            // step this page's date and write nothing back: the app's date is
-            // switched on the Prayer screen, and a second writer would be a second
-            // answer to "which day is it".
-            Spacer(Modifier.height(space.sm))
-
-            // The day's own name comes from the platform, in the *app's* language and
-            // not the device's - the two are separate settings, and an Arabic interface
-            // on a German phone was reading a German weekday under an Arabic date.
-            // Hoisted out of the body as well: this row redraws with the countdown, and
-            // the pattern was rebuilt with it.
-            val dateLocale = appLocale(LocalLanguage.current)
-            val gregorianFormatter = remember(dateLocale) {
-                DateTimeFormatter.ofPattern("EEEE d MMMM", dateLocale)
-            }
-            DaySelector(
-                selectedDate = date,
-                isToday = isToday,
-                hijriLabel = "${hijri.day} ${hijri.monthNameEn} ${hijri.year} AH",
-                gregorianLabel = date.format(gregorianFormatter),
-                todayLabel = LocalStrings.current.todayBtn,
-                onPrevious = { onShiftDate(dayOffset - 1) },
-                onNext = { onShiftDate(dayOffset + 1) },
-                onToday = { onShiftDate(0) }
-            )
-        }
-
-        Spacer(Modifier.height(space.lg))
-
-        // The day as a list. A dotted leader is doing real work here: it is
-        // what lets a column of names and a column of times be read as pairs
-        // without a rule between every row.
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(space.sm)
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            PrayerListOrder.forEach { prayer ->
-                PrayerTimeRow(
-                    prayer = prayer,
-                    time = times[prayer]?.format(timeFormatter) ?: "--:--",
-                    state = prayerRowState(
-                        isToday = isToday,
-                        prayer = prayer,
-                        currentPrayer = currentPrayer,
-                        nextPrayer = nextPrayer
+            // The body in the sky, monochrome: a single disc in its real place.
+            CelestialBody(
+                sunAltitude = sunAltitude,
+                sunAzimuth = sunAzimuth,
+                isSetting = isSetting,
+                hijriDay = hijriDay,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(CelestialStripHeight)
+            )
+
+            Spacer(Modifier.height(space.sm))
+
+            // The prayer's name is the loudest thing on the page, in whatever
+            // language the app is actually in. Arabic leads only when the reader
+            // chose Arabic - a headline in a language you did not pick is decoration,
+            // and the Arabic belongs underneath it as the subtitle, not above it as
+            // the title.
+            //
+            // Measured, not fixed: see [HeadlineFit]. A fixed 58sp cut "Lever du
+            // soleil" and "Sonnenaufgang" off mid-word on one line, with no ellipsis,
+            // on the one line the page is built around.
+            val localisedName = strings.prayerName(currentPrayer)
+            val arabicLeads = isArabicUi
+            val headlineText = if (arabicLeads) currentPrayer.arabicName else localisedName
+            // Handwriting, not the display serif. This is the one line on the
+            // page that should read as written by a person rather than set by a
+            // typesetter, and at the ceiling the difference is the whole character
+            // of the page. The Arabic subtitle below keeps the serif, because
+            // [HandwritingFamily] has no Arabic glyphs to fall back from within.
+            val headlineStyle = TextStyle(
+                fontFamily = if (arabicLeads) FontFamily.Serif else HandwritingFamily,
+                fontSize = HeadlineFit.CEILING_SP.sp,
+                lineHeight = HeadlineFit.LINE_HEIGHT_SP.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = accent,
+                textAlign = TextAlign.Center
+            )
+            val measurer = rememberTextMeasurer()
+            val density = LocalDensity.current
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                val rowWidthPx = with(density) { maxWidth.roundToPx() }
+                val fontScale = density.fontScale
+                val sizeSp = remember(headlineText, headlineStyle, rowWidthPx, fontScale) {
+                    HeadlineFit.size(
+                        measuredWidthPx = measurer
+                            .measure(AnnotatedString(headlineText), headlineStyle)
+                            .size
+                            .width,
+                        availableWidthPx = rowWidthPx
                     )
+                }
+                Text(
+                    text = headlineText,
+                    style = headlineStyle.copy(fontSize = sizeSp.sp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag("today_headline")
                 )
             }
+            if (!arabicLeads) {
+                Text(
+                    text = currentPrayer.arabicName,
+                    fontFamily = FontFamily.Serif,
+                    fontSize = 20.sp,
+                    lineHeight = 26.sp,
+                    color = muted,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+            }
+
+            Spacer(Modifier.height(space.sm))
+
+            // An affordance rather than an instruction. A rule reads as "there is
+            // more under here", and the container still carries the instruction for
+            // anyone who cannot see it.
+            Box(
+                modifier = Modifier
+                    .size(width = 64.dp, height = 20.dp)
+                    .clearAndSetSemantics { },
+                contentAlignment = Alignment.Center
+            ) {
+                Canvas(Modifier.fillMaxSize()) {
+                    drawLine(
+                        color = muted.copy(alpha = 0.55f),
+                        start = Offset(0f, size.height / 2f),
+                        end = Offset(size.width, size.height / 2f),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(space.lg))
+
+            if (nextPrayer != null) {
+                // One line at normal sizes, differentiated by weight and colour
+                // instead of by size. At 200% Dynamic Type the three pieces wrap
+                // rather than clipping: the label stays quiet, while the prayer
+                // name and its time both carry full-strength ink.
+                val size = 17.sp
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(
+                        space.sm,
+                        Alignment.CenterHorizontally
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(space.xxs)
+                ) {
+                    Text(
+                        text = strings.dateNav.nextPrayerPrefix.uppercase(),
+                        fontSize = size,
+                        lineHeight = size * 1.2f,
+                        fontWeight = FontWeight.SemiBold,
+                        color = muted.copy(alpha = 0.7f),
+                        maxLines = 1
+                    )
+                    Text(
+                        text = strings.prayerName(nextPrayer),
+                        fontSize = size,
+                        lineHeight = size * 1.2f,
+                        fontWeight = FontWeight.SemiBold,
+                        color = onSurface,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = nextTime?.format(timeFormatter) ?: "--:--",
+                        fontSize = size,
+                        lineHeight = size * 1.2f,
+                        fontWeight = FontWeight.SemiBold,
+                        color = onSurface,
+                        maxLines = 1
+                    )
+                }
+
+                Spacer(Modifier.height(space.md))
+
+                if (isToday && countdown.isNotEmpty()) {
+                    CountdownRule(accent = accent, countdown = countdown)
+                }
+
+                Spacer(Modifier.height(space.sm))
+
+                val dateLocale = appLocale(LocalLanguage.current)
+                val gregorianFormatter = remember(dateLocale) {
+                    DateTimeFormatter.ofPattern("EEEE d MMMM", dateLocale)
+                }
+                DaySelector(
+                    selectedDate = date,
+                    isToday = isToday,
+                    hijriLabel = "${hijri.day} ${hijri.monthNameEn} ${hijri.year} AH",
+                    gregorianLabel = date.format(gregorianFormatter),
+                    onPrevious = { onShiftDate(dayOffset - 1) },
+                    onNext = { onShiftDate(dayOffset + 1) },
+                    onToday = { onShiftDate(0) }
+                )
+            }
+
+            Spacer(Modifier.height(space.lg))
+
+            // The day as a list. A dotted leader is doing real work here: it is
+            // what lets a column of names and a column of times be read as pairs
+            // without a rule between every row.
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(space.sm)
+            ) {
+                PrayerListOrder.forEach { prayer ->
+                    PrayerTimeRow(
+                        prayer = prayer,
+                        time = times[prayer]?.format(timeFormatter) ?: "--:--",
+                        state = prayerRowState(
+                            isToday = isToday,
+                            prayer = prayer,
+                            currentPrayer = currentPrayer,
+                            nextPrayer = nextPrayer
+                        )
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(space.lg))
+
+            // Two rows, in the same hand as the times above them: a label, a dotted
+            // leader, an optional value. Not cards.
+            LinkRow(
+                label = LocalStrings.current.dateNav.fullHijriMonth,
+                onClick = onShowMonth
+            )
         }
-
-        Spacer(Modifier.height(space.lg))
-
-        // Two rows, in the same hand as the times above them: a label, a dotted
-        // leader, a value. Not cards - a card around each would give them more
-        // weight than the prayer times, and the whole point is that they are the
-        // quiet way out of this page.
-        LinkRow(
-            label = LocalStrings.current.dateNav.fullHijriMonth,
-            onClick = onShowMonth
-        )
-        LinkRow(
-            label = LocalStrings.current.continueReading,
-            value = continueReadingRef,
-            onClick = onContinueReadingClick
-        )
     }
 }
 
@@ -652,9 +629,7 @@ private fun CountdownRule(accent: Color, countdown: String, modifier: Modifier =
 private fun RuleSegment(accent: Color, modifier: Modifier) {
     Canvas(modifier = modifier.height(1.dp)) {
         drawLine(
-            brush = Brush.horizontalGradient(
-                colors = listOf(Color.Transparent, accent.copy(alpha = 0.3f), Color.Transparent)
-            ),
+            color = accent.copy(alpha = 0.35f),
             start = Offset(0f, size.height / 2f),
             end = Offset(size.width, size.height / 2f),
             strokeWidth = size.height

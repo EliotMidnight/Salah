@@ -15,7 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.example.engine.MagneticFieldStatus
 import com.example.engine.QiblaEngine
-import com.example.engine.PrayerNotificationManager
+import com.example.engine.formatBearing
+import com.example.ui.LocationStatus
 import com.example.ui.SalahUiState
 import com.example.ui.components.BannerTone
 import com.example.ui.components.ConfirmDialog
@@ -23,6 +24,9 @@ import com.example.ui.components.OptionSheet
 import com.example.ui.components.ScreenScaffold
 import com.example.ui.components.StatusBanner
 import com.example.ui.localization.LocalStrings
+import com.example.ui.system.LocationAccessBanner
+import com.example.ui.system.SystemAccessActions
+import com.example.ui.system.SystemAccessState
 import com.example.ui.theme.Space
 import kotlin.math.abs
 
@@ -34,6 +38,8 @@ fun QiblaScreen(
     state: SalahUiState,
     onToggleTrueNorth: () -> Unit = {},
     onFetchLocation: () -> Unit = {},
+    systemAccess: SystemAccessState = SystemAccessState(),
+    systemAccessActions: SystemAccessActions = SystemAccessActions(),
     modifier: Modifier = Modifier
 ) {
     val space = Space.current
@@ -64,6 +70,18 @@ fun QiblaScreen(
                     message = strings.more.magneticInterferenceMessage,
                     tone = BannerTone.Warning,
                     modifier = Modifier.testTag("magnetic_warning")
+                )
+                Spacer(Modifier.height(space.md))
+            }
+
+            if (state.locationStatus is LocationStatus.Failed ||
+                systemAccess.locationIssue != null
+            ) {
+                LocationAccessBanner(
+                    status = state.locationStatus,
+                    systemAccess = systemAccess,
+                    actions = systemAccessActions,
+                    modifier = Modifier.testTag("qibla_location_banner")
                 )
                 Spacer(Modifier.height(space.md))
             }
@@ -112,7 +130,6 @@ private fun QiblaHeader(
 ) {
     val space = Space.current
     val strings = LocalStrings.current
-    val semantic = com.example.ui.theme.Tonal.colors
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
@@ -122,9 +139,9 @@ private fun QiblaHeader(
         )
         Spacer(Modifier.height(space.xxs))
         Text(
-            text = PrayerNotificationManager.formatBearing(bearing),
+            text = formatBearing(bearing),
             style = MaterialTheme.typography.displayMedium,
-            color = if (isFacing) semantic.success else MaterialTheme.colorScheme.onSurface
+            color = if (isFacing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
         )
         Spacer(Modifier.height(space.xs))
         Text(
@@ -199,7 +216,7 @@ private fun SunReferenceSheet(state: SalahUiState, onDismiss: () -> Unit) {
             items = listOf(
                 strings.more.sunAzimuth to String.format(java.util.Locale.US, "%.1f°", sun.azimuth),
                 strings.more.sunAltitudeValue to String.format(java.util.Locale.US, "%.1f°", sun.altitude),
-                strings.more.qiblaBearing to PrayerNotificationManager.formatBearing(state.qiblaBearing)
+                strings.more.qiblaBearing to formatBearing(state.qiblaBearing)
             )
         )
     }

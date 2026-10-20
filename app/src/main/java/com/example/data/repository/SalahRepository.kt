@@ -6,26 +6,16 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
-import com.example.data.local.BookmarkEntity
-import com.example.data.local.ContinueReadingEntity
 import com.example.data.local.PrayerLogEntity
 import com.example.data.local.SalahDao
 import com.example.data.location.AppLocationService
 import com.example.data.location.LocationStore
 import com.example.data.location.LocationFetchResult
-import com.example.data.model.AdhanSound
 import com.example.data.model.CalculationMethod
 import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
 import com.example.data.model.PrayerAdjustments
-import com.example.data.model.QuranFontFace
-import com.example.data.model.QuranPaperTone
-import com.example.data.model.QuranPinchTarget
-import com.example.data.model.QuranReadingLayout
-import com.example.data.model.QuranReadingOptions
-import com.example.data.model.QuranScrollDirection
 import com.example.data.model.UserLocation
-import com.example.engine.AdhanAudioSynthesizer
 import com.example.service.PrayerAlarmScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -73,69 +63,29 @@ class SalahRepository(
     private val _vibrateOnlyFlow = MutableStateFlow(prefs.getBoolean("pref_vibrate_only", false))
     val vibrateOnlyFlow: StateFlow<Boolean> = _vibrateOnlyFlow.asStateFlow()
 
-    private val _quranReadingOptions = MutableStateFlow(loadQuranReadingOptions())
-    val quranReadingOptions: StateFlow<QuranReadingOptions> = _quranReadingOptions.asStateFlow()
+    private val _globalSilentFlow = MutableStateFlow(prefs.getBoolean("pref_global_silent", false))
+    val globalSilentFlow: StateFlow<Boolean> = _globalSilentFlow.asStateFlow()
 
-    private companion object Keys {
-        const val KEY_QURAN_LAYOUT = "pref_quran_layout"
-        const val KEY_QURAN_PER_VERSE = "pref_quran_per_verse"
-        const val KEY_QURAN_SCROLL = "pref_quran_scroll"
-        const val KEY_QURAN_PINCH = "pref_quran_pinch_target"
-        const val KEY_QURAN_PAPER = "pref_quran_paper"
-        const val KEY_QURAN_FONT = "pref_quran_font"
-        const val KEY_QURAN_ARABIC_SCALE = "pref_quran_arabic_scale"
-        const val KEY_QURAN_TRANSLATION_SCALE = "pref_quran_translation_scale"
-        const val KEY_QURAN_SHOW_TRANSLATION = "pref_quran_show_translation"
-    }
     private val _languageFlow = MutableStateFlow(prefs.getString("pref_language", "English") ?: "English")
     val languageFlow: StateFlow<String> = _languageFlow.asStateFlow()
 
     private val _themeFlow = MutableStateFlow(prefs.getString("pref_theme", "System Default") ?: "System Default")
     val themeFlow: StateFlow<String> = _themeFlow.asStateFlow()
 
+    // Null means "no choice stored yet". The repository deliberately does not
+    // name the default: that is `Accent.DEFAULT`, which lives with the theme.
+    private val _accentFlow = MutableStateFlow(prefs.getString("pref_accent", null))
+    val accentFlow: StateFlow<String?> = _accentFlow.asStateFlow()
+
+    private val _reduceTransparencyFlow =
+        MutableStateFlow(prefs.getBoolean("pref_reduce_transparency", false))
+    val reduceTransparencyFlow: StateFlow<Boolean> = _reduceTransparencyFlow.asStateFlow()
+
     private val _timeFormat24hFlow = MutableStateFlow(prefs.getBoolean("pref_time_format_24h", true))
     val timeFormat24hFlow: StateFlow<Boolean> = _timeFormat24hFlow.asStateFlow()
 
-    /**
-     * The chosen adhan, as an [AdhanSound] and not a label.
-     *
-     * A label was the stored value, which made "which sound is this" a string-matching
-     * question in four places - see [AdhanSound] for how they disagreed. The stored
-     * key is read through [AdhanSound.fromStored], so a preference written by a build
-     * that saved the label still resolves.
-     */
-    private val _adhanSoundFlow = MutableStateFlow(
-        AdhanSound.fromStored(prefs.getString("pref_adhan_sound", ""))
-    )
-    val adhanSoundFlow: StateFlow<AdhanSound> = _adhanSoundFlow.asStateFlow()
-
     private val _hijriAdjustmentFlow = MutableStateFlow(prefs.getInt("pref_hijri_adj", 0))
     val hijriAdjustmentFlow: StateFlow<Int> = _hijriAdjustmentFlow.asStateFlow()
-
-    private val _reciterFlow = MutableStateFlow(prefs.getString("pref_reciter", "Mishary Rashid Alafasy") ?: "Mishary Rashid Alafasy")
-    val reciterFlow: StateFlow<String> = _reciterFlow.asStateFlow()
-
-    /**
-     * The speed the reader's verse recitation is played at.
-     *
-     * A reader preference like the reciter it sits beside: chosen once, applied
-     * to every verse afterwards, and not re-asked at the next session. The player
-     * receives it as a command and carries no opinion of its own.
-     */
-    private val _playbackSpeedFlow = MutableStateFlow(prefs.getFloat("pref_verse_speed", 1f))
-    val playbackSpeedFlow: StateFlow<Float> = _playbackSpeedFlow.asStateFlow()
-
-    private val _globalSilentFlow = MutableStateFlow(prefs.getBoolean("pref_global_silent", false))
-    val globalSilentFlow: StateFlow<Boolean> = _globalSilentFlow.asStateFlow()
-
-    private val _autoSilentDuringPrayerFlow = MutableStateFlow(prefs.getBoolean("pref_auto_silent_during_prayer", false))
-    val autoSilentDuringPrayerFlow: StateFlow<Boolean> = _autoSilentDuringPrayerFlow.asStateFlow()
-
-    private val _autoSilentDurationFlow = MutableStateFlow(prefs.getInt("pref_auto_silent_duration", 20))
-    val autoSilentDurationFlow: StateFlow<Int> = _autoSilentDurationFlow.asStateFlow()
-
-    private val _adhanVolumeFlow = MutableStateFlow(prefs.getFloat("pref_adhan_volume", 0.85f))
-    val adhanVolumeFlow: StateFlow<Float> = _adhanVolumeFlow.asStateFlow()
 
     private val _prePrayerOffsetFlow = MutableStateFlow(prefs.getInt("pref_pre_prayer_offset", 10))
     val prePrayerOffsetFlow: StateFlow<Int> = _prePrayerOffsetFlow.asStateFlow()
@@ -246,24 +196,6 @@ class SalahRepository(
     fun setGlobalSilentMode(enabled: Boolean) {
         prefs.edit().putBoolean("pref_global_silent", enabled).apply()
         _globalSilentFlow.value = enabled
-        if (enabled) {
-            AdhanAudioSynthesizer.stop()
-        }
-    }
-
-    fun setAutoSilentDuringPrayer(enabled: Boolean) {
-        prefs.edit().putBoolean("pref_auto_silent_during_prayer", enabled).apply()
-        _autoSilentDuringPrayerFlow.value = enabled
-    }
-
-    fun setAutoSilentDuration(minutes: Int) {
-        prefs.edit().putInt("pref_auto_silent_duration", minutes).apply()
-        _autoSilentDurationFlow.value = minutes
-    }
-
-    fun setAdhanVolume(volume: Float) {
-        prefs.edit().putFloat("pref_adhan_volume", volume).apply()
-        _adhanVolumeFlow.value = volume
     }
 
     fun setPrePrayerOffset(offset: Int) {
@@ -280,70 +212,6 @@ class SalahRepository(
         PrayerAlarmScheduler.scheduleAllPrayers(context)
     }
 
-    // -------------------------------------------------------------------------
-    // Quran reading options
-    //
-    // One value, persisted key by key. Grouping them in a single data class
-    // ([QuranReadingOptions]) means the reader is handed a coherent set rather
-    // than seven independent flows that can disagree with each other.
-    //
-    // The invariants that do remain - the scales stay inside the range the
-    // sliders can express, and the retired per-ayah layout becomes per-page
-    // with verses broken out - live in [QuranReadingOptions.normalise], which
-    // both this loader and [saveQuranReadingOptions] go through. There are no
-    // rules about layout and axis any more, because there are no combinations
-    // to repair: both axes work in both layouts.
-    // ---------------------------------------------------------------------
-
-    private fun loadQuranReadingOptions(): QuranReadingOptions {
-        // The raw key is read separately from the parsed layout because the one
-        // value that no longer parses - the retired per-ayah layout - still has
-        // to be recognised in order to migrate it.
-        val legacyLayoutKey = prefs.getString(KEY_QURAN_LAYOUT, null)
-        return QuranReadingOptions.normalise(
-            QuranReadingOptions(
-                layout = QuranReadingLayout.fromKey(legacyLayoutKey),
-                perVerse = prefs.getBoolean(KEY_QURAN_PER_VERSE, false),
-                scroll = QuranScrollDirection.fromKey(prefs.getString(KEY_QURAN_SCROLL, null)),
-                pinchTarget = QuranPinchTarget.fromKey(prefs.getString(KEY_QURAN_PINCH, null)),
-                paper = QuranPaperTone.fromKey(prefs.getString(KEY_QURAN_PAPER, null)),
-                font = QuranFontFace.fromKey(prefs.getString(KEY_QURAN_FONT, null)),
-                // Migrated, not shared. The reader's Arabic size used to live in
-                // `pref_quran_scale`; it now lives with the rest of the reading
-                // options. Reading the old key on the way in means someone who set
-                // 130% before this change keeps 130% instead of silently snapping
-                // back to 100%. The two are then independent, and the old slider in
-                // Settings is a summary rather than a second writer.
-                arabicScale = if (prefs.contains(KEY_QURAN_ARABIC_SCALE)) {
-                    prefs.getFloat(KEY_QURAN_ARABIC_SCALE, 1f)
-                } else {
-                    prefs.getFloat("pref_quran_scale", 1f)
-                },
-                translationScale = prefs.getFloat(KEY_QURAN_TRANSLATION_SCALE, 1f),
-                showTranslation = prefs.getBoolean(KEY_QURAN_SHOW_TRANSLATION, false)
-            ),
-            legacyLayoutKey = legacyLayoutKey
-        )
-    }
-
-    fun saveQuranReadingOptions(options: QuranReadingOptions) {
-        // Normalised on the way in as well as on the way out. A value that
-        // cannot be re-read back identically is not a saved preference.
-        val safe = QuranReadingOptions.normalise(options)
-        prefs.edit()
-            .putString(KEY_QURAN_LAYOUT, safe.layout.key)
-            .putBoolean(KEY_QURAN_PER_VERSE, safe.perVerse)
-            .putString(KEY_QURAN_SCROLL, safe.scroll.key)
-            .putString(KEY_QURAN_PINCH, safe.pinchTarget.key)
-            .putString(KEY_QURAN_PAPER, safe.paper.key)
-            .putString(KEY_QURAN_FONT, safe.font.key)
-            .putFloat(KEY_QURAN_ARABIC_SCALE, safe.arabicScale)
-            .putFloat(KEY_QURAN_TRANSLATION_SCALE, safe.translationScale)
-            .putBoolean(KEY_QURAN_SHOW_TRANSLATION, safe.showTranslation)
-            .apply()
-        _quranReadingOptions.value = safe
-    }
-
     fun setLanguage(language: String) {
         prefs.edit().putString("pref_language", language).apply()
         _languageFlow.value = language
@@ -354,35 +222,24 @@ class SalahRepository(
         _themeFlow.value = theme
     }
 
+    fun setAccent(accentKey: String) {
+        prefs.edit().putString("pref_accent", accentKey).apply()
+        _accentFlow.value = accentKey
+    }
+
+    fun setReduceTransparency(enabled: Boolean) {
+        prefs.edit().putBoolean("pref_reduce_transparency", enabled).apply()
+        _reduceTransparencyFlow.value = enabled
+    }
+
     fun setTimeFormat24h(is24h: Boolean) {
         prefs.edit().putBoolean("pref_time_format_24h", is24h).apply()
         _timeFormat24hFlow.value = is24h
     }
 
-    /**
-     * Stores the sound's **key**, never its label.
-     *
-     * A label in storage is a translated string in a file the app does not own, which
-     * is why [AdhanSound.fromStored] has to accept one. Nothing new writes one.
-     */
-    fun setAdhanSound(sound: AdhanSound) {
-        prefs.edit().putString("pref_adhan_sound", sound.key).apply()
-        _adhanSoundFlow.value = sound
-    }
-
     fun setHijriAdjustment(adjustment: Int) {
         prefs.edit().putInt("pref_hijri_adj", adjustment).apply()
         _hijriAdjustmentFlow.value = adjustment
-    }
-
-    fun setReciter(reciter: String) {
-        prefs.edit().putString("pref_reciter", reciter).apply()
-        _reciterFlow.value = reciter
-    }
-
-    fun setPlaybackSpeed(speed: Float) {
-        prefs.edit().putFloat("pref_verse_speed", speed).apply()
-        _playbackSpeedFlow.value = speed
     }
 
     // Room DB delegated methods
@@ -392,34 +249,6 @@ class SalahRepository(
 
     suspend fun savePrayerLog(log: PrayerLogEntity) {
         dao.insertOrUpdatePrayerLog(log)
-    }
-
-    fun getContinueReading(): Flow<ContinueReadingEntity?> {
-        return dao.getContinueReading()
-    }
-
-    suspend fun saveContinueReading(continueReading: ContinueReadingEntity) {
-        dao.saveContinueReading(continueReading)
-    }
-
-    fun getBookmarks(): Flow<List<BookmarkEntity>> {
-        return dao.getAllBookmarks()
-    }
-
-    /**
-     * Saves a verse, or removes it if it is already saved.
-     */
-    suspend fun toggleBookmark(surahNumber: Int, ayahNumber: Int) {
-        if (dao.isBookmarked(surahNumber, ayahNumber) > 0) {
-            dao.deleteBookmark(surahNumber, ayahNumber)
-        } else {
-            dao.insertBookmark(
-                BookmarkEntity(
-                    surahNumber = surahNumber,
-                    ayahNumber = ayahNumber
-                )
-            )
-        }
     }
 
     init {
@@ -432,8 +261,7 @@ class SalahRepository(
                 object : ConnectivityManager.NetworkCallback() {
                     override fun onAvailable(network: Network) {
                         // Reported, not acted on. There is nothing to fetch: prayer
-                        // times are computed here, and the only network use is the
-                        // audio stream, which the player handles itself.
+                        // times are computed here.
                         _isOnlineFlow.value = true
                     }
 
@@ -461,9 +289,7 @@ class SalahRepository(
      * `refreshOnlineDataSync` and its entire body was to write one of two
      * sentences into [lastCheckedFlow] - "Online · Synced at 14:32 (Verified
      * Ephemeris)" or "Offline · Calculated on-device (14:32)" - having contacted
-     * no server. The app has no HTTP client; `grep` for one returns nothing. A
-     * reader who pressed "Network Synchronization & Source" was told their prayer
-     * times had been verified against a source that does not exist.
+     * no server. The app has no HTTP client; `grep` for one returns nothing.
      */
     fun refreshConnectivity() {
         _isOnlineFlow.value = checkIsOnline()

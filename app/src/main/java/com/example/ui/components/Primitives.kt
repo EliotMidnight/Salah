@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.graphics.Color
@@ -76,6 +77,7 @@ fun ActionRow(
     value: String? = null,
     showChevron: Boolean = true,
     enabled: Boolean = true,
+    destructive: Boolean = false,
     isSelected: Boolean = false,
     selectedLabel: String? = null,
     contentDescription: String? = null,
@@ -83,6 +85,15 @@ fun ActionRow(
 ) {
     val space = Space.current
     val minTarget = MaterialTheme.layoutMetrics.minTouchTarget
+    // At accessibility sizes a title and a long value cannot share a line
+    // without one of them ellipsizing. Stacking the value under the title gives
+    // both the full row width; the normal side-by-side layout is unchanged.
+    val largeText = LocalDensity.current.fontScale >= 1.3f
+    val valueColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
     Surface(
         color = Color.Transparent,
@@ -123,10 +134,10 @@ fun ActionRow(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = if (enabled) {
-                        MaterialTheme.colorScheme.onSurface
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
+                    color = when {
+                        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
+                        destructive -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.onSurface
                     },
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -137,24 +148,31 @@ fun ActionRow(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (value != null && largeText) {
+                    Spacer(Modifier.height(space.xxs))
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = valueColor,
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
-            if (value != null) {
+            if (value != null && !largeText) {
                 Spacer(Modifier.width(space.sm))
                 Text(
                     text = value,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (isSelected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    maxLines = 1,
+                    color = valueColor,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.End,
                     modifier = Modifier.widthIn(max = 140.dp)
                 )
             }
@@ -192,22 +210,23 @@ fun RowDivider(
 
 /**
  * A labelled container for a related group of rows.
+ *
+ * In the monochrome theme there is no visible container: page and surface are the
+ * same colour, so a card would be invisible. Grouping comes from the hairline
+ * dividers between items and the spacing around the group.
  */
 @Composable
 fun SectionGroup(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.medium,
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = Space.current.lg, vertical = Space.current.xs),
-            content = { content() }
-        )
-    }
+    val space = Space.current
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = space.lg, vertical = space.xs),
+        content = { content() }
+    )
 }
 
 /**
@@ -279,6 +298,9 @@ enum class BannerTone { Neutral, Success, Warning, Danger }
 
 /**
  * One inline message: information, confirmation, a warning, or a failure.
+ *
+ * Monochrome: no filled colour block. Tone is signalled by an icon and by the
+ * semantic colour of that icon, not by tinting the whole container.
  */
 @Composable
 fun StatusBanner(
@@ -291,19 +313,15 @@ fun StatusBanner(
     val space = Space.current
     val semantic = Tonal.colors
 
-    val (container, content) = when (tone) {
-        BannerTone.Neutral ->
-            MaterialTheme.colorScheme.surfaceContainer to MaterialTheme.colorScheme.onSurface
-        BannerTone.Success ->
-            semantic.successContainer to semantic.onSuccessContainer
-        BannerTone.Warning ->
-            semantic.warningContainer to semantic.onWarningContainer
-        BannerTone.Danger ->
-            MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+    val iconTint = when (tone) {
+        BannerTone.Neutral -> MaterialTheme.colorScheme.onSurfaceVariant
+        BannerTone.Success -> semantic.success
+        BannerTone.Warning -> semantic.warning
+        BannerTone.Danger -> MaterialTheme.colorScheme.error
     }
 
     Surface(
-        color = container,
+        color = MaterialTheme.colorScheme.surfaceContainer,
         shape = MaterialTheme.shapes.small,
         modifier = modifier.fillMaxWidth()
     ) {
@@ -315,7 +333,7 @@ fun StatusBanner(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = content,
+                    tint = iconTint,
                     modifier = Modifier
                         .size(IconSize.md)
                         .clearAndSetSemantics { }
@@ -325,7 +343,7 @@ fun StatusBanner(
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodyMedium,
-                color = content,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f)
             )
             if (action != null) {
@@ -510,7 +528,7 @@ fun SegmentedOptions(
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             },
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             textAlign = TextAlign.Center
                         )
@@ -548,8 +566,10 @@ fun LabeledSlider(
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
             )
+            Spacer(Modifier.width(space.sm))
             Text(
                 text = valueText,
                 style = MaterialTheme.typography.titleSmall,

@@ -44,8 +44,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -62,12 +60,14 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.engine.MagneticFieldStatus
 import com.example.engine.QiblaGuidance
-import com.example.engine.PrayerNotificationManager
+import com.example.engine.formatBearing
 import com.example.ui.SalahUiState
+import com.example.ui.formatCoordinates
+import com.example.ui.isolateLtr
 import com.example.ui.components.ActionRow
 import com.example.ui.components.DetailList
 import com.example.ui.components.RowDivider
@@ -76,7 +76,6 @@ import com.example.ui.components.SegmentedOptions
 import com.example.ui.localization.LocalStrings
 import com.example.ui.theme.IconSize
 import com.example.ui.theme.Space
-import com.example.ui.theme.Tonal
 import java.util.Locale
 
 import kotlin.math.cos
@@ -97,11 +96,8 @@ fun QiblaDirectionFinder(
     val isFacing = state.isFacingQibla
     val strings = LocalStrings.current
     val space = Space.current
-    val successColors = Tonal.colors
     val colorScheme = MaterialTheme.colorScheme
     val primaryColor = colorScheme.primary
-    val tertiaryColor = colorScheme.tertiary
-    val errorColor = colorScheme.error
     val onSurfaceColor = colorScheme.onSurface
     val onSurfaceVariant = colorScheme.onSurfaceVariant
     val outlineVariantColor = colorScheme.outlineVariant
@@ -117,10 +113,9 @@ fun QiblaDirectionFinder(
         label = "animatedHeading"
     )
 
-    val alignedSuccess = successColors.success
-    val alignedGold = tertiaryColor
+    // Monochrome: the dial ring is accent when facing, neutral otherwise.
     val dialRingColor by animateColorAsState(
-        targetValue = if (isFacing) alignedSuccess else outlineVariantColor,
+        targetValue = if (isFacing) primaryColor else outlineVariantColor,
         label = "dialRingColor"
     )
 
@@ -178,16 +173,9 @@ fun QiblaDirectionFinder(
 
                 if (isFacing) {
                     drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                alignedSuccess.copy(alpha = 0.20f),
-                                Color.Transparent
-                            ),
-                            center = center,
-                            radius = outerRadius + 18.dp.toPx()
-                        ),
-                        radius = outerRadius + 18.dp.toPx(),
-                        center = center
+                        color = primaryColor.copy(alpha = 0.15f),
+                        center = center,
+                        radius = outerRadius + 18.dp.toPx()
                     )
                 }
 
@@ -209,9 +197,14 @@ fun QiblaDirectionFinder(
                 )
 
                 rotate(degrees = -animatedHeading, pivot = center) {
+                    // The dial is a fixed-size instrument: its etched labels stop
+                    // growing at 135% so the cardinal letters cannot collide with
+                    // the degree numerals. Every value they show is set at full
+                    // Dynamic Type in the readouts above.
+                    val dialFontScale = fontScale.coerceAtMost(1.35f)
                     val cardinalPaint = android.graphics.Paint().apply {
                         isAntiAlias = true
-                        textSize = 14.sp.toPx()
+                        textSize = 14.dp.toPx() * dialFontScale
                         textAlign = android.graphics.Paint.Align.CENTER
                         typeface = android.graphics.Typeface.DEFAULT_BOLD
                     }
@@ -264,9 +257,10 @@ fun QiblaDirectionFinder(
                         )
                     }
 
-                    // The degree numerals, every 30 degrees. Drawn upright and
-                    // not counter-rotated, so they stay readable as the card
-                    // turns rather than spinning with it.
+                    // The degree numerals, every 30 degrees except the four
+                    // cardinal points: there the letter is the label, and
+                    // printing "270" under "W" only made both harder to read.
+                    // They rotate with the card rather than staying upright.
                     val degreePaint = android.graphics.Paint().apply {
                         isAntiAlias = true
                         textAlign = android.graphics.Paint.Align.CENTER
@@ -275,7 +269,8 @@ fun QiblaDirectionFinder(
                     for (deg in 0 until 360 step 30) {
                         val rad = Math.toRadians(deg.toDouble())
                         val is90 = deg % 90 == 0
-                        degreePaint.textSize = (if (is90) 11.sp else 9.sp).toPx()
+                        degreePaint.textSize =
+                            (if (is90) 11.dp else 9.dp).toPx() * dialFontScale
                         degreePaint.color = if (is90) {
                             onSurfaceColor.copy(alpha = 0.5f).toArgb()
                         } else {
@@ -286,16 +281,27 @@ fun QiblaDirectionFinder(
                         } else {
                             android.graphics.Typeface.DEFAULT
                         }
-                        val x = center.x + labelRadius * sin(rad).toFloat()
-                        val y = center.y - labelRadius * cos(rad).toFloat() + (degreePaint.textSize / 3f)
-                        drawContext.canvas.nativeCanvas.drawText("$deg", x, y, degreePaint)
+                        if (deg % 90 != 0) {
+                            val x = center.x + labelRadius * sin(rad).toFloat()
+                            val y = center.y - labelRadius * cos(rad).toFloat() +
+                                (degreePaint.textSize / 3f)
+                            drawContext.canvas.nativeCanvas.drawText("$deg", x, y, degreePaint)
+                        }
                     }
 
-                    listOf(0 to "N", 90 to "E", 180 to "S", 270 to "W").forEach { (deg, label) ->
+                    // The dial is a physical instrument and must not mirror in
+                    // RTL, but its labels are still words: use the localized
+                    // abbreviations rather than hard-coded English letters.
+                    listOf(
+                        0f to strings.more.reader.cardinalNorth,
+                        90f to strings.more.reader.cardinalEast,
+                        180f to strings.more.reader.cardinalSouth,
+                        270f to strings.more.reader.cardinalWest
+                    ).forEach { (deg, label) ->
                         val rad = Math.toRadians(deg.toDouble())
-                        val isNorth = deg == 0
+                        val isNorth = deg == 0f
                         cardinalPaint.color =
-                            if (isNorth) errorColor.toArgb() else onSurfaceColor.toArgb()
+                            if (isNorth) primaryColor.toArgb() else onSurfaceColor.toArgb()
                         val r = outerRadius - 44.dp.toPx()
                         val x = center.x + r * sin(rad).toFloat()
                         val y = center.y - r * cos(rad).toFloat() + (cardinalPaint.textSize / 3f)
@@ -308,16 +314,6 @@ fun QiblaDirectionFinder(
                     val perpX = -dirY
                     val perpY = dirX
 
-                    val kaabaDist = outerRadius - 16.dp.toPx()
-                    val kaabaCenter = Offset(center.x + dirX * kaabaDist, center.y + dirY * kaabaDist)
-                    val kaabaHalf = 7.dp.toPx()
-                    drawRect(
-                        color = if (isFacing) alignedSuccess else alignedGold,
-                        topLeft = Offset(kaabaCenter.x - kaabaHalf, kaabaCenter.y - kaabaHalf),
-                        size = Size(kaabaHalf * 2, kaabaHalf * 2),
-                        style = Stroke(width = 1.5.dp.toPx())
-                    )
-
                     val tipDist = outerRadius - 30.dp.toPx()
                     val halfWidth = 3.dp.toPx()
                     val tip = Offset(center.x + dirX * tipDist, center.y + dirY * tipDist)
@@ -329,14 +325,7 @@ fun QiblaDirectionFinder(
                     }
                     drawPath(
                         path = needle,
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                if (isFacing) alignedSuccess else primaryColor,
-                                if (isFacing) alignedSuccess else alignedGold
-                            ),
-                            start = center,
-                            end = tip
-                        ),
+                        color = if (isFacing) primaryColor else primaryColor,
                         style = Fill
                     )
                 }
@@ -350,12 +339,12 @@ fun QiblaDirectionFinder(
                 }
                 drawPath(
                     path = arrow,
-                    color = if (isFacing) alignedSuccess else primaryColor,
+                    color = primaryColor,
                     style = Fill
                 )
 
                 if (isFacing) {
-                    drawCircle(color = alignedSuccess, radius = 15.dp.toPx(), center = center)
+                    drawCircle(color = primaryColor, radius = 15.dp.toPx(), center = center)
                     val check = Path().apply {
                         moveTo(center.x - 6.dp.toPx(), center.y)
                         lineTo(center.x - 1.5.dp.toPx(), center.y + 4.5.dp.toPx())
@@ -363,7 +352,7 @@ fun QiblaDirectionFinder(
                     }
                     drawPath(
                         path = check,
-                        color = successColors.onSuccess,
+                        color = Color.White,
                         style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                     )
                 } else {
@@ -385,7 +374,7 @@ fun QiblaDirectionFinder(
                 Icon(
                     imageVector = Icons.Default.Sensors,
                     contentDescription = null,
-                    tint = alignedGold,
+                    tint = onSurfaceVariant,
                     modifier = Modifier
                         .size(IconSize.xs)
                         .clearAndSetSemantics { }
@@ -414,7 +403,9 @@ fun QiblaDirectionFinder(
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    text = "${String.format(Locale.US, "%,d", state.distanceToKaabaKm)} km",
+                    text = isolateLtr(
+                        "${String.format(Locale.US, "%,d", state.distanceToKaabaKm)} km"
+                    ),
                     style = MaterialTheme.typography.titleMedium,
                     color = onSurfaceColor
                 )
@@ -444,13 +435,8 @@ fun QiblaDirectionFinder(
             ActionRow(
                 title = strings.more.locateMe,
                 subtitle = "${state.location.name}, ${state.location.country} · " +
-                    String.format(
-                        Locale.US,
-                        "%.4f°, %.4f° · %s",
-                        state.location.latitude,
-                        state.location.longitude,
-                        if (state.location.isGps) strings.more.gpsCached else strings.more.selectedCity
-                    ),
+                    "${formatCoordinates(state.location.latitude, state.location.longitude, 4)} · " +
+                    if (state.location.isGps) strings.more.gpsCached else strings.more.selectedCity,
                 icon = Icons.Default.MyLocation,
                 value = if (state.isLocating) strings.more.loading else null,
                 enabled = !state.isLocating,
@@ -494,7 +480,6 @@ private fun DialReadout(
 ) {
     val strings = LocalStrings.current
     val space = Space.current
-    val success = Tonal.colors.success
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -521,14 +506,10 @@ private fun DialReadout(
             )
             ReadoutFigure(
                 label = strings.more.qiblaBearing,
-                value = PrayerNotificationManager.formatBearing(bearing),
-                // The cardinal sector of the bearing, exactly as the heading beside
-                // it. The two figures are read side by side, so they are captioned
-                // by the same rule: the numeral says how far, the sector says which
-                // way. A caption that is not a direction belongs on neither of them.
+                value = formatBearing(bearing),
                 caption = strings.more.reader.cardinal(bearing),
                 captionColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                valueColor = if (isFacing) success else MaterialTheme.colorScheme.primary,
+                valueColor = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -554,7 +535,9 @@ private fun ReadoutFigure(
             text = label.uppercase(),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(space.xxs))
         Text(
@@ -585,14 +568,13 @@ private fun QiblaGuidanceBanner(
     val guidance = state.qiblaGuidance
     val isFacing = guidance.isAligned
     val space = Space.current
-    val successColors = Tonal.colors
     val colorScheme = MaterialTheme.colorScheme
     val strings = LocalStrings.current
 
     val (bannerColor, contentColor, guidanceText) = when (guidance.direction) {
         QiblaGuidance.Direction.ON_TARGET -> Triple(
-            successColors.success,
-            successColors.onSuccess,
+            colorScheme.primary,
+            Color.White,
             strings.more.alignedWithQibla
         )
         QiblaGuidance.Direction.RIGHT -> Triple(

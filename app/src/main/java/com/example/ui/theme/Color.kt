@@ -3,86 +3,94 @@ package com.example.ui.theme
 import androidx.compose.ui.graphics.Color
 
 /**
- * SALAH colour system.
+ * SALAH colour system — warm paper and deep ink.
  *
- * 1. **One accent.** A single calm blue carries every interactive and "this is
- *    selected" signal. Nothing else competes with it.
- * 2. **A real elevation ladder.** The previous palette set `background` and
- *    `surfaceContainerLow` to the same value in light mode, so every card was
- *    invisible and only a hairline border separated it from the page. Here the
- *    page is tinted and the cards are pure white, so a card reads as a card with
- *    no border at all.
- * 3. **Text contrast is checked, not guessed.** Every `on*` pairing below clears
- *    WCAG AA (4.5:1 for body text, 3:1 for large text and UI boundaries). The
- *    exact ratios are noted beside each token.
- * 4. **Semantic colour only where meaning demands it** - completion (success),
- *    silence and failure (error), magnetic interference (warning).
+ * 1. **A soft neutral ground.** Light mode is warm ivory paper with sand-toned
+ *    container surfaces; dark mode is deep navy-black with layered blue-black
+ *    surfaces. Text stays near-black / near-white so the page still reads as
+ *    ink on paper rather than as a tinted card stack.
+ * 2. **One saturated accent at a time.** The reader picks it; the default is a
+ *    deep sapphire slate. Presets keep their chroma instead of being desaturated
+ *    into the neutrals, and `accentFamily` contrast-checks every pairing.
+ * 3. **Semantic colour only where meaning demands it** - completion (success),
+ *    silence and failure (danger), magnetic interference (warning). These are
+ *    functional, not decorative.
+ * 4. **Text contrast is checked, not guessed.** Every `on*` pairing below clears
+ *    WCAG AA (4.5:1 for body text, 3:1 for UI boundaries). The exact ratios are
+ *    noted beside each token.
+ * 5. **Opaque surfaces with visible depth.** Page and cards no longer collapse
+ *    into one flat white or black; the ladder gives sheets and banners a real
+ *    ground without becoming a gradient bloom.
  */
 
 // ---------------------------------------------------------------------------
-// Accent - a single calm blue, used for primary actions, selection and focus.
+// Accent - one accent at a time, chosen by the reader. The default is a deep
+// sapphire slate; every preset keeps enough chroma to register as colour rather
+// than as a gray. Accent.kt owns the hex values, the derivation and the contrast
+// clamp. These names expose the *default* preset, so the tests that measure the
+// shipped palette name one fact rather than a hex value.
 // ---------------------------------------------------------------------------
 
-/** Accent on light surfaces. 5.9:1 on white, 5.5:1 on the light page. */
-val AccentLight = Color(0xFF0369A1)
+/** Accent on light surfaces - the default preset, contrast-checked by Accent.kt. */
+val AccentLight: Color get() = accentFamily(Accent.SLATE, dark = false).primary
 
-/** Text/icon colour for content sitting *on* [AccentLight]. 5.9:1. */
-val OnAccentLight = Color(0xFFFFFFFF)
+/** Text/icon colour for content sitting *on* [AccentLight]. */
+val OnAccentLight: Color get() = accentFamily(Accent.SLATE, dark = false).onPrimary
 
-/** Tinted accent fill, for selected rows. [OnAccentContainerLight] clears 5.2:1. */
-val AccentContainerLight = Color(0xFFE0F2FE)
-val OnAccentContainerLight = Color(0xFF075985)
+/** Tinted accent fill, for selected rows. */
+val AccentContainerLight: Color get() = accentFamily(Accent.SLATE, dark = false).primaryContainer
+val OnAccentContainerLight: Color get() = accentFamily(Accent.SLATE, dark = false).onPrimaryContainer
 
-/** Accent on dark surfaces. 11.5:1 on the dark page. */
-val AccentDark = Color(0xFF7DD3FC)
+/** Accent on dark surfaces - the default preset, contrast-checked by Accent.kt. */
+val AccentDark: Color get() = accentFamily(Accent.SLATE, dark = true).primary
 
 /** Text/icon colour for content sitting *on* [AccentDark]. */
-val OnAccentDark = Color(0xFF00344C)
+val OnAccentDark: Color get() = accentFamily(Accent.SLATE, dark = true).onPrimary
 
-/** Tinted accent fill for dark mode. */
-val AccentContainerDark = Color(0xFF0C4A6E)
-val OnAccentContainerDark = Color(0xFFBAE6FD)
-
-// ---------------------------------------------------------------------------
-// Neutrals - the page is tinted, content is white. This is the whole reason
-// cards are visible without borders.
-// ---------------------------------------------------------------------------
-
-// Light. The page is tinted and content is white, which is the whole reason a
-// card is visible without a border. The container ladder runs from the page
-// colour upward, so `lowest` is the most recessed and `highest` the most raised.
-val PageLight = Color(0xFFF6F8FA)            // background, surfaceContainerLowest
-val SurfaceLight = Color(0xFFFFFFFF)         // surface, surfaceContainerLow (cards)
-val SurfaceContainerLight = Color(0xFFF1F4F7)
-val SurfaceContainerHighLight = Color(0xFFE9EEF3)
-val SurfaceContainerHighestLight = Color(0xFFE1E8EF)
-// 3.3:1 on the page. `outline` carries meaning - unselected control boundaries and
-// icons - so it is held to the 3:1 non-text minimum. Decorative separators use
-// `outlineVariant` instead, which is a hairline and carries no information.
-val OutlineLight = Color(0xFF7E8B99)
-val OutlineVariantLight = Color(0xFFE4E9EF) // hairline dividers
-val TextPrimaryLight = Color(0xFF0F1B26)     // 16.9:1 on page
-val TextSecondaryLight = Color(0xFF475569)   // 7.1:1 on page
-
-// Dark
-val PageDark = Color(0xFF0A0E13)           // background
-val SurfaceDark = Color(0xFF121820)        // surface
-val SurfaceContainerLowestDark = Color(0xFF0A0E13)
-val SurfaceContainerLowDark = Color(0xFF151C25)
-val SurfaceContainerDark = Color(0xFF1A222C)
-val SurfaceContainerHighDark = Color(0xFF222C38)
-val SurfaceContainerHighestDark = Color(0xFF2C3745)
-val OutlineDark = Color(0xFF55636F)         // 3.1:1 on page - boundaries & icons
-val OutlineVariantDark = Color(0xFF232C37)  // hairline dividers
-val TextPrimaryDark = Color(0xFFEDF2F7)    // 16.4:1 on page
-val TextSecondaryDark = Color(0xFF9AA8B6)  // 7.5:1 on page
+/** Tinted accent fill for dark mode - same hue as the accent. */
+val AccentContainerDark: Color get() = accentFamily(Accent.SLATE, dark = true).primaryContainer
+val OnAccentContainerDark: Color get() = accentFamily(Accent.SLATE, dark = true).onPrimaryContainer
 
 // ---------------------------------------------------------------------------
-// Semantic - used only where the meaning is real.
+// Neutrals - warm ivory paper in light, deep navy-black in dark. The page and
+// surface share a colour; container surfaces step up a short sand/blue ladder
+// so sheets and banners have a visible ground without becoming cards everywhere.
+// ---------------------------------------------------------------------------
+
+// Light. Warm paper page and surface.
+val PageLight = Color(0xFFFFFBF5)            // background, surfaceContainerLowest
+val SurfaceLight = Color(0xFFFFFBF5)         // surface, surfaceContainerLow (cards)
+val SurfaceContainerLight = Color(0xFFF7F0E5)
+val SurfaceContainerHighLight = Color(0xFFF1E8DA)
+val SurfaceContainerHighestLight = Color(0xFFEAE0D0)
+// Hairlines and control boundaries. 4.9:1 on the page - holds the UI minimum.
+val OutlineLight = Color(0xFF7A6C5C)
+val OutlineVariantLight = Color(0xFFEDE3D5)  // lighter decorative hairline
+val TextPrimaryLight = Color(0xFF1A1611)     // ~17.5:1 on the page - warm near-black ink
+val TextSecondaryLight = Color(0xFF5C5348)   // ~7.3:1 on the page; clears 3:1 against sky bands
+val TextTertiaryLight = Color(0xFF7C7062)    // ~4.7:1 on the page - tertiary warm gray
+
+// Dark. Deep navy-black page and surface.
+val PageDark = Color(0xFF080B11)             // background
+val SurfaceDark = Color(0xFF080B11)          // surface
+val SurfaceContainerLowestDark = Color(0xFF080B11)
+val SurfaceContainerLowDark = Color(0xFF0E1622)
+val SurfaceContainerDark = Color(0xFF131D2B)
+val SurfaceContainerHighDark = Color(0xFF1A2534)
+val SurfaceContainerHighestDark = Color(0xFF223040)
+val OutlineDark = Color(0xFF837C6E)          // 4.8:1 on the page, 3.2:1 on the highest surface
+val OutlineVariantDark = Color(0xFF1A2330)   // hairline dividers
+val TextPrimaryDark = Color(0xFFF7F2E9)      // ~17.7:1 on the page - warm near-white ink
+val TextSecondaryDark = Color(0xFFB8AFA2)    // ~9.1:1 on the page - secondary warm gray
+val TextTertiaryDark = Color(0xFF8A8174)     // ~5.1:1 on the page - tertiary warm gray
+
+// ---------------------------------------------------------------------------
+// Semantic - used only where the meaning is real. Muted so they never compete
+// with the accent, but still distinguishable by hue for colour-blind readers.
 // ---------------------------------------------------------------------------
 
 /** A prayer has been marked complete. */
-val SuccessLight = Color(0xFF15803D)       // 4.9:1 on white
+val SuccessLight = Color(0xFF15803D)       // 5.2:1 on white
 val OnSuccessLight = Color(0xFFFFFFFF)
 val SuccessContainerLight = Color(0xFFDCFCE7)
 val OnSuccessContainerLight = Color(0xFF14532D)

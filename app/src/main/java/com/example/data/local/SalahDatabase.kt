@@ -9,11 +9,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [
-        PrayerLogEntity::class,
-        ContinueReadingEntity::class,
-        BookmarkEntity::class
+        PrayerLogEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class SalahDatabase : RoomDatabase() {
@@ -172,6 +170,22 @@ abstract class SalahDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * **6 to 7.** Drops the Quran reader's `bookmarks` and `continue_reading`
+         * tables now that the reader is gone. `prayer_logs` is untouched, so the
+         * reader's removal costs no prayer-completion data.
+         *
+         * The tables are dropped rather than recreated: there is no entity left to
+         * validate, and a `DROP TABLE` is the one statement that cannot drift from
+         * the schema Room expects.
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `bookmarks`")
+                db.execSQL("DROP TABLE IF EXISTS `continue_reading`")
+            }
+        }
+
         fun getDatabase(context: Context): SalahDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -179,13 +193,12 @@ abstract class SalahDatabase : RoomDatabase() {
                     SalahDatabase::class.java,
                     "salah_quiet.db"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     // Only reached when there is no path from the installed version -
                     // which for a shipped app means a downgrade or a version nobody
                     // wrote a migration for. It is still destructive, and that is now a
-                    // real cost rather than a theoretical one, because the database holds
-                    // the reader's bookmarks and reading position. Anything that adds a
-                    // version must add a migration here.
+                    // real cost rather than a theoretical one, because the database
+                    // holds the reader's prayer logs.
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance

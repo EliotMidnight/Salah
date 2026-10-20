@@ -80,7 +80,10 @@ fun ScreenScaffold(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = MaterialTheme.layoutMetrics.contentMaxWidth)
-                    .padding(horizontal = space.lg + sides),
+                    .padding(horizontal = space.lg + sides)
+                    // The dock floats over the screen, so the scrollable content
+                    // needs its own clearance; the bottomBar slot is empty.
+                    .padding(bottom = dockContentPadding()),
                 content = { content(PaddingValues(bottom = space.xxxl)) }
             )
         }

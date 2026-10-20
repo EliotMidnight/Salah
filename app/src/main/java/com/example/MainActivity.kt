@@ -3,55 +3,39 @@ package com.example
 import android.Manifest
 import android.app.Activity
 import android.content.Context
-import android.content.pm.PackageManager
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.Explore
-import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,14 +46,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.testTagsAsResourceId
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -79,25 +58,40 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.engine.PrayerNotificationManager
 import com.example.ui.SalahViewModel
+import com.example.ui.components.DockItem
+import com.example.ui.components.GlassChromeScaffold
+import com.example.ui.components.SalahDock
 import com.example.ui.home.TodayScreen
 import com.example.ui.localization.LocalStrings
 import com.example.ui.localization.ProvideAppLanguage
-import com.example.ui.prayer.PrayerScreen
 import com.example.ui.qibla.QiblaScreen
-import com.example.ui.quran.QuranScreen
 import com.example.ui.settings.SettingsScreen
+import com.example.ui.system.NotificationIssue
+import com.example.ui.system.PermissionAccess
+import com.example.ui.system.SystemAccessActions
+import com.example.ui.system.SystemPermissionPrefs
+import com.example.ui.system.canScheduleExactAlarms
+import com.example.ui.system.hasLocationPermission
+import com.example.ui.system.hasNotificationPermission
+import com.example.ui.system.isLocationEnabled
+import com.example.ui.system.rememberSystemAccessState
+import com.example.ui.theme.Glass
+import com.example.ui.theme.LocalGlassEnabled
+import com.example.ui.theme.LocalHighContrast
 import com.example.ui.theme.Motion
 import com.example.ui.theme.SalahReduceMotion
 import com.example.ui.theme.SalahTheme
 import com.example.ui.theme.Space
+import com.example.ui.theme.glassEnabled
 import com.example.ui.theme.screenEnterBack
 import com.example.ui.theme.screenEnterForward
 import com.example.ui.theme.screenExitBack
 import com.example.ui.theme.screenExitForward
 
 /**
- * The five top-level destinations.
+ * The three top-level destinations.
  */
 enum class SalahDestination(
     val route: String,
@@ -105,64 +99,21 @@ enum class SalahDestination(
     val unselectedIcon: ImageVector
 ) {
     TODAY("today", Icons.Filled.WbSunny, Icons.Outlined.WbSunny),
-    PRAYER("prayer", Icons.Filled.Schedule, Icons.Outlined.Schedule),
-    QURAN("quran", Icons.Filled.AutoStories, Icons.Outlined.AutoStories),
     QIBLA("qibla", Icons.Filled.Explore, Icons.Outlined.Explore),
     SETTINGS("settings", Icons.Filled.Settings, Icons.Outlined.Settings)
 }
 
 /**
- * The four destinations the bottom bar offers.
+ * The three destinations the bottom bar offers.
  *
- * A list rather than `entries`, because the bar is not every destination. Prayer
- * is one of the app's real screens - calculation method, madhhab, the month
- * table, and the day switcher the Today page follows - but it is reached from
- * Settings rather than from the dock, so five tabs became four and the phone's
- * dock stopped being the widest thing on screen.
+ * Every destination is on the bar - Today, Qibla, Settings - so the dock is the
+ * app's only navigation and nothing lives behind an extra tap.
  */
 private val SALAH_TABS = listOf(
     SalahDestination.TODAY,
-    SalahDestination.QURAN,
     SalahDestination.QIBLA,
     SalahDestination.SETTINGS
 )
-
-/**
- * Whether the reader is taking the whole screen, this moment.
- *
- * The flag alone is not the answer, and that was the bug: the reader's
- * immersive flag hid the dock and the status bar on Today, and - because it was
- * persisted - on the first screen after every relaunch. A takeover is a fact
- * about the destination on screen, so the route is half the answer, and the
- * dock's visibility and the reset below both read this one predicate so they
- * cannot disagree about when the takeover is in force.
- */
-internal fun readerTakesTheScreen(route: String, immersive: Boolean): Boolean =
-    immersive && route == SalahDestination.QURAN.route
-
-/**
- * Ends the reader's takeover when the destination under it changes.
- *
- * The derivation above keeps the chrome honest on the frame the route changes;
- * this keeps the flag honest, so a later visit to the reader starts with the
- * chrome in place instead of reliving a mode the reader had left. The flag is
- * session state now - nothing writes it to preferences - so this is the only
- * thing that ends it besides the reader's own toggle.
- *
- * Scoped to the route rather than run from the destination's `onDispose`,
- * because a destination leaves the screen by more paths than it can call back
- * on: a tab switch and a back-stack pop are not the same callback.
- */
-@Composable
-internal fun ClearImmersiveWhenLeavingReader(
-    route: String,
-    immersive: Boolean,
-    onClear: () -> Unit
-) {
-    LaunchedEffect(route, immersive) {
-        if (immersive && !readerTakesTheScreen(route, immersive)) onClear()
-    }
-}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -174,8 +125,9 @@ class MainActivity : ComponentActivity() {
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
             // The app has three explicit theme choices plus "match system".
-            // Dynamic (wallpaper) colour is intentionally not offered: it cannot
-            // be contrast-checked, and this design fixes its accent on purpose.
+            // The accent is a separate choice: a muted preset, or the wallpaper
+            // primary on Android 12+. Only the accent family follows that choice;
+            // the monochrome surfaces and every contrast claim stay put.
             val darkTheme = when (uiState.appTheme) {
                 "Dark Mode (OLED)" -> true
                 "Clean Light" -> false
@@ -207,7 +159,7 @@ class MainActivity : ComponentActivity() {
             SideEffect { Motion.reduced = reduceMotion }
 
             CompositionLocalProvider(SalahReduceMotion.Local provides reduceMotion) {
-                SalahTheme(darkTheme = darkTheme) {
+                SalahTheme(darkTheme = darkTheme, accentKey = uiState.accent) {
                     ProvideAppLanguage(language = uiState.language) {
                         SalahApp(viewModel = viewModel)
                     }
@@ -226,39 +178,39 @@ private fun SalahApp(viewModel: SalahViewModel) {
     val context = LocalContext.current
     val strings = LocalStrings.current
 
-    // Whether the reader is taking the whole screen, this moment.
-    //
-    // Derived from the route, not read from the flag alone. The flag says the
-    // reader asked for the takeover; the route says they are still in the
-    // reader. Reading the flag by itself is how the dock and the status bar
-    // stayed hidden on Today, and the flag below is cleared the moment the
-    // reader leaves so a return does not relive the mode.
-    val immersive = readerTakesTheScreen(currentRoute, uiState.isQuranImmersive)
-    ClearImmersiveWhenLeavingReader(
-        route = currentRoute,
-        immersive = uiState.isQuranImmersive,
-        onClear = { viewModel.setQuranImmersive(false) }
+    val prayerChannelId = PrayerNotificationManager.channelIdFor(
+        isGlobalSilent = uiState.isGlobalSilentMode,
+        vibrateOnly = uiState.vibrateOnly
     )
+    var systemAccessRevision by remember { mutableStateOf(0) }
+    val systemAccess = rememberSystemAccessState(prayerChannelId, systemAccessRevision)
+    var pendingAlertEnable by rememberSaveable { mutableStateOf<AlertKind?>(null) }
+    var pendingLocationFix by rememberSaveable { mutableStateOf(false) }
+    var pendingExactAlarmReschedule by rememberSaveable { mutableStateOf(false) }
 
-    // The status bar belongs to the window, but whether it is hidden is a fact
-    // about the destination on screen, so it is set here where the route is
-    // known rather than inside the reader - setting it from a screen that gets
-    // navigated away from is exactly how it was left hidden on Today.
-    val view = LocalView.current
-    if (!view.isInEditMode) {
-        SideEffect {
-            val window = (view.context as? Activity)?.window ?: return@SideEffect
-            val controller = WindowCompat.getInsetsController(window, view)
-            if (immersive) {
-                controller.hide(WindowInsetsCompat.Type.statusBars())
-                // Swipe it back rather than never showing it again: a bar
-                // the user cannot summon with a gesture is a bar they will
-                // assume the app got stuck behind.
-                controller.systemBarsBehavior =
-                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            } else {
-                controller.show(WindowInsetsCompat.Type.statusBars())
-            }
+    // The one place the chrome material's runtime gate is decided. The build
+    // flag, the platform capability, Reduce Transparency and Android's high
+    // contrast text setting all resolve to a single boolean; no screen or
+    // component re-decides it.
+    val highContrast = rememberHighContrast()
+    val glassOn = glassEnabled(
+        buildEnabled = Glass.ENABLED,
+        sdkInt = Build.VERSION.SDK_INT,
+        reduceTransparency = uiState.reduceTransparency,
+        highContrast = highContrast
+    )
+    val dockItems = remember(strings) {
+        SALAH_TABS.map { destination ->
+            DockItem(
+                route = destination.route,
+                label = when (destination) {
+                    SalahDestination.TODAY -> strings.navToday
+                    SalahDestination.QIBLA -> strings.navQibla
+                    SalahDestination.SETTINGS -> strings.navSettings
+                },
+                selectedIcon = destination.selectedIcon,
+                unselectedIcon = destination.unselectedIcon
+            )
         }
     }
 
@@ -272,42 +224,214 @@ private fun SalahApp(viewModel: SalahViewModel) {
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        if (permissions.values.any { it }) viewModel.fetchCurrentLocation()
+        SystemPermissionPrefs.markLocationAsked(context)
+        if (permissions.values.any { it }) {
+            viewModel.fetchCurrentLocation()
+        } else {
+            viewModel.reportLocationPermissionDenied()
+        }
+        systemAccessRevision++
+    }
+
+    fun applyPendingAlertEnable() {
+        when (pendingAlertEnable) {
+            AlertKind.ADHAN -> viewModel.setAdhanNotification(true)
+            AlertKind.PRE_PRAYER -> viewModel.setPrePrayerAlert(true)
+            null -> Unit
+        }
+        pendingAlertEnable = null
     }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        // Remember the answer either way. If the user declines we must not ask
-        // again on the next cold start - only the system prompt is limited to
-        // two attempts, and our own rationale must not become a nag.
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_ASKED_NOTIFICATIONS, true)
-
-            .apply()
+        // Remember that the system prompt actually ran. This is what
+        // distinguishes "never asked" from "asked and declined", so a later
+        // tap on an alert switch can send the reader to system settings
+        // instead of showing a prompt Android will ignore.
+        SystemPermissionPrefs.markNotificationPrompted(context)
+        if (granted) {
+            applyPendingAlertEnable()
+        } else {
+            pendingAlertEnable = null
+        }
+        systemAccessRevision++
     }
 
-    // The permission is no longer requested blind on the first frame.
-    //
-    // It used to fire from LaunchedEffect(Unit), so a first-time user met a
-    // system dialog for notifications before they had seen the app, understood
-    // that it is a prayer app, or been given any reason to say yes. Android's
-    // own guidance and the Material permission pattern both ask for the
-    // rationale first and in context.
-    //
-    // Nothing else in the app requested this permission, so simply deleting the
-    // effect would have meant notifications were never asked for and the adhan
-    // feature failed silently. The rationale below is what replaced it.
-    val askNotifications = remember {
-        !context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_ASKED_NOTIFICATIONS, false)
+    fun startAppDetails() {
+        runCatching {
+            context.startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", context.packageName, null)
+                )
+            )
+        }
     }
-    var showNotificationRationale by rememberSaveable { mutableStateOf(askNotifications) }
 
-    val requestNotifications = {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    fun openAppSettings() {
+        // If the reader grants the permission while app settings is open, the
+        // ON_RESUME below can finish the location attempt they started.
+        pendingLocationFix = true
+        startAppDetails()
+    }
+
+    fun openLocationSettings() {
+        pendingLocationFix = true
+        runCatching {
+            context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+        }
+    }
+
+    fun openPrayerChannelSettings() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            startAppDetails()
+            return
+        }
+        runCatching {
+            context.startActivity(
+                Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    putExtra(Settings.EXTRA_CHANNEL_ID, prayerChannelId)
+                }
+            )
+        }.onFailure { startAppDetails() }
+    }
+
+    fun openNotificationSettings() {
+        if (systemAccess.notificationIssue == NotificationIssue.CHANNEL_BLOCKED) {
+            openPrayerChannelSettings()
+            return
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            startAppDetails()
+            return
+        }
+        runCatching {
+            context.startActivity(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                }
+            )
+        }.onFailure { startAppDetails() }
+    }
+
+    fun requestExactAlarms() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        pendingExactAlarmReschedule = true
+        runCatching {
+            context.startActivity(
+                Intent(
+                    Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                    "package:${context.packageName}".toUri()
+                )
+            )
+        }.onFailure {
+            pendingExactAlarmReschedule = false
+            startAppDetails()
+        }
+    }
+
+    fun requestLocationFix() {
+        when {
+            hasLocationPermission(context) -> viewModel.fetchCurrentLocation()
+            systemAccess.locationPermission == PermissionAccess.DENIED_PERMANENTLY -> {
+                viewModel.reportLocationPermissionDenied()
+                openAppSettings()
+            }
+
+            else -> locationPermissionLauncher.launch(LOCATION_PERMISSIONS)
+        }
+    }
+
+    fun requestNotificationPermission() {
+        when {
+            hasNotificationPermission(context) -> applyPendingAlertEnable()
+            systemAccess.notificationPermission == PermissionAccess.DENIED_PERMANENTLY ->
+                openNotificationSettings()
+
+            else -> {
+                // hasNotificationPermission() is always true below Android 13,
+                // so this branch is the Android 13+ prompt. Record the launch
+                // before the dialog appears: a result may not come back if the
+                // process is killed while it is open.
+                SystemPermissionPrefs.markNotificationPrompted(context)
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    // Permission is asked for only when a switch asks for it.
+    //
+    // A rationale sheet on the first frame is still a first-frame request in
+    // disguise: it asks a reader to decide about prayer alerts before they have
+    // seen the prayer page or chosen an alert. The rationale therefore starts
+    // closed and is opened by [requestAlerts] at the moment an Adhan or
+    // pre-prayer switch is turned on. If the reader never enables either, the
+    // app never interrupts them about notifications.
+    var showNotificationRationale by rememberSaveable { mutableStateOf(false) }
+
+    fun requestAlerts(kind: AlertKind) {
+        if (systemAccess.notificationsReady) {
+            when (kind) {
+                AlertKind.ADHAN -> viewModel.setAdhanNotification(true)
+                AlertKind.PRE_PRAYER -> viewModel.setPrePrayerAlert(true)
+            }
+            pendingAlertEnable = null
+            return
+        }
+
+        if (systemAccess.notificationIssue == NotificationIssue.PERMISSION_DENIED) {
+            if (systemAccess.notificationPermission == PermissionAccess.CAN_ASK) {
+                pendingAlertEnable = kind
+                showNotificationRationale = true
+            } else {
+                pendingAlertEnable = null
+                openNotificationSettings()
+            }
+            return
+        }
+
+        // The app-level switch or the channel is off. Honour the intent and let
+        // the banner beside the switch say which system screen fixes it.
+        when (kind) {
+            AlertKind.ADHAN -> viewModel.setAdhanNotification(true)
+            AlertKind.PRE_PRAYER -> viewModel.setPrePrayerAlert(true)
+        }
+        pendingAlertEnable = null
+    }
+
+    val systemAccessActions = SystemAccessActions(
+        requestLocation = { requestLocationFix() },
+        openLocationSettings = { openLocationSettings() },
+        openAppSettings = { openAppSettings() },
+        retryLocation = { viewModel.fetchCurrentLocation() },
+        requestNotifications = { requestNotificationPermission() },
+        openNotificationSettings = { openNotificationSettings() },
+        openPrayerChannelSettings = { openPrayerChannelSettings() },
+        requestExactAlarms = { requestExactAlarms() },
+        sendTestNotification = {
+            if (systemAccess.notificationsReady) viewModel.sendTestNotification()
+        }
+    )
+
+    // Returning from a system settings screen is the only signal that the
+    // reader may have changed something the app could not observe. Finish the
+    // action they started instead of making them tap again.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        if (pendingLocationFix &&
+            hasLocationPermission(context) &&
+            isLocationEnabled(context)
+        ) {
+            pendingLocationFix = false
+            viewModel.fetchCurrentLocation()
+        }
+        if (pendingExactAlarmReschedule && canScheduleExactAlarms(context)) {
+            pendingExactAlarmReschedule = false
+            viewModel.reschedulePrayers()
+        }
+        if (pendingAlertEnable != null && hasNotificationPermission(context)) {
+            applyPendingAlertEnable()
         }
     }
 
@@ -321,26 +445,24 @@ private fun SalahApp(viewModel: SalahViewModel) {
         }
     }
 
-    // The dock is hidden while the reader is taking the screen. Not just made
-    // transparent: the reader's own controls are already off the top of the screen
-    // at that point, so leaving a navigation bar under a full page of Arabic would
-    // be the one piece of chrome the reader could not dismiss. The value is the
-    // route-derived one above, so "hidden" cannot be true on a destination the
-    // reader is not in.
-
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = WindowInsets(0.dp),
-        bottomBar = {
-            if (!immersive) {
-                SalahNavigationBar(navController = navController, currentRoute = currentRoute)
+    CompositionLocalProvider(
+        LocalGlassEnabled provides glassOn,
+        LocalHighContrast provides highContrast
+    ) {
+        GlassChromeScaffold(
+            dock = { dockModifier ->
+                SalahDock(
+                    items = dockItems,
+                    selectedRoute = currentRoute,
+                    onSelect = { route ->
+                        val destination = SALAH_TABS.firstOrNull { it.route == route }
+                        if (destination != null && destination.route != currentRoute) {
+                            navController.navigateTab(destination)
+                        }
+                    },
+                    modifier = dockModifier
+                )
             }
-        }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = if (immersive) 0.dp else innerPadding.calculateBottomPadding())
         ) {
             // Each destination owns its own top bar, so the title always answers
             // "where am I?" on every screen instead of only on some of them.
@@ -356,36 +478,7 @@ private fun SalahApp(viewModel: SalahViewModel) {
                 composable(SalahDestination.TODAY.route) {
                     TodayScreen(
                         state = uiState,
-                        onLocationClick = { navController.navigateTab(SalahDestination.SETTINGS) },
-                        onContinueReadingClick = {
-                            viewModel.jumpToContinueReading()
-                            navController.navigateTab(SalahDestination.QURAN)
-                        }
-                    )
-                }
-
-                composable(SalahDestination.PRAYER.route) {
-                    PrayerScreen(
-                        state = uiState,
-                        onMethodChange = viewModel::setCalculationMethod,
-                        onMadhhabChange = viewModel::setMadhhab,
-                        onSelectDate = viewModel::setSelectedDate
-                    )
-                }
-
-                composable(SalahDestination.QURAN.route) {
-                    QuranScreen(
-                        state = uiState,
-                        onOpen = viewModel::requestOpen,
-                        onOpenConsumed = viewModel::onOpenConsumed,
-                        onAyahViewed = viewModel::onAyahViewed,
-                        onToggleBookmark = viewModel::toggleBookmark,
-                        onTogglePlayAyah = viewModel::togglePlayAyah,
-                        onStopAudio = viewModel::stopAudio,
-                        onCycleSpeed = viewModel::cyclePlaybackSpeed,
-                        onCycleRepeat = viewModel::cycleVerseRepeat,
-                        onOptionsChange = viewModel::setQuranReadingOptions,
-                        onImmersiveChange = viewModel::setQuranImmersive
+                        onLocationClick = { navController.navigateTab(SalahDestination.SETTINGS) }
                     )
                 }
 
@@ -401,13 +494,9 @@ private fun SalahApp(viewModel: SalahViewModel) {
                     QiblaScreen(
                         state = uiState,
                         onToggleTrueNorth = viewModel::toggleTrueNorth,
-                        onFetchLocation = {
-                            if (hasLocationPermission(context)) {
-                                viewModel.fetchCurrentLocation()
-                            } else {
-                                locationPermissionLauncher.launch(LOCATION_PERMISSIONS)
-                            }
-                        }
+                        onFetchLocation = { requestLocationFix() },
+                        systemAccess = systemAccess,
+                        systemAccessActions = systemAccessActions
                     )
                 }
 
@@ -419,31 +508,39 @@ private fun SalahApp(viewModel: SalahViewModel) {
                     SettingsScreen(
                         state = uiState,
                         onLocationSelect = viewModel::setLocation,
-                        onFetchLocation = { locationPermissionLauncher.launch(LOCATION_PERMISSIONS) },
+                        onFetchLocation = { requestLocationFix() },
                         onMethodSelect = viewModel::setCalculationMethod,
                         onMadhhabSelect = viewModel::setMadhhab,
                         onAdjustmentsChange = viewModel::setAdjustments,
-                        onAdhanToggle = viewModel::setAdhanNotification,
-                        onPrePrayerToggle = viewModel::setPrePrayerAlert,
+                        onAdhanToggle = { enabled ->
+                            if (enabled) {
+                                requestAlerts(AlertKind.ADHAN)
+                            } else {
+                                pendingAlertEnable = null
+                                viewModel.setAdhanNotification(false)
+                            }
+                        },
+                        onPrePrayerToggle = { enabled ->
+                            if (enabled) {
+                                requestAlerts(AlertKind.PRE_PRAYER)
+                            } else {
+                                pendingAlertEnable = null
+                                viewModel.setPrePrayerAlert(false)
+                            }
+                        },
                         onVibrateOnlyToggle = viewModel::setVibrateOnly,
                         onGlobalSilentToggle = viewModel::toggleGlobalSilentMode,
-                        onAutoSilentDuringPrayerToggle = viewModel::toggleAutoSilentDuringPrayer,
-                        onAutoSilentDurationChange = viewModel::setAutoSilentDuration,
                         onLanguageSelect = viewModel::setLanguage,
                         onThemeSelect = viewModel::setAppTheme,
+                        onAccentSelect = viewModel::setAccent,
+                        onReduceTransparencyChange = viewModel::setReduceTransparency,
                         onTimeFormatToggle = viewModel::setTimeFormat24h,
-                        onAdhanSoundSelect = viewModel::setAdhanSound,
                         onHijriAdjustmentChange = viewModel::setHijriAdjustment,
-                        onReciterSelect = viewModel::setReciter,
-                        onPrePrayerOffsetChange = viewModel::setPrePrayerOffsetMinutes,
-                        onAdhanVolumeChange = viewModel::setAdhanVolume,
-                        onPrayerAlertModeChange = viewModel::setPrayerAlertMode,
-                        onPlayAudioPreview = viewModel::playAudioPreview,
-                        onStopAudioPreview = viewModel::stopAudioPreview,
                         onCustomLocationSave = viewModel::setCustomLocation,
                         onReschedulePrayers = viewModel::reschedulePrayers,
                         onResetAllSettings = viewModel::resetAllSettings,
-                        onOpenPrayer = { navController.navigateTab(SalahDestination.PRAYER) },
+                        systemAccess = systemAccess,
+                        systemAccessActions = systemAccessActions
                     )
                 }
             }
@@ -454,21 +551,18 @@ private fun SalahApp(viewModel: SalahViewModel) {
         NotificationRationaleSheet(
             onAllow = {
                 showNotificationRationale = false
-                requestNotifications()
+                requestNotificationPermission()
             },
             onDismiss = {
                 showNotificationRationale = false
-                context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                    .edit()
-                    .putBoolean(KEY_ASKED_NOTIFICATIONS, true)
-                    .apply()
+                pendingAlertEnable = null
             }
         )
     }
 }
 
-private const val PREFS = "salah_permission_state"
-private const val KEY_ASKED_NOTIFICATIONS = "asked_post_notifications"
+/** Which alert switch asked for notification permission. */
+private enum class AlertKind { ADHAN, PRE_PRAYER }
 
 /**
  * Explains why notifications are wanted before the system prompt appears.
@@ -528,12 +622,6 @@ private val LOCATION_PERMISSIONS = arrayOf(
     Manifest.permission.ACCESS_COARSE_LOCATION
 )
 
-private fun hasLocationPermission(context: android.content.Context): Boolean =
-    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
-        PackageManager.PERMISSION_GRANTED ||
-        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
-        PackageManager.PERMISSION_GRANTED
-
 /** Tab switching that keeps one entry per tab and restores each tab's state. */
 private fun NavHostController.navigateTab(destination: SalahDestination) {
     navigate(destination.route) {
@@ -543,71 +631,35 @@ private fun NavHostController.navigateTab(destination: SalahDestination) {
     }
 }
 
-@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+/**
+ * Android's "high contrast text" setting.
+ *
+ * API 36 exposes it through [AccessibilityManager]. Older platforms only have
+ * the secure setting the system toggle writes; the key is hidden from the SDK
+ * but is marked `@Readable` and has not changed since it was introduced. The
+ * value is re-read on resume, because that is the normal path back from the
+ * system Settings screen and avoids registering two different listeners for the
+ * two API paths.
+ */
 @Composable
-private fun SalahNavigationBar(
-    navController: NavHostController,
-    currentRoute: String
-) {
-    val strings = LocalStrings.current
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp
-    ) {
-        NavigationBar(
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            tonalElevation = 0.dp,
-            windowInsets = WindowInsets.navigationBars
-        ) {
-            SALAH_TABS.forEach { destination ->
-                val selected = currentRoute == destination.route
-                val label = when (destination) {
-                    SalahDestination.TODAY -> strings.navToday
-                    SalahDestination.PRAYER -> strings.navPrayer
-                    SalahDestination.QURAN -> strings.navQuran
-                    SalahDestination.QIBLA -> strings.navQibla
-                    SalahDestination.SETTINGS -> strings.navSettings
-                }
-
-                NavigationBarItem(
-                    selected = selected,
-                    onClick = { if (!selected) navController.navigateTab(destination) },
-                    // The label is the accessible name; a second announcement from
-                    // the icon would just repeat it.
-                    icon = {
-                        Icon(
-                            imageVector = if (selected) destination.selectedIcon else destination.unselectedIcon,
-                            contentDescription = null
-                        )
-                    },
-                    label = {
-                        AnimatedContent(
-                            targetState = label,
-                            transitionSpec = {
-                                fadeIn(tween(Motion.duration(Motion.MICRO))) togetherWith
-                                    fadeOut(tween(Motion.duration(Motion.MICRO)))
-                            },
-                            label = "nav_label"
-                        ) { text ->
-                            Text(
-                                text = text,
-                                style = MaterialTheme.typography.labelMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    modifier = Modifier.semantics { testTagsAsResourceId = true }
-                )
-            }
-        }
+private fun rememberHighContrast(): Boolean {
+    val context = LocalContext.current
+    var enabled by remember(context) { mutableStateOf(readHighContrast(context)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        enabled = readHighContrast(context)
     }
+    return enabled
 }
+
+private fun readHighContrast(context: Context): Boolean = runCatching {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+        (context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager)
+            ?.isHighContrastTextEnabled == true
+    } else {
+        Settings.Secure.getInt(
+            context.contentResolver,
+            "high_text_contrast_enabled",
+            0
+        ) == 1
+    }
+}.getOrDefault(false)

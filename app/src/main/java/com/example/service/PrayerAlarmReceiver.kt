@@ -32,6 +32,21 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent == null) return
 
+        // System broadcasts are the only actions an external caller may deliver.
+        // The alarm, silence and prayer-completion actions are app-internal and
+        // must not be spoofable by another app with the same action string.
+        val appInternalActions = setOf(
+            ACTION_PRAYER_ALARM,
+            ACTION_PRE_PRAYER_ALARM,
+            ACTION_SILENCE_ACTIVE,
+            ACTION_MARK_PRAYED
+        )
+        if (intent.action in appInternalActions &&
+            android.os.Binder.getCallingUid() != android.os.Process.myUid()
+        ) {
+            return
+        }
+
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED,
@@ -71,7 +86,7 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             }
 
             ACTION_SILENCE_ACTIVE -> {
-                // Immediately silence adhan audio synthesis
+                // Stop the active alert
                 PrayerAlertService.stopActiveAlert(context)
             }
 
@@ -81,7 +96,7 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
 
                 // Dismiss active notification
                 PrayerNotificationManager.dismissNotification(context, prayer)
-                // Stop any audio alert
+                // Stop any active alert
                 PrayerAlertService.stopActiveAlert(context)
 
                 // Persist prayer completion in local Room DB

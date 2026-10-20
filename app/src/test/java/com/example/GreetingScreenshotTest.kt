@@ -41,14 +41,17 @@ class GreetingScreenshotTest {
 
     @get:Rule val composeTestRule = createComposeRule()
 
-    private fun render(dark: Boolean, name: String) {
+    private fun render(
+        dark: Boolean,
+        name: String,
+        state: SalahUiState = todaySampleState()
+    ) {
         composeTestRule.setContent {
             SalahTheme(darkTheme = dark) {
                 ProvideAppLanguage(language = "English") {
                     TodayScreen(
-                        state = todaySampleState(),
-                        onLocationClick = {},
-                        onContinueReadingClick = {}
+                        state = state,
+                        onLocationClick = {}
                     )
                 }
             }
@@ -61,6 +64,14 @@ class GreetingScreenshotTest {
 
     @Test
     fun home_screen_dark() = render(dark = true, name = "home_dark")
+
+    @Test
+    fun home_screen_night_light() =
+        render(dark = false, name = "home_night_light", state = todayNightSampleState())
+
+    @Test
+    fun home_screen_night_dark() =
+        render(dark = true, name = "home_night_dark", state = todayNightSampleState())
 }
 
 /**
@@ -106,5 +117,29 @@ internal fun todaySampleState(): SalahUiState {
             altitude = 34f,
             isSunVisible = true
         ),
+    )
+}
+
+/**
+ * The same page after sunset, with the moon near the middle of the strip.
+ *
+ * The day baselines cannot show the moon halo, so they cannot catch it turning
+ * gray or brown. The Hijri adjustment moves the fixture to a first-quarter
+ * moon, which puts the moon high enough to be visible instead of pinning it to
+ * the horizon.
+ */
+internal fun todayNightSampleState(): SalahUiState {
+    val day = todaySampleState()
+    val prayers = day.todayPrayerTimes!!.prayers
+    return day.copy(
+        nextPrayer = prayers.first { it.prayer == Prayer.ISHA },
+        previousPrayer = prayers.first { it.prayer == Prayer.MAGHRIB },
+        countdownString = "02h 12m",
+        sunPosition = SunPosition(
+            azimuth = 0f,
+            altitude = -10f,
+            isSunVisible = false
+        ),
+        hijriAdjustment = 6
     )
 }

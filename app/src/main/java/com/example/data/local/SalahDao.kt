@@ -17,24 +17,4 @@ interface SalahDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdatePrayerLog(log: PrayerLogEntity)
-
-    // Continue Reading
-    @Query("SELECT * FROM continue_reading WHERE id = 1 LIMIT 1")
-    fun getContinueReading(): Flow<ContinueReadingEntity?>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun saveContinueReading(continueReading: ContinueReadingEntity)
-
-    // Bookmarks
-    @Query("SELECT * FROM bookmarks ORDER BY timestamp DESC")
-    fun getAllBookmarks(): Flow<List<BookmarkEntity>>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertBookmark(bookmark: BookmarkEntity): Long
-
-    @Query("DELETE FROM bookmarks WHERE surahNumber = :surahNumber AND ayahNumber = :ayahNumber")
-    suspend fun deleteBookmark(surahNumber: Int, ayahNumber: Int)
-
-    @Query("SELECT COUNT(*) FROM bookmarks WHERE surahNumber = :surahNumber AND ayahNumber = :ayahNumber")
-    suspend fun isBookmarked(surahNumber: Int, ayahNumber: Int): Int
 }

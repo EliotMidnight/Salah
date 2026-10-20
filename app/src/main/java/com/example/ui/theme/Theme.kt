@@ -1,43 +1,53 @@
 package com.example.ui.theme
 
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 // ---------------------------------------------------------------------------
 // Colour schemes
 //
-// Dynamic colour is deliberately OFF. The app already offers System / Dark /
-// Light as an explicit setting, and honouring the wallpaper palette on top of
-// that produced the real problem this redesign fixes: an unpredictable accent
-// that cannot be contrast-checked. One accent, always the same, is the point.
+// Dynamic colour is accent-only. The reader's choice (or the wallpaper's
+// primary, on Android 12+) is a *seed*: `accentFamily` derives the four accent
+// slots and clamps them until every pairing clears WCAG AA. Surfaces are never
+// taken from the system palette - the page stays warm ivory / deep navy-black,
+// so the neutral ladder and its contrast claims are untouched by what the
+// wallpaper happens to be.
+//
+// The palette is warm paper and deep ink: an ivory page, sand-toned container
+// surfaces, and exactly one saturated accent reserved for interaction and state.
 // ---------------------------------------------------------------------------
 
-private val LightColors = lightColorScheme(
-    primary = AccentLight,
-    onPrimary = OnAccentLight,
-    primaryContainer = AccentContainerLight,
-    onPrimaryContainer = OnAccentContainerLight,
-    secondary = AccentLight,
-    onSecondary = OnAccentLight,
-    secondaryContainer = AccentContainerLight,
-    onSecondaryContainer = OnAccentContainerLight,
-    tertiary = AccentLight,
-    onTertiary = OnAccentLight,
-    tertiaryContainer = AccentContainerLight,
-    onTertiaryContainer = OnAccentContainerLight,
+internal fun salahLightScheme(accent: AccentFamily): ColorScheme = lightColorScheme(
+    primary = accent.primary,
+    onPrimary = accent.onPrimary,
+    primaryContainer = accent.primaryContainer,
+    onPrimaryContainer = accent.onPrimaryContainer,
+    secondary = accent.primary,
+    onSecondary = accent.onPrimary,
+    secondaryContainer = accent.primaryContainer,
+    onSecondaryContainer = accent.onPrimaryContainer,
+    tertiary = accent.primary,
+    onTertiary = accent.onPrimary,
+    tertiaryContainer = accent.primaryContainer,
+    onTertiaryContainer = accent.onPrimaryContainer,
     background = PageLight,
     onBackground = TextPrimaryLight,
     surface = SurfaceLight,
@@ -59,19 +69,19 @@ private val LightColors = lightColorScheme(
     surfaceBright = SurfaceLight
 )
 
-private val DarkColors = darkColorScheme(
-    primary = AccentDark,
-    onPrimary = OnAccentDark,
-    primaryContainer = AccentContainerDark,
-    onPrimaryContainer = OnAccentContainerDark,
-    secondary = AccentDark,
-    onSecondary = OnAccentDark,
-    secondaryContainer = AccentContainerDark,
-    onSecondaryContainer = OnAccentContainerDark,
-    tertiary = AccentDark,
-    onTertiary = OnAccentDark,
-    tertiaryContainer = AccentContainerDark,
-    onTertiaryContainer = OnAccentContainerDark,
+internal fun salahDarkScheme(accent: AccentFamily): ColorScheme = darkColorScheme(
+    primary = accent.primary,
+    onPrimary = accent.onPrimary,
+    primaryContainer = accent.primaryContainer,
+    onPrimaryContainer = accent.onPrimaryContainer,
+    secondary = accent.primary,
+    onSecondary = accent.onPrimary,
+    secondaryContainer = accent.primaryContainer,
+    onSecondaryContainer = accent.onPrimaryContainer,
+    tertiary = accent.primary,
+    onTertiary = accent.onPrimary,
+    tertiaryContainer = accent.primaryContainer,
+    onTertiaryContainer = accent.onPrimaryContainer,
     background = PageDark,
     onBackground = TextPrimaryDark,
     surface = SurfaceDark,
@@ -165,10 +175,6 @@ object Tonal {
 
 // ---------------------------------------------------------------------------
 // Icon sizes - one set, so a "play" triangle is the same size on every screen.
-//
-// The app had drifted to a dozen ad-hoc icon sizes (14, 16, 18, 20, 22, 24,
-// 26, 28, 32dp) chosen per call site, so the same affordance rendered at two
-// sizes on adjacent screens. These are the sizes the product actually uses.
 // ---------------------------------------------------------------------------
 
 object IconSize {
@@ -209,13 +215,32 @@ val MaterialTheme.layoutMetrics: LayoutMetrics
 @Composable
 fun SalahTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    accentKey: String = Accent.DEFAULT.key,
     content: @Composable () -> Unit
 ) {
+    val context = LocalContext.current
+    val accent = Accent.fromKey(accentKey)
+    val family = remember(accent, darkTheme) {
+        // Read the wallpaper primary only for the mode on screen; the light
+        // scheme's primary is a poor seed for a black page and vice versa.
+        // Wallpaper changes are picked up on the next activity recreation,
+        // which is also when the system refreshes its own palette.
+        val dynamicSeed = if (
+            accent == Accent.WALLPAPER &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        ) {
+            if (darkTheme) dynamicDarkColorScheme(context).primary
+            else dynamicLightColorScheme(context).primary
+        } else {
+            null
+        }
+        accentFamily(accent, darkTheme, dynamicSeed)
+    }
     CompositionLocalProvider(
         LocalSemanticColors provides if (darkTheme) DarkSemantics else LightSemantics
     ) {
         MaterialTheme(
-            colorScheme = if (darkTheme) DarkColors else LightColors,
+            colorScheme = if (darkTheme) salahDarkScheme(family) else salahLightScheme(family),
             typography = Typography,
             shapes = Shapes,
             content = content

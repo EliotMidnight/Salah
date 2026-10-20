@@ -55,8 +55,12 @@ trust the executable source; several prose claims have drifted.
 
 ## Quran corpus (never weaken)
 
-- `app/src/main/resources/quran/{uthmani.txt,en_sahihintl.txt,metadata.xml}` are
-  SHA-256-gated at load (`QuranCorpus`) and by `QuranResourceIntegrityTest`. If you edit
+- The on-device Quran reader and bundled corpus were intentionally removed in this
+  refactor. No `QuranCorpus`, `QuranRef`, reader, audio player, bookmark, or corpus
+  asset references should remain. If the reader is restored, reintroduce the
+  SHA-256 gate and `QuranResourceIntegrityTest` unchanged.
+- Historically, `app/src/main/resources/quran/{uthmani.txt,en_sahihintl.txt,metadata.xml}`
+  were SHA-256-gated at load (`QuranCorpus`) and by `QuranResourceIntegrityTest`. If you edit
   an asset, update the matching constant in `QuranCorpus.kt` to the digest of the new
   bytes. The check is the one thing that throws instead of guessing — do not soften it.
 - Verse identity is `QuranRef(surah, ayah, page)`; page is not redundant. Build refs only
@@ -104,6 +108,9 @@ trust the executable source; several prose claims have drifted.
 - "A fact decided in two places" is this repo's definition of a bug: prefer deleting the
   second copy over syncing it. A detector that can't be made sound gets deleted, not
   allowlisted.
+- This file is living documentation: whenever an agent changes behavior, files, tests,
+  or decisions, update the relevant section here in the same change. Do not leave
+  AGENTS.md stale after modifying the codebase.
 - KDoc carries the contract and the reason for it; history belongs in commit messages.
   Rebuild-history KDoc was trimmed deliberately — don't reintroduce it.
 - Commit messages: `type(scope): the finding as a sentence` plus an explanatory body

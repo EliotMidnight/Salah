@@ -5,15 +5,10 @@ package com.example.ui
  *
  * ### Why this is one table and not two
  *
- * Two tests need to know the same thing. `StringCoverageTest` walks every
- * `ReaderStrings` field by reflection and fails when a non-English language's value
- * equals the English one; `ReaderAnnouncementTest` checks the paper names through the
- * `when` that reads them. For a *plain field value* those two comparisons are the
- * identical fact — `paperRose` in French is `"Rose"`, and `paperLabel(RED, french)`
- * is `"Rose"` — so an allowlist in each place would be one more fact decided in two
- * places, and adding a borrowed term would have to be remembered twice. The failure
- * mode is not a crash: it is a word silently reverted to English in one test's view
- * and still accepted by the other.
+ * The surviving coverage check walks the surviving string classes by reflection
+ * and fails when a non-English language's value equals the English one. `ReaderStrings`
+ * and its announcement test no longer exist after the reader was removed, so the
+ * allowlist now covers only the labels that still ship.
  *
  * **Keyed by the English text, not by the field name.** The tests compare *text*, and
  * text is what a translator reasons about; a field-name key would need a second
@@ -45,6 +40,15 @@ internal object BorrowedWords {
 
     /** English text → the languages that write it the same way. */
     private val byText: Map<String, Set<String>> = mapOf(
+        // --- App identity and universal status labels ------------------------
+        "SALAH" to setOf(
+            "Arabic", "French", "Indonesian", "Turkish", "Urdu", "Malay",
+            "Bengali", "Russian", "German", "Spanish"
+        ),
+        "ONLINE" to setOf("Indonesian", "German"),
+        "OFFLINE" to setOf("Indonesian", "German"),
+        "Plum" to setOf("Malay"),
+
         // --- Reader chrome ---------------------------------------------------
         "Vertical" to setOf("French", "Spanish"),
         "Horizontal" to setOf("French", "Indonesian", "German", "Spanish"),

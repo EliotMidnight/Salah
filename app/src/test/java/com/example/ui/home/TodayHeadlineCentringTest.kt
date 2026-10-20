@@ -46,8 +46,7 @@ class TodayHeadlineCentringTest {
                 ProvideAppLanguage(language = "English") {
                     TodayScreen(
                         state = todaySampleState(),
-                        onLocationClick = {},
-                        onContinueReadingClick = {}
+                        onLocationClick = {}
                     )
                 }
             }

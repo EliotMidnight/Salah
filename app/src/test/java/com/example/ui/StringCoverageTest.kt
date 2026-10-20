@@ -9,43 +9,14 @@ import com.example.ui.localization.IndonesianStrings
 import com.example.ui.localization.MalayStrings
 import com.example.ui.localization.RussianStrings
 import com.example.ui.localization.SpanishStrings
+import com.example.ui.localization.SystemAccessStrings
 import com.example.ui.localization.TurkishStrings
-import com.example.ui.localization.UrduStrings
 import com.example.ui.localization.UiStrings
+import com.example.ui.localization.UiStringsMore
+import com.example.ui.localization.UrduStrings
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The reader's labels are actually translated.
- *
- * ### Why this test exists
- *
- * `ReaderStrings` is its own data class because the reader's labels had pushed
- * `UiStringsMore` past the JVM's 255-parameter constructor limit - a failure
- * that compiles cleanly and then throws `ClassFormatError` from the class
- * loader at runtime.
- *
- * Giving it its own class fixed that crash and introduced a quieter one. With
- * its own constructor every field got an English default, and because no
- * per-language `UiStrings` passed a `reader =`, the entire reader - the index,
- * immersive mode, both layouts, the axis picker, the pinch target, paper, font
- * and the per-verse toggle - rendered in English for all ten non-English
- * languages. Nothing failed. The build was green, the strings resolved, and a
- * reader who selected Urdu got an English Quran screen.
- *
- * Defaults are a trap here precisely because they compile, so this walks the
- * values instead of reading the source. It catches the class-wide regression,
- * and it catches a label added to `ReaderStrings` that nobody remembered to
- * translate - which is the failure that will actually recur.
- *
- * ### Why there is an allowlist
- *
- * "Differs from English" is not the same as "translated". Some labels are
- * proper nouns that are *supposed* to read the same in every language, and a
- * test that demands they differ would push a translator to invent a wrong
- * transliteration. Those are named below with the reason, so adding one is a
- * deliberate act rather than a way to silence a red build.
- */
 class StringCoverageTest {
 
     private val nonEnglish: List<Pair<String, UiStrings>> = listOf(
@@ -62,135 +33,51 @@ class StringCoverageTest {
     )
 
     @Test
-    fun `every reader label is translated in every language`() {
+    fun `every surviving label is translated in every language`() {
         val failures = buildList {
             nonEnglish.forEach { (language, strings) ->
-                readerFields().forEach { field ->
-                    val translated = read(strings.more.reader, field)
-                    val english = read(EnglishStrings.more.reader, field)
+                stringFields(UiStrings::class.java).forEach { field ->
+                    val translated = read(strings, field)
+                    val english = read(EnglishStrings, field)
                     if (translated != english) return@forEach
                     if (BorrowedWords.isBorrowed(english, language)) return@forEach
-                    add("$language.reader.$field is still the English text (\"$english\")")
+                    add("$language.$field is still the English text (\"$english\")")
                 }
-            }
-        }
-
-        assertTrue(
-            "Reader labels left in English:\n" + failures.joinToString("\n"),
-            failures.isEmpty()
-        )
-    }
-
-    @Test
-    fun `every language overrides the reader rather than inheriting it`() {
-        // The class-wide regression, stated directly. If someone drops a
-        // `reader = ReaderStrings(...)` override again, this fails immediately
-        // rather than only noticing field by field.
-        val bare = com.example.ui.localization.ReaderStrings()
-
-        val failures = nonEnglish.filterNot { (_, strings) ->
-            val reader = strings.more.reader
-            readerFields().count { read(reader, it) != read(bare, it) } > 20
-        }.map { (language, _) -> "$language uses the English defaults for the whole reader" }
-
-        assertTrue(
-            "The reader fell back to English defaults:\n" + failures.joinToString("\n"),
-            failures.isEmpty()
-        )
-    }
-
-    @Test
-    fun `no language ships a blank reader label`() {
-        val failures = buildList {
-            nonEnglish.forEach { (language, strings) ->
-                readerFields().forEach { field ->
-                    if (read(strings.more.reader, field).isBlank()) {
-                        add("${language}.reader.$field")
-                    }
-                }
-            }
-        }
-
-        assertTrue(
-            "Blank labels shipped to users:\n" + failures.joinToString("\n"),
-            failures.isEmpty()
-        )
-    }
-
-    @Test
-    fun `a language that has its own name for a borrowed term uses it`() {
-        // The counterpart to [BorrowedWords]. Arabic, Urdu, Bengali and
-        // Russian all have an established form for "Juz"; if one of them
-        // reverted to the English spelling that would be a regression the
-        // allowlist would otherwise hide.
-        val mustDiffer = setOf("Arabic", "Urdu", "Bengali", "Russian")
-
-        val failures = nonEnglish
-            .filter { (language, _) -> language in mustDiffer }
-            .filter { (language, strings) ->
-                read(strings.more, "juzOf") ==
-                    read(EnglishStrings.more, "juzOf")
-            }
-            .map { (language, _) -> "$language should use its own form of \"Juz\"" }
-
-        assertTrue(
-            "Borrowed term used where the language has its own:\n" +
-                failures.joinToString("\n"),
-            failures.isEmpty()
-        )
-    }
-
-    private fun readerFields(): List<String> =
-        EnglishStrings.more.reader::class.java.declaredFields
-            // `$stable` is emitted by the Compose compiler, not written by hand.
-            .filterNot { it.isSynthetic || it.name.startsWith("$") }
-            .map { it.name }
-
-    /**
-     * The same sweep for [UiStringsMore], which holds everything that is not
-     * reader-specific - the settings sheet, the Today page, the search and Qibla
-     * screens, and the shared chrome.
-     *
-     * **221 fields across nine languages, about 2,000 strings, and until now none of
-     * them was checked.** Every defect this file exists to catch - a string left in
-     * English, a blank shipped to a reader, a whole language falling back to the
-     * defaults - was only ever able to happen in [ReaderStrings], which is the smallest
-     * of the three string classes and the one a Quran rebuild is most likely to be
-     * working in. The two defects found in this session by hand - the reader's page
-     * announcement and the Qibla dial's "NE" - were both in these classes.
-     *
-     * Every field passes today. That was measured before the sweep was added rather
-     * than assumed, which is why adding it was a one-line change rather than a stage
-     * of its own.
-     */
-    @Test
-    fun `every label outside the reader is translated in every language`() {
-        val failures = buildList {
-            nonEnglish.forEach { (language, strings) ->
-                uiStringsMoreFields().forEach { field ->
+                stringFields(UiStringsMore::class.java).forEach { field ->
                     val translated = read(strings.more, field)
                     val english = read(EnglishStrings.more, field)
                     if (translated != english) return@forEach
                     if (BorrowedWords.isBorrowed(english, language)) return@forEach
                     add("$language.more.$field is still the English text (\"$english\")")
                 }
+                stringFields(SystemAccessStrings::class.java).forEach { field ->
+                    val translated = read(strings.system, field)
+                    val english = read(EnglishStrings.system, field)
+                    if (translated != english) return@forEach
+                    if (BorrowedWords.isBorrowed(english, language)) return@forEach
+                    add("$language.system.$field is still the English text (\"$english\")")
+                }
             }
         }
 
         assertTrue(
-            "Non-reader labels left in English:\n" + failures.joinToString("\n"),
+            "Labels left in English:\n" + failures.joinToString("\n"),
             failures.isEmpty()
         )
     }
 
     @Test
-    fun `no language ships a blank label outside the reader`() {
+    fun `no language ships a blank surviving label`() {
         val failures = buildList {
             nonEnglish.forEach { (language, strings) ->
-                uiStringsMoreFields().forEach { field ->
-                    if (read(strings.more, field).isBlank()) {
-                        add("$language.more.$field")
-                    }
+                stringFields(UiStrings::class.java).forEach { field ->
+                    if (read(strings, field).isBlank()) add("$language.$field")
+                }
+                stringFields(UiStringsMore::class.java).forEach { field ->
+                    if (read(strings.more, field).isBlank()) add("$language.more.$field")
+                }
+                stringFields(SystemAccessStrings::class.java).forEach { field ->
+                    if (read(strings.system, field).isBlank()) add("$language.system.$field")
                 }
             }
         }
@@ -201,31 +88,12 @@ class StringCoverageTest {
         )
     }
 
-    /**
-     * The `String` fields of [UiStringsMore].
-     *
-     * Filtered by type because the class holds one non-String field - `reader`, the
-     * nested [ReaderStrings] - and a reflection sweep that does not check the type
-     * reads it as an empty string and then reports it as both blank *and* English, in
-     * all nine languages. That is three tests failing on a value that is not a string.
-     */
-    private fun uiStringsMoreFields(): List<String> =
-        EnglishStrings.more::class.java.declaredFields
+    private fun stringFields(type: Class<*>): List<String> =
+        type.declaredFields
             .filterNot { it.isSynthetic || it.name.startsWith("$") }
             .filter { it.type == String::class.java }
             .map { it.name }
 
-    /**
-     * The value of [field] in [target].
-     *
-     * Deliberately not tolerant of a field name that does not exist. This helper is
-     * asked for fields by name, and the compiler cannot check those names; a miss used
-     * to read as `""` on both sides of a comparison, which makes a probe report an
-     * untranslated value where the field it meant to read was not there at all. It read
-     * that way when `juzOf` moved from `ReaderStrings` to `UiStringsMore`: four
-     * languages were named as untranslated while the holder being read had no such
-     * field, and the value on both sides was the empty fallback.
-     */
     private fun read(target: Any, field: String): String =
         target::class.java.declaredFields
             .first { it.name == field }

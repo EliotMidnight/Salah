@@ -1,14 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Network: the ONLY network use in the app is streaming per-verse Quran
-         recitation audio from everyayah.com (see QuranAudioPlayer). Prayer times,
-         Qibla, the Quran text and its translation are all on-device; there is no
-         account, no analytics and no tracking. ACCESS_NETWORK_STATE lets the
-         repository report whether the device is online - Settings shows it - and
-         nothing else; the player handles a dead stream itself, by reporting the
-         failure rather than waiting on a flag. -->
-    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- No network calls remain in the app. ACCESS_NETWORK_STATE only lets Settings
+         report whether the device is online; it is not used for data transfer. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -18,13 +12,13 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
 
     <uses-feature android:name="android.hardware.sensor.compass" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
@@ -62,7 +56,7 @@
             android:name=".service.PrayerAlertService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
+            android:foregroundServiceType="shortService" />
     </application>
 
 </manifest>

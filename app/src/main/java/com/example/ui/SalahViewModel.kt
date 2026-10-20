@@ -13,14 +13,11 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.data.local.BookmarkEntity
-import com.example.data.local.ContinueReadingEntity
 import com.example.data.local.PrayerLogEntity
 import com.example.data.local.SalahDatabase
 import com.example.data.location.LocationFailure
 import com.example.data.location.LocationFetchResult
-import com.example.data.model.Ayah
-import com.example.data.model.AdhanSound
+import com.example.data.repository.SalahRepository
 import com.example.data.model.CalculationMethod
 import com.example.data.model.defaultAlertModes
 import com.example.data.model.HijriDate
@@ -29,34 +26,17 @@ import com.example.data.model.Prayer
 import com.example.data.model.PrayerAdjustments
 import com.example.data.model.PrayerTime
 import com.example.data.model.PrayerTimesDay
-import com.example.data.model.QuranFontFace
-import com.example.data.model.QuranPaperTone
-import com.example.data.model.QuranPinchTarget
-import com.example.data.model.QuranReadingLayout
-import com.example.data.model.QuranReadingOptions
-import com.example.data.model.QuranScrollDirection
-import com.example.data.model.QuranRef
-import com.example.data.model.Reciter
-import com.example.data.model.Surah
 import com.example.data.model.UserLocation
-import com.example.data.quran.QuranBrowse
-import com.example.data.quran.QuranDataSource
-import com.example.data.repository.SalahRepository
 import com.example.engine.HijriCalendarEngine
 import com.example.engine.MagneticFieldStatus
-import com.example.engine.PlaybackTap
-import com.example.engine.VerseRepeat
-import com.example.engine.nextPlaybackSpeed
 import com.example.engine.PrayerCalculationEngine
 import com.example.engine.PrayerNotificationManager
 import com.example.engine.QiblaEngine
 import com.example.engine.QiblaGuidance
-import com.example.engine.QuranAudioPlayer
 import com.example.engine.SunPosition
-import com.example.engine.playbackTapFor
-import com.example.engine.AdhanAudioSynthesizer
 import com.example.service.PrayerAlarmScheduler
 import com.example.service.PrayerAlertService
+import com.example.ui.theme.Accent
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -67,7 +47,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -119,14 +98,11 @@ data class SalahUiState(
      */
     val selectedDate: LocalDate? = null,
     val prayerLog: PrayerLogEntity = PrayerLogEntity(LocalDate.now().toString()),
-    val continueReading: ContinueReadingEntity = ContinueReadingEntity(),
-    val bookmarks: List<BookmarkEntity> = emptyList(),
     val adhanNotificationEnabled: Boolean = true,
     val prePrayerAlertEnabled: Boolean = true,
     val vibrateOnly: Boolean = false,
     val isGlobalSilentMode: Boolean = false,
-    val autoSilentDuringPrayer: Boolean = false,
-    val autoSilentDurationMinutes: Int = 20,
+    val prePrayerOffsetMinutes: Int = 10,
 
     /**
      * Whether the device currently has a connection.
@@ -135,20 +111,11 @@ data class SalahUiState(
     // Expanded user preferences
     val language: String = "English",
     val appTheme: String = "System Default",
+    /** The stored accent key; the theme resolves it to a family. */
+    val accent: String = Accent.DEFAULT.key,
+    /** When true the chrome uses the opaque path even on a blur-capable device. */
+    val reduceTransparency: Boolean = false,
     val timeFormat24h: Boolean = true,
-    val adhanSound: AdhanSound = AdhanSound.MAKKAH,
-    val reciter: String = Reciter.ALAFASY.displayName,
-    val prePrayerOffsetMinutes: Int = 10,
-    val adhanVolume: Float = 0.85f,
-    val audioPreviewPlaying: String? = null,
-    val prayerAlertModes: Map<Prayer, String> = mapOf(
-        Prayer.FAJR to "Full Adhan",
-        Prayer.DHUHR to "Full Adhan",
-        Prayer.ASR to "Full Adhan",
-        Prayer.MAGHRIB to "Full Adhan",
-        Prayer.ISHA to "Full Adhan",
-        Prayer.SUNRISE to "Silent Reminder"
-    ),
     // Qibla state & magnetic sensor diagnostics
     val compassAzimuth: Float = 0f,
     val qiblaBearing: Float = 0f,
@@ -173,99 +140,6 @@ data class SalahUiState(
      * How the location attempt is going, as facts.
      */
     val locationStatus: LocationStatus? = null,
-    // Quran reader state
-    //
-    // There is deliberately no `selectedSurah` and no `currentSurahAyahs` here.
-    //
-    // The reader's place is `ReaderPosition.ref`, and it is the Quran destination
-    // that owns it - the same object the reading surfaces read, the index navigates
-    // and the chrome reports. A copy of it in this state had two writers and no way
-    // to reach the reader: `selectSurah` wrote it, and the reader never asked, so a
-    // surah chosen from the index changed the pill's name and left the page where
-    // it was. And the reader wrote it *back* through a 600ms debounce, so for half
-    // a second the pill paired the new page number with the old surah's name.
-    //
-    // What the ViewModel has instead is a **request**: something outside the reader
-    // - the index, a bookmark, a search hit, Continue Reading - asking to be put
-    // somewhere. One field, one writer, and it is consumed by the destination rather
-    // than mirrored.
-    //
-    // The reader's place in the book, once read, is not in this state at all.
-
-    /**
-     * A request to open the Quran at [QuranRef], or null.
-     */
-    val pendingOpen: QuranRef? = null,
-
-    val isAudioPlaying: Boolean = false,
-
-    /**
-     * True when the last verse the reader asked for could not be streamed.
-     *
-     * The reader has to be told what happened: the player no longer answers a
-     * failed stream with a chime, so silence and a still play button would be the
-     * whole message. Cleared by a new attempt at playback and by `stopAudio`.
-     */
-    val audioFailed: Boolean = false,
-
-    /**
-     * Which verse is playing, as a reference.
-     *
-     * A whole reference and not an ayah number, because an ayah number alone does
-     * not say which verse: page 604 holds three ayah-1s, and a pager composes its
-     * neighbours, so "ayah 5 is playing" was true of a verse on a page the reader
-     * could also be looking at. `QuranAudioPlayer` already knew the surah - it is
-     * the argument it was asked to play - and the field carrying it was never read.
-     */
-    val currentAudioRef: QuranRef = QuranRef.Start,
-
-    /**
-     * The reciter actually being streamed, or null when nothing is and when what
-     * is playing is not a recitation (a Settings preview).
-     *
-     * The recitation banner reads this and has never read the reciter
-     * *preference*: the preference says who the reader chose, and only the
-     * player knows who is being heard. They were the same value for as long as
-     * the player streamed one reciter, and following one change while the other
-     * ignores it is how a promise rots.
-     */
-    val currentAudioReciter: String? = null,
-
-    /**
-     * The speed the recitation is played at, mirrored from the reader's
-     * preference flow.
-     *
-     * The banner pill that cycles the speed shows this, and the tap behind it
-     * writes to the preference - the player is commanded from the flow, not
-     * from this copy. A copy of the speed, not the speed itself, is what the
-     * surface can read without reaching past the state.
-     */
-    val versePlaybackSpeed: Float = 1f,
-
-    /**
-     * How many times the tapped verse recites before the chain moves on.
-     *
-     * Session state, not a preference: unlike the reciter and the speed, a
-     * repeat count is a decision about *this* sitting - read, not configured.
-     * The default is one, so a reader who never asks for repeats is never
-     * given one. The pill on the recitation banner draws it and cycles it;
-     * the tap writes here and tells the player, so a mid-recitation change
-     * counts from the verse it lands on.
-     */
-    val verseRepeat: VerseRepeat = VerseRepeat.ONCE,
-    /**
-     * The reader's own preferences, as one value.
-     */
-    val quranReadingOptions: QuranReadingOptions = QuranReadingOptions(),
-    /**
-     * Whether the reader is taking over the whole screen, this moment.
-     *
-     * Session state, never persisted: the takeover is a mode of the reader's
-     * stay in the destination, and `MainActivity` clears it when the
-     * destination under it changes, so it can neither hide the dock on Today
-     * nor outlive a relaunch.
-     */
-    val isQuranImmersive: Boolean = false
 ) {
     /**
      * True once the Kaaba is inside the alignment window.
@@ -276,7 +150,6 @@ data class SalahUiState(
 class SalahViewModel(application: Application) : AndroidViewModel(application), SensorEventListener {
 
     private val repository: SalahRepository
-    val audioPlayer: QuranAudioPlayer
 
     private val _uiState = MutableStateFlow(SalahUiState())
     val uiState: StateFlow<SalahUiState> = _uiState.asStateFlow()
@@ -308,32 +181,9 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
     private var declCacheValue = 0f
     private var declCacheAtMs = 0L
 
-    /**
-     * Set once the stored reading position has been applied for this launch.
-     */
-    private var readingPositionRestored = false
-
-    private fun cachedDeclinationFor(lat: Float, lon: Float): Float {
-        val now = System.currentTimeMillis()
-        if (lat == declCacheLat && lon == declCacheLon && now - declCacheAtMs < 6 * 60 * 60 * 1000L) {
-            return declCacheValue
-        }
-        val value = try {
-            GeomagneticField(lat, lon, 50f, now).declination
-        } catch (_: Exception) {
-            0f
-        }
-        declCacheLat = lat
-        declCacheLon = lon
-        declCacheValue = value
-        declCacheAtMs = now
-        return value
-    }
-
     init {
         val database = SalahDatabase.getDatabase(application)
         repository = SalahRepository(database.salahDao(), application)
-        audioPlayer = QuranAudioPlayer(application)
         PrayerNotificationManager.initChannels(application)
 
         // Observe repository state
@@ -390,36 +240,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         }
 
         viewModelScope.launch {
-            repository.autoSilentDuringPrayerFlow.collectLatest { autoSilent ->
-                _uiState.value = _uiState.value.copy(autoSilentDuringPrayer = autoSilent)
-            }
-        }
-
-        viewModelScope.launch {
-            repository.autoSilentDurationFlow.collectLatest { duration ->
-                _uiState.value = _uiState.value.copy(autoSilentDurationMinutes = duration)
-            }
-        }
-
-        viewModelScope.launch {
-            repository.adhanVolumeFlow.collectLatest { vol ->
-                _uiState.value = _uiState.value.copy(adhanVolume = vol)
-            }
-        }
-
-        viewModelScope.launch {
-            repository.prePrayerOffsetFlow.collectLatest { offset ->
-                _uiState.value = _uiState.value.copy(prePrayerOffsetMinutes = offset)
-            }
-        }
-
-        viewModelScope.launch {
-            repository.prayerAlertModesFlow.collectLatest { modes ->
-                _uiState.value = _uiState.value.copy(prayerAlertModes = modes)
-            }
-        }
-
-        viewModelScope.launch {
             repository.languageFlow.collectLatest { lang ->
                 _uiState.value = _uiState.value.copy(language = lang)
             }
@@ -432,14 +252,20 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         }
 
         viewModelScope.launch {
-            repository.timeFormat24hFlow.collectLatest { tf ->
-                _uiState.value = _uiState.value.copy(timeFormat24h = tf)
+            repository.accentFlow.collectLatest { key ->
+                _uiState.value = _uiState.value.copy(accent = Accent.fromKey(key).key)
             }
         }
 
         viewModelScope.launch {
-            repository.adhanSoundFlow.collectLatest { asnd ->
-                _uiState.value = _uiState.value.copy(adhanSound = asnd)
+            repository.reduceTransparencyFlow.collectLatest { reduce ->
+                _uiState.value = _uiState.value.copy(reduceTransparency = reduce)
+            }
+        }
+
+        viewModelScope.launch {
+            repository.timeFormat24hFlow.collectLatest { tf ->
+                _uiState.value = _uiState.value.copy(timeFormat24h = tf)
             }
         }
 
@@ -447,22 +273,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             repository.hijriAdjustmentFlow.collectLatest { adj ->
                 _uiState.value = _uiState.value.copy(hijriAdjustment = adj)
                 recalculateAll()
-            }
-        }
-
-        viewModelScope.launch {
-            repository.reciterFlow.collectLatest { rec ->
-                _uiState.value = _uiState.value.copy(reciter = rec)
-            }
-        }
-
-        // The speed is commanded from the preference flow, and the player's
-        // apply-at-every-prepare makes it reach the whole chain; the state copy
-        // is what the banner's pill draws.
-        viewModelScope.launch {
-            repository.playbackSpeedFlow.collectLatest { speed ->
-                audioPlayer.setSpeed(speed)
-                _uiState.value = _uiState.value.copy(versePlaybackSpeed = speed)
             }
         }
 
@@ -478,80 +288,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         // collection: at midnight the date changes and the observer has to follow
         // it. Re-armed by [observePrayerLog] from the ticker below.
         observePrayerLog(LocalDate.now())
-
-        viewModelScope.launch {
-            repository.getContinueReading().collectLatest { cont ->
-                if (cont != null) {
-                    _uiState.value = _uiState.value.copy(continueReading = cont)
-                    // Resume, exactly once, the first time a stored position
-                    // arrives.
-                    //
-                    // This has to be guarded rather than run on every emission,
-                    // because this is also the flow the reader writes to as the
-                    // user scrolls: an unguarded restore would yank the reader
-                    // back to the opening ayah the instant they moved. The flag
-                    // means the stored position is applied once per launch and
-                    // never again.
-                    //
-                    // It is a *request* now, like every other way into the book, and
-                    // the Quran destination resolves it to a reference from the
-                    // corpus rather than from the stored row - so a row written by a
-                    // build whose partition differed cannot seed the reader with a
-                    // page that no longer holds the verse.
-                    if (!readingPositionRestored && cont.surahNumber > 0) {
-                        readingPositionRestored = true
-                        requestOpenVerse(cont.surahNumber, cont.ayahNumber)
-                    }
-                }
-            }
-        }
-
-        viewModelScope.launch {
-            repository.quranReadingOptions.collectLatest { options ->
-                _uiState.value = _uiState.value.copy(quranReadingOptions = options)
-            }
-        }
-
-        viewModelScope.launch {
-            repository.getBookmarks().collectLatest { bms ->
-                _uiState.value = _uiState.value.copy(bookmarks = bms)
-            }
-        }
-
-        // Audio state observer
-        //
-        // The playing verse arrives as a whole reference, so the "is this verse
-        // playing" test the surfaces run can be exact. The player already knew the
-        // surah - it was the argument it was handed - and the state used to keep only
-        // the ayah number, so the dot and the play/pause icon lit on ayah *N* of
-        // whatever surah happened to be composed nearby.
-        viewModelScope.launch {
-            audioPlayer.playbackState.collectLatest { ps ->
-                _uiState.value = _uiState.value.copy(
-                    isAudioPlaying = ps.isPlaying,
-                    audioFailed = ps.failed,
-                    currentAudioRef = QuranRef(
-                        surah = ps.surahNumber,
-                        ayah = ps.ayahNumber,
-                        page = QuranBrowse.pageOf(ps.surahNumber, ps.ayahNumber)
-                    ),
-                    // What the player is streaming, not what the reader chose.
-                    // Null when nothing is streamed, or when what plays is a
-                    // Settings preview - the banner has no way to say
-                    // "reciting" without a reciter behind it.
-                    currentAudioReciter = ps.reciter?.displayName
-                )
-            }
-        }
-
-        // Nothing to initialise for the Quran, and that is the point.
-        //
-        // This used to eagerly select Al-Fatihah, because `currentSurahAyahs` started
-        // empty and the reader rendered a loading state until a surah was chosen. Now
-        // the reader's place is `ReaderPosition`, which the destination seeds with
-        // `QuranRef.Start` - Al-Fatihah, page 1 - and the stored Continue Reading row
-        // replaces as soon as it arrives. So a first run opens Al-Fatihah because that
-        // is the start of the book, not because something had to be written down first.
 
         // Register background prayer alarm scheduling
         PrayerAlarmScheduler.scheduleAllPrayers(application)
@@ -619,7 +355,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         compassWatchers = 0
         sensorManager?.unregisterListener(this)
         tickerJob?.cancel()
-        audioPlayer.stop()
     }
 
     /**
@@ -720,35 +455,9 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         val nextPt = PrayerCalculationEngine.getNextPrayer(calculatedToday, LocalTime.now())
         val prevPt = PrayerCalculationEngine.getPreviousPrayer(calculatedToday, LocalTime.now())
         val countdown = PrayerCalculationEngine.formatRemainingCountdown(nextPt.dateTime)
-        // The Hijri date is deliberately **not** computed here.
-        //
-        // It used to be, and it was the only Hijri date in the app that honoured
-        // `hijriAdjustment` - and nothing read it. The adjustment therefore round-tripped
-        // through preferences, the repository flow and a full recalculation, changed
-        // the number in the Settings row, and changed nothing a reader could see.
-        // Two representations of "what Hijri date is it", one of them invisible.
-        //
-        // So each surface applies the adjustment where it renders the date, from the
-        // one `hijriAdjustment` in this state. See `TodayScreen`, `PrayerScreen` and
-        // `HijriMonthSheet`.
-
         val qiblaBearing = QiblaEngine.calculateQiblaBearing(state.location.latitude, state.location.longitude)
         val distanceKaaba = QiblaEngine.calculateDistanceToKaabaKm(state.location.latitude, state.location.longitude)
         val sun = QiblaEngine.calculateSunPosition(state.location)
-
-        // No second day is calculated here.
-        //
-        // There used to be a `calendarSelectedDate` / `calendarSelectedDayPrayers` pair,
-        // and this function built a complete `PrayerTimesDay` for it on every location,
-        // method, madhhab, adjustment and midnight change - and nothing read either
-        // field. `selectCalendarDate`, which wrote them, was itself never called: the
-        // calendar goes through `setSelectedDate`, so the pair sat frozen at
-        // `LocalDate.now()` from construction and was recalculated all day to be
-        // discarded.
-        //
-        // The Prayer tab already computes the day it is showing, from
-        // `selectedDate`, on demand. So there is one day - the one the reader chose -
-        // and no second calendar to disagree with it.
 
         _uiState.value = state.copy(
             todayPrayerTimes = calculatedToday,
@@ -815,6 +524,22 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         }
     }
 
+    /**
+     * A permission denial is a location failure too. Before this existed the
+     * Settings banner only appeared if a fetch had run, so refusing the prompt
+     * left the screen looking as if nothing had happened.
+     */
+    fun reportLocationPermissionDenied() {
+        _uiState.value = _uiState.value.copy(
+            isLocating = false,
+            locationStatus = LocationStatus.Failed(LocationFailure.PERMISSION_NOT_GRANTED)
+        )
+    }
+
+    fun sendTestNotification() {
+        PrayerNotificationManager.showTestNotification(getApplication())
+    }
+
     fun setCalculationMethod(method: CalculationMethod) {
         repository.saveMethod(method)
     }
@@ -839,80 +564,9 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         repository.setVibrateOnly(enabled)
     }
 
-    // Quran reading options
-    //
-    // One setter rather than one per option, so every preference change is
-    // normalised and persisted through the same path. The repairs
-    // (continuous/horizontal, continuous/page) live in the model, which is the
-    // only place that knows the rules.
-
-    fun setQuranReadingOptions(options: QuranReadingOptions) {
-        repository.saveQuranReadingOptions(options)
-    }
-
-    /**
-     * Sets the layout, and nothing else.
-     */
-    fun setQuranLayout(layout: QuranReadingLayout) {
-        setQuranReadingOptions(_uiState.value.quranReadingOptions.copy(layout = layout))
-    }
-
-    /** Sets the axis, and nothing else. Same reasoning as [setQuranLayout]. */
-    fun setQuranScroll(direction: QuranScrollDirection) {
-        setQuranReadingOptions(_uiState.value.quranReadingOptions.copy(scroll = direction))
-    }
-
-    /**
-     * Breaks every verse out as its own selectable unit, in either layout.
-     */
-    fun setQuranPerVerse(perVerse: Boolean) {
-        setQuranReadingOptions(_uiState.value.quranReadingOptions.copy(perVerse = perVerse))
-    }
-
-    fun setQuranPinchTarget(target: QuranPinchTarget) {
-        setQuranReadingOptions(_uiState.value.quranReadingOptions.copy(pinchTarget = target))
-    }
-
-    fun setQuranPaper(tone: QuranPaperTone) {
-        setQuranReadingOptions(_uiState.value.quranReadingOptions.copy(paper = tone))
-    }
-
-    fun setQuranFont(face: QuranFontFace) {
-        setQuranReadingOptions(_uiState.value.quranReadingOptions.copy(font = face))
-    }
-
-    fun setQuranArabicScale(scale: Float) {
-        setQuranReadingOptions(
-            _uiState.value.quranReadingOptions.copy(
-                arabicScale = scale.coerceIn(QuranReadingOptions.ArabicScaleRange)
-            )
-        )
-    }
-
-    fun setQuranTranslationScale(scale: Float) {
-        setQuranReadingOptions(
-            _uiState.value.quranReadingOptions.copy(
-                translationScale = scale.coerceIn(QuranReadingOptions.TranslationScaleRange)
-            )
-        )
-    }
-
-    fun setQuranShowTranslation(show: Boolean) {
-        setQuranReadingOptions(_uiState.value.quranReadingOptions.copy(showTranslation = show))
-    }
-
-    /**
-     * Takes the reader over the whole screen, or gives the screen back.
-     *
-     * Session state rather than a preference. It used to be persisted, which
-     * meant a reader who entered the mode and then tapped Today left the dock
-     * and the status bar hidden on Today - and the flag survived the process,
-     * so the first screen after a relaunch was missing its chrome too. Nothing
-     * here writes it down any more, and `MainActivity` clears it when the
-     * reader's destination is left.
-     */
-    fun setQuranImmersive(immersive: Boolean) {
-        _uiState.value = _uiState.value.copy(isQuranImmersive = immersive)
+    fun toggleGlobalSilentMode() {
+        val newState = !_uiState.value.isGlobalSilentMode
+        repository.setGlobalSilentMode(newState)
     }
 
     fun setLanguage(language: String) {
@@ -923,12 +577,16 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         repository.setAppTheme(theme)
     }
 
-    fun setTimeFormat24h(is24h: Boolean) {
-        repository.setTimeFormat24h(is24h)
+    fun setAccent(accentKey: String) {
+        repository.setAccent(Accent.fromKey(accentKey).key)
     }
 
-    fun setAdhanSound(sound: AdhanSound) {
-        repository.setAdhanSound(sound)
+    fun setReduceTransparency(enabled: Boolean) {
+        repository.setReduceTransparency(enabled)
+    }
+
+    fun setTimeFormat24h(is24h: Boolean) {
+        repository.setTimeFormat24h(is24h)
     }
 
     fun setHijriAdjustment(adjustment: Int) {
@@ -941,110 +599,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
     fun refreshConnectivity() {
         repository.refreshConnectivity()
         recalculateAll()
-    }
-
-    fun setReciter(reciter: String) {
-        repository.setReciter(reciter)
-    }
-
-    fun setPrePrayerOffsetMinutes(minutes: Int) {
-        repository.setPrePrayerOffset(minutes)
-    }
-
-    fun setAdhanVolume(volume: Float) {
-        repository.setAdhanVolume(volume.coerceIn(0f, 1f))
-    }
-
-    fun setPrayerAlertMode(prayer: Prayer, mode: String) {
-        repository.setPrayerAlertMode(prayer, mode)
-    }
-
-    fun toggleGlobalSilentMode() {
-        val newState = !_uiState.value.isGlobalSilentMode
-        repository.setGlobalSilentMode(newState)
-        if (newState) {
-            stopAudioPreview()
-            silenceActiveAlert()
-        }
-    }
-
-    fun toggleAutoSilentDuringPrayer() {
-        setAutoSilentDuringPrayerTo(!_uiState.value.autoSilentDuringPrayer)
-    }
-
-    /**
-     * Auto-silence during prayer, as an explicit value.
-     *
-     * A setter as well as the toggle, so a reset can put it back without first reading
-     * the current value and negating it. That would be a second derivation of "the
-     * default", and it would restore the wrong thing if the toggle's own notion of the
-     * current value were ever wrong.
-     */
-    fun setAutoSilentDuringPrayerTo(enabled: Boolean) {
-        repository.setAutoSilentDuringPrayer(enabled)
-    }
-
-    fun setAutoSilentDuration(minutes: Int) {
-        repository.setAutoSilentDuration(minutes)
-    }
-
-    fun cyclePrayerAlertMode(prayer: Prayer) {
-        val current = _uiState.value.prayerAlertModes[prayer] ?: "Full Adhan"
-        val nextMode = when (current) {
-            "Full Adhan" -> "Takbeer Only"
-            "Takbeer Only" -> "Gentle Chime"
-            "Gentle Chime" -> "Vibrate Only"
-            "Vibrate Only" -> "Silent"
-            "Silent", "Silent Reminder" -> "Full Adhan"
-            else -> "Full Adhan"
-        }
-        repository.setPrayerAlertMode(prayer, nextMode)
-    }
-
-    fun silenceActiveAlert() {
-        PrayerAlertService.stopActiveAlert(getApplication())
-        AdhanAudioSynthesizer.stop()
-    }
-
-    fun playAudioPreview(title: String) {
-        if (_uiState.value.audioPreviewPlaying == title) {
-            stopAudioPreview()
-            return
-        }
-        _uiState.value = _uiState.value.copy(audioPreviewPlaying = title)
-
-        // Which of the three things the reader might have pressed: an adhan sound, an
-        // alert *mode*, or a reciter.
-        //
-        // This used to answer it by substring-matching the title against two hard-coded
-        // word lists, one of which omitted "Gentle Bell Chime" - the only option in the
-        // picker that is not an adhan. So previewing it fell through to the reciter
-        // branch and played a **chime**, while the alarm for the same setting played a
-        // **full adhan**, because the synthesizer's own matcher did not skip it either.
-        // One setting, two sounds, and the one a reader could hear by pressing the
-        // button was not the one they would get.
-        val sound = AdhanSound.entries.firstOrNull { it.label == title }
-        val mode = ALERT_MODES.firstOrNull { it == title }
-
-        if (sound != null || mode != null) {
-            AdhanAudioSynthesizer.playAlert(
-                alertMode = mode ?: "Full Adhan",
-                sound = sound ?: _uiState.value.adhanSound,
-                volume = _uiState.value.adhanVolume
-            ) {
-                _uiState.value = _uiState.value.copy(audioPreviewPlaying = null)
-            }
-        } else {
-            audioPlayer.playAudioPreview(title) {
-                _uiState.value = _uiState.value.copy(audioPreviewPlaying = null)
-            }
-        }
-    }
-
-    fun stopAudioPreview() {
-        audioPlayer.stop()
-        AdhanAudioSynthesizer.stop()
-        _uiState.value = _uiState.value.copy(audioPreviewPlaying = null)
     }
 
     fun setCustomLocation(name: String, lat: Double, lng: Double, altitude: Double = 0.0) {
@@ -1060,12 +614,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     /**
      * Re-derive the schedule and re-arm the alarms.
-     *
-     * **There is no cache.** `PrayerAlarmScheduler` computes today and tomorrow
-     * from the engine every time it is asked and hands the result to
-     * `AlarmManager`; nothing is stored, so nothing can go stale and there is
-     * nothing to recompute. The engine runs in well under a millisecond for one
-     * day. The button was reporting that it had verified a year of times.
      */
     fun reschedulePrayers() {
         recalculateAll()
@@ -1078,9 +626,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
      * **Through the repository, one setting at a time.** The last three lines used to
      * be a single `copy()` into the UI state, so the settings screen showed the
      * defaults and the *storage* kept the old values - which is the shape of bug a
-     * reader cannot see coming and cannot undo: a reader who had silenced everything
-     * and pressed "Reset all settings" was told they were back to defaults, and heard
-     * a full adhan again on the next cold start.
+     * reader cannot see coming and cannot undo.
      */
     fun resetAllSettings() {
         // Prayer calculation.
@@ -1093,223 +639,34 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         // the last one wins the arming.
         setAdhanNotification(true)
         setPrePrayerAlert(true)
-        setPrePrayerOffsetMinutes(10)
-        setAdhanVolume(0.85f)
         setVibrateOnly(false)
         defaultAlertModes.forEach { (prayer, mode) ->
             repository.setPrayerAlertMode(prayer, mode)
         }
         repository.setGlobalSilentMode(false)
-        setAutoSilentDuringPrayerTo(false)
-        setAutoSilentDuration(20)
-        setAdhanSound(AdhanSound.MAKKAH)
 
         // Display and interface.
         setTimeFormat24h(true)
         setAppTheme("System Default")
+        setAccent(Accent.DEFAULT.key)
+        setReduceTransparency(false)
         setLanguage("English")
-
-        // The Quran reader's own preferences, so a reset really does hand back a
-        // reader that looks and behaves the way it did on first run.
-        setQuranReadingOptions(QuranReadingOptions())
-
-        // The reciter is the one Quran choice Settings still offers, because it is
-        // the one that does something: it names the directory the player streams.
-        // The riwayah and the script were choices over a corpus that is one text -
-        // they are facts now, not preferences, and there is nothing left to reset.
-        setReciter(Reciter.ALAFASY.displayName)
 
         // Location and the reader's place are deliberately **not** reset.
         //
         // They are the reader's, not a preference: a reset that moved a reader to
-        // Mecca, or to page 1 of wherever they had been reading, would be a surprise
-        // with no undo. It is also why the confirmation names what is kept.
+        // Mecca would be a surprise with no undo. It is also why the confirmation
+        // names what is kept.
 
         recalculateAll()
     }
 
-    // Quran actions
-    //
-    // Everything that wants the reader somewhere arrives as a [QuranRef] and becomes
-    // `pendingOpen`. The Quran destination consumes it by handing it to
-    // `ReaderPosition.goTo`, and the reader's place is then `ReaderPosition.ref` and
-    // nothing else.
-
-    /**
-     * Asks for the reader to be put at [ref].
-     */
-    fun requestOpen(ref: QuranRef) = requestOpenVerse(ref.surah, ref.ayah)
-
-    /**
-     * Asks for a surah, which is a request for its first verse.
-     *
-     * A surah's ayah 1 is the only verse that means "this surah" - so it is resolved
-     * through the same path as everything else rather than by a second convention.
-     */
-    fun requestOpenSurah(surahNumber: Int) = requestOpenVerse(surahNumber, 1)
-
-    /**
-     * Resolves a verse against the corpus, off the main thread, then asks the
-     * reader to go there.
-     *
-     * The resolution is what keeps the request honest - a stored row cannot name
-     * a verse this build does not have - and it is the app's most expensive lazy
-     * read (the SHA-256 gate, the parse, 6,236 verses) the first time it runs.
-     * The launch restore and "Continue reading" on Today both arrive here before
-     * the Quran destination has ever loaded the corpus, so the work goes to a
-     * Default dispatcher, and the state write stays on the main thread with
-     * every other write to it.
-     */
-    private fun requestOpenVerse(surah: Int, ayah: Int) {
-        viewModelScope.launch {
-            val resolved = withContext(Dispatchers.Default) {
-                QuranBrowse.ref(surah, ayah)
-            } ?: return@launch
-            _uiState.value = _uiState.value.copy(pendingOpen = resolved)
-        }
-    }
-
-    /**
-     * The reader has honoured the pending request; there is nothing left to open.
-     *
-     * A request is an *event*, and `pendingOpen` is its mailbox - it must be empty
-     * again the moment it has been read. It used to stay set, and the destination's
-     * effect is keyed on the request, so every return to the Quran destination (a
-     * tab switch, a back-stack restore) re-ran the same request and moved the
-     * reader to old news; the debounced position writer then persisted that place,
-     * so the stale request quietly overwrote where the reader really was.
-     *
-     * The destination calls this, not the ViewModel, because only the reader knows
-     * the moment the request has been honoured.
-     */
-    fun onOpenConsumed() {
-        _uiState.value = _uiState.value.copy(pendingOpen = null)
-    }
-
-    /**
-     * The reader has settled on a verse; remember it for next time.
-     *
-     * **Persistence only.** This used to also write the reader's in-session position,
-     * which was a second anchor for a fact `ReaderPosition` already owned and which
-     * only ever got read once - at first composition, long before this fired. Two
-     * writers, neither of which could affect anything, in a rebuild whose subject is
-     * that there must be one writer.
-     */
-    fun onAyahViewed(ayah: Ayah) {
-        viewModelScope.launch {
-            repository.saveContinueReading(
-                ContinueReadingEntity(
-                    surahNumber = ayah.surahNumber,
-                    ayahNumber = ayah.ayahNumber,
-                    pageNumber = ayah.pageNumber,
-                    timestamp = System.currentTimeMillis()
-                )
-            )
-        }
-    }
-
-    /**
-     * Show prayer times for [date], or for today when it is null.
-     */
     fun setSelectedDate(date: LocalDate?) {
         _uiState.value = _uiState.value.copy(selectedDate = date)
     }
 
     /** Back to today, whatever day is currently selected. */
     fun clearSelectedDate() = setSelectedDate(null)
-
-    /**
-     * Asks for the reader's last remembered place.
-     *
-     * A request like any other, and the reason it is one is now visible: this used to
-     * *be* the reader's place, in a state field the reader could not see. Pressing
-     * "Continue reading" on the Today page set `selectedSurah`, so the pill named the
-     * surah and the page stayed where it was.
-     */
-    fun jumpToContinueReading() {
-        val cr = _uiState.value.continueReading
-        requestOpenVerse(cr.surahNumber, cr.ayahNumber)
-    }
-
-    fun toggleBookmark(ayah: Ayah) {
-        viewModelScope.launch {
-            repository.toggleBookmark(
-                surahNumber = ayah.surahNumber,
-                ayahNumber = ayah.ayahNumber
-            )
-        }
-    }
-
-    // Audio Playback
-    fun togglePlayAyah(ayah: Ayah) {
-        // The player's own state, not the UiState's copy of it: the copy is what the
-        // surfaces draw, and the decision is a question about the player, so it is
-        // asked of the thing that has to carry it out.
-        when (playbackTapFor(audioPlayer.playbackState.value, ayah.surahNumber, ayah.ayahNumber)) {
-            PlaybackTap.PAUSE -> audioPlayer.pause()
-            PlaybackTap.RESUME -> audioPlayer.resume()
-            PlaybackTap.PLAY -> {
-                // The reciter the *preference* names, resolved through [Reciter]:
-                // the same registry the picker offers, so an old or foreign stored
-                // name cannot make the player stream something the banner will not
-                // describe.
-                audioPlayer.playAyah(
-                    ayah.surahNumber,
-                    ayah.ayahNumber,
-                    Reciter.from(_uiState.value.reciter),
-                    // What plays after 2:255 is 2:256, and after a surah's last
-                    // ayah nothing does: the corpus's own answer, injected as the
-                    // seam. The player owns the *timing* hands these facts - so
-                    // that it can prepare the next verse while this one sounds,
-                    // instead of the old chain, where this callback tore the
-                    // player down and a fresh prepare carried the next verse's
-                    // whole download delay into every seam.
-                    nextVerse = { surah, ayahNumber ->
-                        QuranBrowse.ayah(surah, ayahNumber + 1)
-                            ?.let { it.surahNumber to it.ayahNumber }
-                    },
-                    // The session's own repeat choice: not persisted, not a
-                    // preference - a reader who asks for repeats asks each
-                    // sitting.
-                    repeat = _uiState.value.verseRepeat
-                )
-            }
-        }
-    }
-
-    fun stopAudio() {
-        audioPlayer.stop()
-    }
-
-    /**
-     * One tap, one step: the speed pill cycles the offer.
-     *
-     * The cycle is asked of the engine's pure offer ([nextPlaybackSpeed]) and
-     * written to the preference - the flow tells the player, the state copy
-     * tells the pill. A tap that bypassed the preference would go stale on the
-     * next session; a tap that bypassed the cycle would drift from the five
-     * speeds the banner can actually describe.
-     */
-    fun cyclePlaybackSpeed() {
-        repository.setPlaybackSpeed(
-            nextPlaybackSpeed(_uiState.value.versePlaybackSpeed)
-        )
-    }
-
-    /**
-     * One tap, one choice round the ring: once, three times, five, until
-     * stopped.
-     *
-     * Session state only, so the write is the state copy and the *telling* of
-     * the player - no preference is written, because the count is about this
-     * sitting. The player is told even when nothing is playing, so the next
-     * playAyah reads the choice the pill shows.
-     */
-    fun cycleVerseRepeat() {
-        val repeat = _uiState.value.verseRepeat.next()
-        _uiState.value = _uiState.value.copy(verseRepeat = repeat)
-        audioPlayer.setRepeat(repeat)
-    }
 
     // SensorEventListener
     // The TYPE_ORIENTATION branch below is a deliberate last-resort fallback for
@@ -1420,13 +777,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         val relativeAngle = QiblaEngine.calculateRelativeAngle(finalAzimuth, qiblaBearing)
 
         // Alignment is asked of QiblaGuidance rather than re-decided here.
-        //
-        // This used to be its own `abs(relativeAngle) <= 4.0f`, and the banner had a
-        // third answer again in the shape of the instruction it printed. Three
-        // tolerances cannot agree at the edge: at 4.5 degrees the dial's ring turned
-        // to the success colour, the check mark appeared in the middle of the dial,
-        // and the banner still said "turn 5°". Now the boolean, the needle, the
-        // number of degrees and the haptic all fall out of one value.
         val guidance = QiblaGuidance.fromRelative(relativeAngle)
         val isFacing = guidance.isAligned
 
@@ -1441,19 +791,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
         // The accuracy sentence, chosen from the sensor's own report rather than from a
         // field in this state.
-        //
-        // `magneticSensorAccuracy` was the raw `SENSOR_STATUS_*` integer sitting beside
-        // this string in the UI state, and it was the one the string was derived from.
-        // Two representations of one fact, where one can be copied over without the
-        // other - the shape that produced the four two-writer bugs this rebuild fixed.
-        // Now there is only the sentence.
-        //
-        // Note also what this does *not* say. "FACING QIBLA" is not an accuracy
-        // reading: it is the alignment state, which is what the banner and the dial's
-        // ring already say, with the actual degree count. A row in Settings labelled
-        // "Compass Sensors & Diagnostics" reporting alignment tells a reader nothing
-        // about their compass, and the emoji made it read as a status light rather than
-        // as a measurement. Aligned is now reported by the banner that exists for it.
         val accuracyLabel = when (sensorAccuracy) {
             SensorManager.SENSOR_STATUS_UNRELIABLE -> "UNRELIABLE (Calibrate)"
             SensorManager.SENSOR_STATUS_ACCURACY_LOW -> "LOW ACCURACY"
@@ -1461,11 +798,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             else -> "HIGH ACCURACY"
         }
 
-        // Two fields, both of which a screen reads and neither of which is derivable
-        // here alone: the heading the compass currently reports, and the guidance
-        // computed from it. The declination is not published - it is an input to the
-        // heading above, and a second copy of it in the UI state is a number that can
-        // disagree with the heading it produced.
         if (finalAzimuth != _uiState.value.compassAzimuth || accuracyLabel != _uiState.value.compassAccuracy) {
             _uiState.value = _uiState.value.copy(
                 compassAzimuth = finalAzimuth,
@@ -1473,8 +805,6 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
                 compassAccuracy = accuracyLabel
             )
         } else {
-            // The heading is smoothed, so it usually has not moved; the guidance may
-            // still have, and it is the value the banner and the haptic read.
             _uiState.value = _uiState.value.copy(qiblaGuidance = guidance)
         }
     }
@@ -1513,19 +843,26 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             sensorAccuracy = accuracy
         }
     }
+
+    private fun cachedDeclinationFor(lat: Float, lon: Float): Float {
+        val now = System.currentTimeMillis()
+        if (lat == declCacheLat && lon == declCacheLon && now - declCacheAtMs < 6 * 60 * 60 * 1000L) {
+            return declCacheValue
+        }
+        val value = try {
+            GeomagneticField(lat, lon, 50f, now).declination
+        } catch (_: Exception) {
+            0f
+        }
+        declCacheLat = lat
+        declCacheLon = lon
+        declCacheValue = value
+        declCacheAtMs = now
+        return value
+    }
 }
 
 /**
  * How far the phone may be tilted before its compass reading is not trusted.
- *
- * A compass reading taken while the phone is tilted is wrong by roughly the tilt
- * angle, so this is a claim about the reading's accuracy rather than about the
- * device's posture. 18 degrees is past the point at which a phone is held one-handed
- * to face the Kaaba, which is the only posture this matters in.
  */
 internal const val DEVICE_LEVEL_TOLERANCE_DEGREES = 18f
-
-/**
- * The alert *modes* the Settings screen offers to preview.
- */
-private val ALERT_MODES = listOf("Full Adhan", "Takbeer Only", "Gentle Chime")

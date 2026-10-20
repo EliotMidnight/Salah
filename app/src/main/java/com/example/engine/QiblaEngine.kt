@@ -7,6 +7,7 @@ import kotlin.math.acos
 import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.tan
 
@@ -148,3 +149,6 @@ enum class MagneticFieldStatus(val label: String, val isGood: Boolean) {
     ELEVATED("Elevated Flux", true),
     INTERFERENCE("Metal Interference!", false)
 }
+
+/** A bearing in whole degrees, as a reader reads it. */
+fun formatBearing(degrees: Float): String = "${degrees.roundToInt()}°"
