@@ -8,10 +8,12 @@ import com.example.data.model.PrayerTime
 import com.example.data.model.PrayerTimesDay
 import com.example.data.model.UserLocation
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlin.math.acos
@@ -25,48 +27,36 @@ import kotlin.math.tan
 
 object PrayerCalculationEngine {
 
-    // Official Moroccan Ministry of Habous & Islamic Affairs baseline calibrations
-    // For Moroccan cities, the national table calibrates exact astronomical horizons:
-    private val MOROCCO_CITY_DELTAS = mapOf(
-        "Rabat" to Triple(0, 0, 0),
-        "Casablanca" to Triple(4, 3, 3), // +4 min Fajr, +3 min Maghrib
-        "Marrakech" to Triple(4, 5, 4),
-        "Fes" to Triple(-7, -8, -7),
-        "Tangier" to Triple(-2, -4, -3),
-        "Agadir" to Triple(8, 9, 8),
-        "Meknes" to Triple(-5, -6, -5),
-        "Oujda" to Triple(-19, -20, -19),
-        "Tetouan" to Triple(-3, -5, -4)
-    )
-
     fun calculatePrayerTimes(
         date: LocalDate,
         location: UserLocation,
         method: CalculationMethod,
         madhhab: Madhhab,
-        adjustments: PrayerAdjustments
+        adjustments: PrayerAdjustments,
+        zoneId: ZoneId = PrayerTimeZone.forDay(date, ZoneId.systemDefault())
     ): PrayerTimesDay {
-        val zoneOffsetHours = calculateTimeZoneOffset(location, date)
-
-        // Astronomical Solar Coordinates
+        // Everything below is computed in universal time and converted to
+        // [zoneId] once, at the end.
+        //
+        // Solar noon is a UTC instant; which civil hour it lands on is a
+        // separate fact. This used to fold a guessed offset into `noon` at the
+        // start, which made a wrong offset indistinguishable from a wrong
+        // equinox - and made the sun's position be evaluated for a moment that
+        // was wrong by however much the guess was wrong.
         val julianDay = calculateJulianDay(date)
-        val d = julianDay - 2451545.0
-        val g = fixAngle(357.529 + 0.98560028 * d)
-        val q = fixAngle(280.459 + 0.98564736 * d)
-        val l = fixAngle(q + 1.915 * sin(toRadians(g)) + 0.020 * sin(toRadians(2 * g)))
-        val e = 23.439 - 0.00000036 * d
-        val declination = toDegrees(asin(sin(toRadians(e)) * sin(toRadians(l))))
-        val ra = fixAngle(toDegrees(atan2(cos(toRadians(e)) * sin(toRadians(l)), cos(toRadians(l)))))
-        var eqDiff = (q - ra)
-        while (eqDiff < -180.0) eqDiff += 360.0
-        while (eqDiff > 180.0) eqDiff -= 360.0
-        val equationOfTime = eqDiff / 15.0
+        val utcStart = date.atStartOfDay(ZoneOffset.UTC).toInstant()
 
-        // Solar Noon (Dhuhr base)
-        val noon = 12.0 + zoneOffsetHours - (location.longitude / 15.0) - equationOfTime
+        val latitude = location.latitude
+        val longitude = location.longitude
 
-        // Solar Angles
-        val lat = location.latitude
+        // Solar noon: the hour angle is zero, so the only moving part is the
+        // equation of time - evaluated *at* noon, which is why this iterates.
+        var noonUt = 12.0 - longitude / 15.0
+        repeat(3) {
+            noonUt = 12.0 - longitude / 15.0 -
+                    solarPosition(julianDay + noonUt / 24.0).equationOfTimeHours
+        }
+        val noonDeclination = solarPosition(julianDay + noonUt / 24.0).declination
 
         // Fajr angle
         val fajrAngle = -method.fajrAngle
@@ -78,61 +68,84 @@ object PrayerCalculationEngine {
         // returned times stay ordered and next-prayer logic stays correct.
         val requiredAngles = listOfNotNull(fajrAngle, -0.833, ishaAngle)
         val effectiveLat =
-            if (requiredAngles.any { cosHourAngle(it, lat, declination) !in -1.0..1.0 }) {
-                nearestResolvableLatitude(lat, declination, requiredAngles)
+            if (requiredAngles.any { cosHourAngle(it, latitude, noonDeclination) !in -1.0..1.0 }) {
+                nearestResolvableLatitude(latitude, noonDeclination, requiredAngles)
             } else {
-                lat
+                latitude
             }
 
-        // Sunrise & Sunset Angle (-0.833° accounting for refraction & solar disk)
-        val sunriseHourAngle = calculateHourAngle(-0.833, effectiveLat, declination)
+        // Sunrise & sunset angle (-0.833° accounting for refraction & solar disk)
+        val fajrUt = eventUt(julianDay, effectiveLat, noonUt, fajrAngle, morning = true)
+        val sunriseUt = eventUt(julianDay, effectiveLat, noonUt, -0.833, morning = true)
+        val maghribUt = eventUt(julianDay, effectiveLat, noonUt, -0.833, morning = false)
 
-        val fajrHourAngle = calculateHourAngle(fajrAngle, effectiveLat, declination)
-
-        // Isha angle / offset
-        val ishaHourAngle = if (ishaAngle != null) {
-            calculateHourAngle(ishaAngle, effectiveLat, declination)
-        } else {
-            0.0
+        // Asr is defined by shadow length, so its altitude depends on the
+        // declination - which depends on when Asr is. Two passes settle it.
+        var asrUt = noonUt
+        var asrDeclination = noonDeclination
+        repeat(2) {
+            val asrAltitude = toDegrees(
+                atan(1.0 / (madhhab.shadowFactor + tan(toRadians(Math.abs(effectiveLat - asrDeclination)))))
+            )
+            asrUt = eventUt(julianDay, effectiveLat, noonUt, asrAltitude, morning = false)
+            asrDeclination = solarPosition(julianDay + asrUt / 24.0).declination
         }
 
-        // Asr Angle
-        val asrAltitude = toDegrees(
-            atan(1.0 / (madhhab.shadowFactor + tan(toRadians(Math.abs(effectiveLat - declination)))))
-        )
-        val asrHourAngle = calculateHourAngle(asrAltitude, effectiveLat, declination)
-
-        // Raw decimal hours
-        var fajrRaw = noon - (fajrHourAngle / 15.0)
-        var sunriseRaw = noon - (sunriseHourAngle / 15.0)
-        var dhuhrRaw = noon
-        var asrRaw = noon + (asrHourAngle / 15.0)
-        var maghribRaw = noon + (sunriseHourAngle / 15.0)
-        var ishaRaw = if (method.ishaAngle > 0.0) {
-            noon + (ishaHourAngle / 15.0)
+        val ishaUt = if (ishaAngle != null) {
+            eventUt(julianDay, effectiveLat, noonUt, ishaAngle, morning = false)
         } else {
             // Umm Al-Qura 90 min after Maghrib
-            maghribRaw + 1.5
+            maghribUt + 1.5
         }
 
-        // Moroccan National Table flagship refinement
-        if (method == CalculationMethod.MOROCCO_MINISTRY && location.country.contains("Morocco", ignoreCase = true)) {
-            val delta = MOROCCO_CITY_DELTAS[location.name] ?: Triple(0, 0, 0)
-            fajrRaw += delta.first / 60.0
-            dhuhrRaw += delta.second / 60.0
-            maghribRaw += delta.third / 60.0
-            asrRaw += delta.second / 60.0
-            ishaRaw += delta.third / 60.0
-        }
+        // Round, and meanwhile let the convention's margins and the reader's
+        // adjustments land on whole minutes.
+        val fajrTime = localMinute(utcStart, zoneId, fajrUt, adjustments.fajr)
+        val sunriseTime = localMinute(
+            utcStart, zoneId, sunriseUt, method.sunriseOffsetMinutes + adjustments.sunrise
+        )
+        val dhuhrTime = localMinute(
+            utcStart, zoneId, noonUt, method.dhuhrOffsetMinutes + adjustments.dhuhr
+        )
+        val asrTime = localMinute(utcStart, zoneId, asrUt, adjustments.asr)
+        val maghribTime = localMinute(
+            utcStart, zoneId, maghribUt, method.maghribOffsetMinutes + adjustments.maghrib
+        )
+        val ishaTime = localMinute(utcStart, zoneId, ishaUt, adjustments.isha)
 
-        // Convert decimal hours to LocalTime with adjustments
-        val fajrRawTime = decimalToTime(fajrRaw).plusMinutes(adjustments.fajr.toLong())
-        val sunriseRawTime = decimalToTime(sunriseRaw).plusMinutes(adjustments.sunrise.toLong())
-        val dhuhrRawTime = decimalToTime(dhuhrRaw).plusMinutes(adjustments.dhuhr.toLong())
-        val asrRawTime = decimalToTime(asrRaw).plusMinutes(adjustments.asr.toLong())
-        val maghribRawTime = decimalToTime(maghribRaw).plusMinutes(adjustments.maghrib.toLong())
-        val ishaRawTime = decimalToTime(ishaRaw).plusMinutes(adjustments.isha.toLong())
+        return assemble(
+            date = date,
+            times = mapOf(
+                Prayer.FAJR to fajrTime,
+                Prayer.SUNRISE to sunriseTime,
+                Prayer.DHUHR to dhuhrTime,
+                Prayer.ASR to asrTime,
+                Prayer.MAGHRIB to maghribTime,
+                Prayer.ISHA to ishaTime
+            ),
+            method = method,
+            location = location,
+            zoneId = zoneId
+        )
+    }
 
+    /**
+     * Assembles a day from six wall-clock times.
+     *
+     * The single place where a set of times becomes a [PrayerTimesDay]: the
+     * ordering safety net, the prayers list, and the night divisions (Imsak,
+     * midnight, last third). Calculated days and published days both come
+     * through here, because those divisions are derived from Fajr and Maghrib
+     * and deriving them twice would let the two paths disagree about midnight
+     * on the very night the ministry's table is in use.
+     */
+    fun assemble(
+        date: LocalDate,
+        times: Map<Prayer, LocalTime>,
+        method: CalculationMethod,
+        location: UserLocation,
+        zoneId: ZoneId
+    ): PrayerTimesDay {
         // Safety net: when the device zone differs greatly from solar time at
         // the location (e.g. travel before the zone updates), or in extreme
         // polar fallback geometry, raw times can wrap past civil midnight and
@@ -140,53 +153,7 @@ object PrayerCalculationEngine {
         // checklist, calendar, alarms, next/previous lookup) requires a
         // strictly increasing day, so enforce monotonicity with 1-minute
         // steps. Never triggers for normal in-zone days.
-        val orderedTimes = enforceOrderedDay(
-            listOf(fajrRawTime, sunriseRawTime, dhuhrRawTime, asrRawTime, maghribRawTime, ishaRawTime)
-        )
-        val fajrTime = orderedTimes[0]
-        val sunriseTime = orderedTimes[1]
-        val dhuhrTime = orderedTimes[2]
-        val asrTime = orderedTimes[3]
-        val maghribTime = orderedTimes[4]
-        val ishaTime = orderedTimes[5]
-
-        val now = LocalDateTime.now()
-        val isToday = date == now.toLocalDate()
-        val currentTime = now.toLocalTime()
-
-        // Assemble Prayer Times
-        val prayerList = listOf(
-            PrayerTime(
-                prayer = Prayer.FAJR,
-                time = fajrTime,
-                dateTime = LocalDateTime.of(date, fajrTime)
-            ),
-            PrayerTime(
-                prayer = Prayer.SUNRISE,
-                time = sunriseTime,
-                dateTime = LocalDateTime.of(date, sunriseTime)
-            ),
-            PrayerTime(
-                prayer = Prayer.DHUHR,
-                time = dhuhrTime,
-                dateTime = LocalDateTime.of(date, dhuhrTime)
-            ),
-            PrayerTime(
-                prayer = Prayer.ASR,
-                time = asrTime,
-                dateTime = LocalDateTime.of(date, asrTime)
-            ),
-            PrayerTime(
-                prayer = Prayer.MAGHRIB,
-                time = maghribTime,
-                dateTime = LocalDateTime.of(date, maghribTime)
-            ),
-            PrayerTime(
-                prayer = Prayer.ISHA,
-                time = ishaTime,
-                dateTime = LocalDateTime.of(date, ishaTime)
-            )
-        )
+        val ordered = enforceOrderedDay(Prayer.entries.map { times.getValue(it) })
 
         // Times, and nothing else.
         //
@@ -208,22 +175,30 @@ object PrayerCalculationEngine {
         // `previousPrayer`. Screens ask that. This function answers the only question
         // it can answer truthfully - what time is each prayer - and nothing about
         // what time it is now.
-        val decoratedList = prayerList
+        val prayers = Prayer.entries.mapIndexed { index, prayer ->
+            PrayerTime(
+                prayer = prayer,
+                time = ordered[index],
+                dateTime = LocalDateTime.of(date, ordered[index])
+            )
+        }
+
+        val fajr = ordered[Prayer.FAJR.ordinal]
+        val maghrib = ordered[Prayer.MAGHRIB.ordinal]
 
         // Night divisions (Imsak = 10m before Fajr, Midnight = halfway between Maghrib and Fajr, Last Third)
-        val imsakTime = fajrTime.minusMinutes(10)
-        val nightDurationMinutes = Duration.between(maghribTime, fajrTime.plusHours(24)).toMinutes() % 1440
-        val midnight = maghribTime.plusMinutes(nightDurationMinutes / 2)
-        val lastThird = maghribTime.plusMinutes((nightDurationMinutes * 2) / 3)
+        val nightDurationMinutes =
+            Duration.between(maghrib, fajr.plusHours(24)).toMinutes() % 1440
 
         return PrayerTimesDay(
             date = date,
-            prayers = decoratedList,
-            imsak = imsakTime,
-            midnight = midnight,
-            lastThirdOfNight = lastThird,
+            prayers = prayers,
+            imsak = fajr.minusMinutes(10),
+            midnight = maghrib.plusMinutes(nightDurationMinutes / 2),
+            lastThirdOfNight = maghrib.plusMinutes((nightDurationMinutes * 2) / 3),
             calculationMethod = method,
-            location = location
+            location = location,
+            zoneId = zoneId
         )
     }
 
@@ -348,45 +323,86 @@ object PrayerCalculationEngine {
         return floor(365.25 * (year + 4716)) + floor(30.6001 * (month + 1)) + day + b - 1524.5
     }
 
-    private fun calculateTimeZoneOffset(location: UserLocation, date: LocalDate): Double {
-        if (location.country.contains("Morocco", ignoreCase = true)) {
-            return 1.0 // Morocco WEST (UTC+1)
-        }
-        if (location.country.contains("Saudi", ignoreCase = true)) {
-            return 3.0 // AST (UTC+3)
-        }
-        if (location.country.contains("Egypt", ignoreCase = true) || location.country.contains("Turkey", ignoreCase = true)) {
-            return 3.0
-        }
-        if (location.country.contains("UK", ignoreCase = true)) {
-            return 1.0
-        }
-        if (location.country.contains("USA", ignoreCase = true)) {
-            return -4.0
-        }
-        return try {
-            val zoneId = ZoneId.systemDefault()
-            val zonedDateTime = date.atStartOfDay(zoneId)
-            zonedDateTime.offset.totalSeconds / 3600.0
-        } catch (e: Exception) {
-            Math.round(location.longitude / 15.0).toDouble()
-        }
+    /**
+     * The sun's declination and equation of time at the instant [julianDay]
+     * (a Julian day, so `.5` of a day is a whole number of UTC hours).
+     *
+     * Low-precision solar theory, good to about 0.01° - roughly 30 seconds of
+     * hour angle, well below the one-minute resolution a timetable prints. The
+     * input is an instant rather than a date on purpose: the whole point of
+     * this function is that it can be called *at* the prayer being computed.
+     */
+    private fun solarPosition(julianDay: Double): SolarPosition {
+        val d = julianDay - 2451545.0
+        val g = fixAngle(357.529 + 0.98560028 * d)
+        val q = fixAngle(280.459 + 0.98564736 * d)
+        val l = fixAngle(q + 1.915 * sin(toRadians(g)) + 0.020 * sin(toRadians(2 * g)))
+        val e = 23.439 - 0.00000036 * d
+        val declination = toDegrees(asin(sin(toRadians(e)) * sin(toRadians(l))))
+        val ra = fixAngle(toDegrees(atan2(cos(toRadians(e)) * sin(toRadians(l)), cos(toRadians(l)))))
+        var eqDiff = q - ra
+        while (eqDiff < -180.0) eqDiff += 360.0
+        while (eqDiff > 180.0) eqDiff -= 360.0
+        return SolarPosition(declination, eqDiff / 15.0)
     }
 
-    private fun decimalToTime(decimalHours: Double): LocalTime {
-        var hours = decimalHours
-        while (hours < 0.0) hours += 24.0
-        while (hours >= 24.0) hours -= 24.0
-
-        val h = floor(hours).toInt()
-        val totalMinutes = floor((hours - h) * 60.0).toInt()
-        val totalSeconds = floor(((hours - h) * 60.0 - totalMinutes) * 60.0).toInt()
-        return LocalTime.of(
-            h.coerceIn(0, 23),
-            totalMinutes.coerceIn(0, 59),
-            totalSeconds.coerceIn(0, 59)
-        )
+    /**
+     * The UT hour at which the sun crosses [altitude] on the day starting at
+     * [julianDay] 0h UT, given the day's converged solar noon [noonUt].
+     *
+     * Iterated, because the declination at dawn is not the declination at
+     * midnight - the earth moves ~0.4° per day along its orbit, and the sun's
+     * declination changes by up to 0.4° per day near the equinoxes. Evaluating
+     * it once at 00:00 UT (what this used to do) is worth under a minute at
+     * Rabat and about eleven minutes at Reykjavík, which is why the frozen
+     * version looked fine in Morocco and nowhere else.
+     */
+    private fun eventUt(
+        julianDay: Double,
+        latitude: Double,
+        noonUt: Double,
+        altitude: Double,
+        morning: Boolean
+    ): Double {
+        var ut = noonUt
+        repeat(3) {
+            val declination = solarPosition(julianDay + ut / 24.0).declination
+            val hourAngle = calculateHourAngle(altitude, latitude, declination) / 15.0
+            ut = if (morning) noonUt - hourAngle else noonUt + hourAngle
+        }
+        return ut
     }
+
+    /**
+     * [utHours] as a wall-clock time in [zoneId], rounded to the nearest minute.
+     *
+     * Rounding, not truncation. `decimalToTime` used to floor the seconds, so a
+     * prayer 40 seconds past the minute was announced at the *previous* minute;
+     * the ministry's table rounds. Prayer times are announced to the minute
+     * everywhere, and a timetable that is systematically up to 59 seconds early
+     * disagrees with the mosque's own board.
+     *
+     * The zone's offset is read at the resulting instant rather than at
+     * midnight, so a day on which the clock changes still gets each prayer's
+     * own offset.
+     */
+    private fun localMinute(
+        utcStart: Instant,
+        zoneId: ZoneId,
+        utHours: Double,
+        extraMinutes: Int
+    ): LocalTime {
+        val instant = utcStart.plusSeconds(floor(utHours * 3600.0).toLong())
+        val offsetSeconds = zoneId.rules.getOffset(instant).totalSeconds
+        val total = utHours * 60.0 + offsetSeconds / 60.0 + extraMinutes + 0.5
+        val minutes = floor(total).toInt().mod(24 * 60)
+        return LocalTime.of(minutes / 60, minutes % 60)
+    }
+
+    private data class SolarPosition(
+        val declination: Double,
+        val equationOfTimeHours: Double
+    )
 
     private fun fixAngle(angle: Double): Double {
         var a = angle - 360.0 * floor(angle / 360.0)
@@ -396,5 +412,4 @@ object PrayerCalculationEngine {
 
     private fun toRadians(deg: Double): Double = Math.toRadians(deg)
     private fun toDegrees(rad: Double): Double = Math.toDegrees(rad)
-    private fun round(v: Double): Long = Math.round(v)
 }

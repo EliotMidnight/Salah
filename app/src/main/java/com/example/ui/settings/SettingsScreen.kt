@@ -831,14 +831,7 @@ internal fun adjustmentSummary(state: SalahUiState, strings: UiStrings): String 
  * Per-prayer minute adjustments as a list of (prayer, minutes) pairs.
  */
 fun appliedAdjustments(adjustments: PrayerAdjustments): List<Pair<Prayer, Int>> {
-    return listOf(
-        Prayer.FAJR to adjustments.fajr,
-        Prayer.SUNRISE to adjustments.sunrise,
-        Prayer.DHUHR to adjustments.dhuhr,
-        Prayer.ASR to adjustments.asr,
-        Prayer.MAGHRIB to adjustments.maghrib,
-        Prayer.ISHA to adjustments.isha
-    ).filter { it.second != 0 }
+    return Prayer.entries.map { it to adjustments.forPrayer(it) }.filter { it.second != 0 }
 }
 
 /**

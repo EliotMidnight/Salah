@@ -11,7 +11,8 @@ import com.example.data.model.Madhhab
 import com.example.data.model.Prayer
 import com.example.data.model.PrayerAdjustments
 import com.example.data.model.UserLocation
-import com.example.engine.PrayerCalculationEngine
+import com.example.data.PrayerTimesProvider
+import com.example.engine.PrayerTimeZone
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -90,20 +91,27 @@ object PrayerAlarmScheduler {
                     isha = prefOrInt("adj_isha", "pref_adj_isha", 0)
                 )
 
-                val today = LocalDate.now()
+                val today = PrayerTimeZone.localNow().toLocalDate()
                 val tomorrow = today.plusDays(1)
-                val zoneId = ZoneId.systemDefault()
                 val nowEpochMs = System.currentTimeMillis()
 
                 // Process both Today and Tomorrow to ensure seamless boundary coverage
                 listOf(today, tomorrow).forEach { date ->
-                    val dayPrayerTimes = PrayerCalculationEngine.calculatePrayerTimes(
+                    val dayPrayerTimes = PrayerTimesProvider.forDate(
+                        context = appContext,
                         date = date,
                         location = location,
                         method = method,
                         madhhab = madhhab,
                         adjustments = adjustments
                     )
+
+                    // The day says which clock its times are written in; ask it,
+                    // don't ask the device a second time. `ZoneId.systemDefault()`
+                    // here used to disagree with the engine on exactly the days the
+                    // two clocks differ - Morocco's 2026 change of legal time among
+                    // them - and the alarm for 05:17 fired an hour off.
+                    val zoneId = dayPrayerTimes.zoneId
 
                     dayPrayerTimes.prayers.forEach { pt ->
                         val targetZoned = pt.dateTime.atZone(zoneId)
@@ -220,9 +228,14 @@ object PrayerAlarmScheduler {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Schedule next midnight at 00:02
-        val nextMidnight = LocalDate.now().plusDays(1).atTime(LocalTime.of(0, 2))
-        val midnightEpochMs = nextMidnight.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        // Schedule next midnight at 00:02, on the clock the times are written in.
+        val nextMidnight = PrayerTimeZone.localNow().toLocalDate()
+            .plusDays(1)
+            .atTime(LocalTime.of(0, 2))
+        val midnightEpochMs = nextMidnight
+            .atZone(PrayerTimeZone.forDay(nextMidnight.toLocalDate(), ZoneId.systemDefault()))
+            .toInstant()
+            .toEpochMilli()
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -240,7 +253,7 @@ object PrayerAlarmScheduler {
     fun cancelAllAlarms(context: Context) {
         try {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
-            val today = LocalDate.now()
+            val today = PrayerTimeZone.localNow().toLocalDate()
             val tomorrow = today.plusDays(1)
 
             listOf(today, tomorrow).forEach { date ->

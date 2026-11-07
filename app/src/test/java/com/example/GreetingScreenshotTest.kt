@@ -107,7 +107,8 @@ internal fun todaySampleState(): SalahUiState {
             midnight = LocalTime.of(0, 20),
             lastThirdOfNight = LocalTime.of(2, 0),
             calculationMethod = CalculationMethod.MOROCCO_MINISTRY,
-            location = UserLocation.RABAT
+            location = UserLocation.RABAT,
+            zoneId = java.time.ZoneOffset.UTC
         ),
         nextPrayer = prayers[2],
         previousPrayer = prayers[1],

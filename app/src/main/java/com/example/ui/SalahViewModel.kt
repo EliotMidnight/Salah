@@ -13,10 +13,12 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.PrayerTimesProvider
 import com.example.data.local.PrayerLogEntity
 import com.example.data.local.SalahDatabase
 import com.example.data.location.LocationFailure
 import com.example.data.location.LocationFetchResult
+import com.example.data.remote.HabousClient
 import com.example.data.repository.SalahRepository
 import com.example.data.model.CalculationMethod
 import com.example.data.model.defaultAlertModes
@@ -31,6 +33,7 @@ import com.example.engine.HijriCalendarEngine
 import com.example.engine.MagneticFieldStatus
 import com.example.engine.PrayerCalculationEngine
 import com.example.engine.PrayerNotificationManager
+import com.example.engine.PrayerTimeZone
 import com.example.engine.QiblaEngine
 import com.example.engine.QiblaGuidance
 import com.example.engine.SunPosition
@@ -49,7 +52,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.LocalTime
 import kotlin.math.abs
 
 /**
@@ -191,6 +193,10 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             repository.locationFlow.collectLatest { loc ->
                 _uiState.value = _uiState.value.copy(location = loc)
                 recalculateAll()
+                // The stored month belongs to the old place. Ask for the new
+                // one now rather than waiting for a reconnect: being online and
+                // getting calculated times after a move looks like a bug.
+                if (_uiState.value.isOnline) refreshOfficialTimes()
             }
         }
 
@@ -198,6 +204,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             repository.methodFlow.collectLatest { meth ->
                 _uiState.value = _uiState.value.copy(method = meth)
                 recalculateAll()
+                if (_uiState.value.isOnline) refreshOfficialTimes()
             }
         }
 
@@ -205,6 +212,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             repository.madhhabFlow.collectLatest { madh ->
                 _uiState.value = _uiState.value.copy(madhhab = madh)
                 recalculateAll()
+                if (_uiState.value.isOnline) refreshOfficialTimes()
             }
         }
 
@@ -279,6 +287,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         viewModelScope.launch {
             repository.isOnlineFlow.collectLatest { online ->
                 _uiState.value = _uiState.value.copy(isOnline = online)
+                if (online) refreshOfficialTimes()
             }
         }
 
@@ -287,7 +296,7 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         // The prayer log is a row keyed by date, so this cannot be a one-off
         // collection: at midnight the date changes and the observer has to follow
         // it. Re-armed by [observePrayerLog] from the ticker below.
-        observePrayerLog(LocalDate.now())
+        observePrayerLog(PrayerTimeZone.localNow().toLocalDate())
 
         // Register background prayer alarm scheduling
         PrayerAlarmScheduler.scheduleAllPrayers(application)
@@ -400,7 +409,12 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
 
     private fun updateLiveTiming() {
         val state = _uiState.value
-        val today = LocalDate.now()
+        // "Today" and "now" come from the clock the day's times are written in.
+        // On a phone whose tzdata predates Morocco's 2026 decree that clock is
+        // pinned to UTC while the device displays +1, and mixing the two made
+        // the app treat each prayer as passed an hour early.
+        val now = PrayerTimeZone.localNow()
+        val today = now.toLocalDate()
 
         // Midnight.
         //
@@ -424,14 +438,20 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
                 observePrayerLog(today)
             }
             recalculateAll()
+            // A day rollover can be a month rollover: ask for the new file
+            // before the store is read, or an app left open across the 1st keeps
+            // calculating. The client no-ops when a valid month is stored.
+            if (_uiState.value.isOnline) refreshOfficialTimes()
             return
         }
 
-        val now = LocalDateTime.now()
         val nextPt = PrayerCalculationEngine.getNextPrayer(day, now.toLocalTime())
         val prevPt = PrayerCalculationEngine.getPreviousPrayer(day, now.toLocalTime())
         val countdown = PrayerCalculationEngine.formatRemainingCountdown(nextPt.dateTime, now)
-        val sun = QiblaEngine.calculateSunPosition(state.location, now)
+        // The sun's position is a physical fact, not a legal-time one, so it
+        // keeps the instant the device actually is at: `now` above may be the
+        // pinned UTC clock rather than the one in the status bar.
+        val sun = QiblaEngine.calculateSunPosition(state.location, LocalDateTime.now())
 
         _uiState.value = state.copy(
             nextPrayer = nextPt,
@@ -441,10 +461,32 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
         )
     }
 
+    /**
+     * Adopts the ministry's published month, if the device is online and the
+     * published row describes this place. Recalculates only when something
+     * actually changed, so a failed fetch costs nothing visible.
+     */
+    private fun refreshOfficialTimes() {
+        val state = _uiState.value
+        viewModelScope.launch {
+            val adopted = HabousClient.refresh(
+                context = getApplication(),
+                location = state.location,
+                method = state.method,
+                madhhab = state.madhhab
+            )
+            if (adopted) recalculateAll()
+        }
+    }
+
     fun recalculateAll() {
         val state = _uiState.value
-        val today = LocalDate.now()
-        val calculatedToday = PrayerCalculationEngine.calculatePrayerTimes(
+        // Same rule as the ticker: the day, "now" and the countdown all use the
+        // clock the times are written in, never a second reading of the device's.
+        val now = PrayerTimeZone.localNow()
+        val today = now.toLocalDate()
+        val calculatedToday = PrayerTimesProvider.forDate(
+            context = getApplication(),
             date = today,
             location = state.location,
             method = state.method,
@@ -452,9 +494,9 @@ class SalahViewModel(application: Application) : AndroidViewModel(application), 
             adjustments = state.adjustments
         )
 
-        val nextPt = PrayerCalculationEngine.getNextPrayer(calculatedToday, LocalTime.now())
-        val prevPt = PrayerCalculationEngine.getPreviousPrayer(calculatedToday, LocalTime.now())
-        val countdown = PrayerCalculationEngine.formatRemainingCountdown(nextPt.dateTime)
+        val nextPt = PrayerCalculationEngine.getNextPrayer(calculatedToday, now.toLocalTime())
+        val prevPt = PrayerCalculationEngine.getPreviousPrayer(calculatedToday, now.toLocalTime())
+        val countdown = PrayerCalculationEngine.formatRemainingCountdown(nextPt.dateTime, now)
         val qiblaBearing = QiblaEngine.calculateQiblaBearing(state.location.latitude, state.location.longitude)
         val distanceKaaba = QiblaEngine.calculateDistanceToKaabaKm(state.location.latitude, state.location.longitude)
         val sun = QiblaEngine.calculateSunPosition(state.location)

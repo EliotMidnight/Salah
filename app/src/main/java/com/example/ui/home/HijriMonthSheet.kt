@@ -51,6 +51,7 @@ import com.example.data.model.PrayerTimesDay
 import com.example.data.model.UserLocation
 import com.example.engine.HijriCalendarEngine
 import com.example.engine.PrayerCalculationEngine
+import com.example.engine.PrayerTimeZone
 import com.example.ui.localization.LocalLanguage
 import com.example.ui.localization.LocalStrings
 import com.example.ui.localization.appLocale
@@ -190,6 +191,9 @@ fun HijriMonthSheet(
 
             Spacer(Modifier.height(space.xs))
 
+            // One reading for the whole grid: 30 calls would be 30 chances to
+            // straddle midnight between cells.
+            val today = PrayerTimeZone.localNow().toLocalDate()
             LazyVerticalGrid(
                 columns = GridCells.Fixed(7),
                 modifier = Modifier.fillMaxWidth()
@@ -202,7 +206,7 @@ fun HijriMonthSheet(
                     HijriDayCell(
                         day = day,
                         isSelected = day == date,
-                        isToday = day == LocalDate.now(),
+                        isToday = day == today,
                         hijriAdjustment = hijriAdjustment,
                         onClick = { onSelectDate(day) }
                     )

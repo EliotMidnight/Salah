@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One host, one extra trust anchor.
+
+  www.habous.gov.ma serves its leaf certificate without the Sectigo
+  intermediate that signed it, so Android cannot build a path to a root it
+  already trusts and the fetch fails with "Trust anchor for certification path
+  not found". The intermediate is bundled here instead of being fetched, because
+  fetching a missing link in a chain is exactly the thing TLS is supposed to
+  stop.
+
+  The anchor is scoped to this site - the domain and the subdomains the ministry
+  serves it from - so it cannot validate a certificate for anything else: an
+  attacker who obtained a certificate for another name would still be checked
+  against the system anchors, and an attacker who obtained one *for this site*
+  from this CA could impersonate it - the same exposure as any other public CA,
+  which is why the host's HSTS header also applies. Cleartext stays off
+  everywhere.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <domain-config>
+        <domain includeSubdomains="true">habous.gov.ma</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/habous_intermediate" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

@@ -163,10 +163,12 @@ android {
   }
 }
 
-// SALAH is offline-first: prayer times, Qibla and the Quran corpus are computed
-// and read on-device, and the app declares no INTERNET permission. There is no
-// server, no analytics and no API key, so no secret-injection plugin is used and
-// no `.env` file is read at build time.
+// SALAH is offline-first: prayer times, Qibla and the prayer log are computed
+// and read on-device. The single exception is the Ministry of Habous monthly
+// timetable - one HTTP GET, used when the device is online, never required, and
+// with the on-device calculation as the fallback (see `HabousClient`). There is
+// no server of our own, no analytics and no API key, so no secret-injection
+// plugin is used and no `.env` file is read at build time.
 //
 // Release signing is the only thing that needs credentials, and those come from
 // the environment (see `signingConfigs` above), never from a file in the repo.

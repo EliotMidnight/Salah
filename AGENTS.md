@@ -1,7 +1,9 @@
 # AGENTS.md
 
 Single-module Android app (`:app`): Kotlin, Jetpack Compose (Material 3), Room. Prayer
-times, Quran and Qibla are computed/read on-device; the only network use is verse audio.
+times, Quran and Qibla are computed/read on-device. Two things use the network, both
+optional: verse audio, and the Ministry of Habous monthly timetable (online-first,
+with the on-device calculation as the fallback).
 Entry: `MainActivity` (NavHost: Today/Prayer/Quran/Qibla/Settings) and
 `ui/SalahViewModel.kt`. `README.md` is the design document — its per-area sections explain
 *why* the constraints below exist. Where README prose and build files/tests disagree,
@@ -49,7 +51,9 @@ trust the executable source; several prose claims have drifted.
   `gradle/libs.versions.toml`, not in `app/build.gradle.kts`.
 - R8 is off on purpose; don't enable it casually.
 - Release tasks throw unless `KEYSTORE_PATH`/`STORE_PASSWORD` are set. Never add a
-  debug-keystore fallback to release.
+  debug-keystore fallback to release. `.env.example` lists the variables, and `.env`
+  (gitignored) holds them locally; Gradle reads the *process environment*, not the
+  file, so source it first: `set -a; . ./.env; set +a`.
 - Don't raise Gradle heap or parallelism in `gradle.properties`; the values are bounded
   for this host and the comments explain the failures they prevent.
 
@@ -116,4 +120,54 @@ trust the executable source; several prose claims have drifted.
 - Commit messages: `type(scope): the finding as a sentence` plus an explanatory body
   (e.g. `fix(quran): the search results header said "50 verses" where 143 verses match`).
 - Don't add network calls, analytics, servers or new SDKs; offline-first is a product
-  guarantee, and INTERNET exists only for `MediaPlayer` verse audio.
+  guarantee. `INTERNET` exists for exactly two things: `MediaPlayer` verse audio, and
+  the single `GET` of the Ministry of Habous monthly timetable in `HabousClient`.
+  Every feature must still work with the radio off.
+
+## Prayer times (accuracy is the product)
+
+- `PrayerTimesProvider.forDate(...)` is the single decision point for a day's times:
+  it returns the adopted published row when one is stored for this place, and the
+  calculation otherwise. The ViewModel's current day and `PrayerAlarmScheduler` both
+  go through it, so the adhan cannot disagree with the list. The month grid and the
+  Today pager's adjacent days call the engine directly on purpose - a grid that
+  changed convention halfway down a month would be worse than one that is a minute
+  off its neighbour.
+- `PrayerTimeZone.forDay(date, deviceZone)` decides the legal clock. There is no
+  country table: the device zone is trusted, with one exception - `Africa/Casablanca`
+  and `Africa/El_Aaiun` are pinned to UTC from 2026-09-20 (decree 2.26.530), because a
+  phone with stale tzdata still reports +1 and that was the one-hour Rabat bug. The
+  resulting zone travels on `PrayerTimesDay.zoneId`; never call `systemDefault()` a
+  second time downstream. "Now" for the countdown, the next/previous prayer, the
+  prayer-log date and the Hijri sheet's today marker comes from
+  `PrayerTimeZone.localNow()` for the same reason: mixing the pinned clock with the
+  device's made the app treat each prayer as passed an hour early on a phone with stale
+  tzdata. The sun's position is the exception - it is a physical fact, so it keeps the
+  instant the device is at.
+- The engine computes everything in UT and converts once, per prayer, at the end.
+  The sun's position is evaluated *at* each prayer (`eventUt`), not frozen at 00:00 UT;
+  times round to the nearest minute, not truncate.
+- `CalculationMethod` carries the convention's own margins: Morocco is Sunrise −3,
+  Dhuhr +5, Maghrib +4. Those are measured against the ministry table, not astronomy,
+  and belong to the method rather than to a country or a city table. Do not
+  reintroduce `MOROCCO_CITY_DELTAS` or any per-city delta map.
+- Offline floor: the calculation reproduces the ministry's Rabat table to the minute on
+  most days and within ±1 minute over a month (the ministry uses unpublished per-city
+  reference points). The month property in `PrayerCalculationTest` pins that; exact
+  agreement is not the contract offline, and the hour is the failure that matters.
+- Online path: `HabousFeed` parses `habous.gov.ma/data/horaires-YYYY-MM.js` and
+  selects by *time agreement* with the local calculation (`TOLERANCE_MINUTES = 3`,
+  whole-hour clock shifts only) - never by city name or coordinates, which were tried
+  and misassigned Rabat to Kénitra. `HabousStore` keeps only the matched city (~2 KB)
+  and invalidates on a 30 km move, a change of device zone, or a corrupt read.
+  `HabousClient` is gated on `method.isMoroccoNationalTable` and
+  `madhhab == Madhhab.STANDARD` (the table is published with the standard shadow
+  factor, so adopting it would override a Hanafi reader's choice); every failure
+  is a fallback, not an error path.
+- `res/xml/network_security_config.xml` scopes the bundled Sectigo intermediate
+  (`res/raw/habous_intermediate.pem`) to `habous.gov.ma`, whose server omits the chain
+  link. Cleartext stays off. Don't widen that anchor to the base config.
+- Settings copy must not promise what the online path breaks: the privacy card says
+  "Works without a connection" and the calculation sheet says "Method, place and
+  adjustments", in all eleven languages. "Completely offline" / "Computed on this
+  device" were true before the ministry fetch existed and are not true now.

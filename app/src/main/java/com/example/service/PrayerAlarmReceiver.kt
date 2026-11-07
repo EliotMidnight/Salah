@@ -7,10 +7,10 @@ import com.example.data.local.SalahDatabase
 import com.example.data.local.PrayerLogEntity
 import com.example.data.model.Prayer
 import com.example.engine.PrayerNotificationManager
+import com.example.engine.PrayerTimeZone
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 
 /**
  * BroadcastReceiver catching scheduled prayer alarms, system reboots, and notification actions.
@@ -104,7 +104,9 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val db = SalahDatabase.getDatabase(context)
-                        val todayStr = LocalDate.now().toString()
+                        // The checklist row is keyed by the day the screen shows,
+                        // which is the legal clock, not necessarily the device's.
+                        val todayStr = PrayerTimeZone.localNow().toLocalDate().toString()
                         val currentLog = db.salahDao().getPrayerLogOnce(todayStr) ?: PrayerLogEntity(dateString = todayStr)
                         val updated = when (prayer) {
                             Prayer.FAJR -> currentLog.copy(fajrDone = true)

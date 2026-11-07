@@ -1,7 +1,9 @@
 # SALAH
 
 Offline-first Android companion for prayer times, Quran reading, and Qibla direction.
-Built with Kotlin and Jetpack Compose (Material 3). No account, no tracking, works fully offline.
+Built with Kotlin and Jetpack Compose (Material 3). No account, no tracking. Everything
+works with the radio off; when there is a connection, prayer times prefer the Ministry
+of Habous' own published table.
 
 ## Contents
 
@@ -29,12 +31,12 @@ Built with Kotlin and Jetpack Compose (Material 3). No account, no tracking, wor
 ## Features
 
 - **Today dashboard** — next prayer countdown, live astronomical sky indicator, Hijri date, prayer checklist, continue-reading shortcut.
-- **Prayer times** — 8 calculation methods (Morocco Ministry/Habous default, MWL, ISNA, Egypt, Umm Al-Qura, Karachi, Dubai, France 12°), Standard/Hanafi Asr jurisprudence, per-prayer minute adjustments, monthly calendar, Imsak / Islamic midnight / last-third-of-night vigils.
+- **Prayer times** — 8 calculation methods (Morocco Ministry/Habous default, MWL, ISNA, Egypt, Umm Al-Qura, Karachi, Dubai, France 12°), Standard/Hanafi Asr jurisprudence, per-prayer minute adjustments, monthly calendar, Imsak / Islamic midnight / last-third-of-night vigils. Online, the Moroccan convention adopts the Ministry of Habous' published month when one describes the reader's place; offline, the same day is computed on-device to within a minute.
 - **Quran reader** — opens straight into the text at your last position (Al-Fatihah on a first run). Two layouts — the canonical 604-page mushaf, or continuous per-surah flow with optional per-verse blocks — each on either axis. Seven washed-out papers with light/dark treatment, independent Arabic and translation sizing, five bundled Quran faces, pinch as zoom or as text size, and immersive mode that clears the status bar and the dock. All 114 surahs with verified Uthmani Arabic and Saheeh International English, bundled offline (6,236 verses). Verse-level search in Arabic or English with the matched words emphasised, and page/juz'/hizb quick filters, bookmarks, copy/share, per-verse audio recitation (streamed from everyayah.com in the reader's chosen reciter), whose banner names the verse being recited so a reader who has scrolled elsewhere can still find it. Page turns work by drag *and* by accessibility action, so a page is reachable without a finger; every page announces itself — reference, extent, surah range and page — in the reader's own language, and the text is kept out of a display cutout in landscape, where the outer column of a page is where a page *begins*.
 - **Qibla compass** — sensor-fused bearing with true/magnetic north, distance to the Kaaba, magnetic-interference diagnostics, device-level indicator, vibration on alignment. Graduated dial: tick every 2°, numerals every 30°, heading and Qibla bearing side by side, and a banner that names the turn — "turn right 12°" — rather than only reporting that you are not there yet.
-- **Adhan & alerts** — every word a notification shows is in the reader's own language, read from the same preference the interface uses: full Adhan, Takbeer-only, chime, vibration or silent per prayer; pre-prayer reminders; global silent and auto masjid-silence mode during prayer windows. Five adhan timbres, one decoder, and the Settings preview plays the sound the alarm will play. Prayer times are computed on this device and are never described as having been verified against anything.
+- **Adhan & alerts** — every word a notification shows is in the reader's own language, read from the same preference the interface uses: full Adhan, Takbeer-only, chime, vibration or silent per prayer; pre-prayer reminders; global silent and auto masjid-silence mode during prayer windows. Five adhan timbres, one decoder, and the Settings preview plays the sound the alarm will play. Alarms are scheduled from the same day object the screen shows, including its time zone, so the adhan and the list cannot drift apart.
 - **Localization** — full UI in 11 languages (English, Arabic, French, Indonesian, Turkish, Urdu, Malay, Bengali, Russian, German, Spanish) with RTL support.
-- **Offline-first & private** — prayer math runs on-device; location stays on the device in one store; the only network use is verse audio streaming. The app ships no HTTP client at all.
+- **Offline-first & private** — prayer math, Hijri dates and Qibla run on-device; location stays on the device in one store. The network is used for two optional things only: verse audio streaming, and one `GET` of the Ministry of Habous' monthly timetable when the device is online. Neither is required for any screen to work.
 
 ## Requirements
 
@@ -96,7 +98,9 @@ app/src/main/java/com/example/
 │   ├── model/                 # Prayer, Quran, location models
 │   ├── local/                 # Room: prayer log, bookmarks, continue-reading
 │   ├── location/              # GPS + cached location
-│   └── quran/                 # QuranCorpus + the browse/search/text facades over it
+│   ├── remote/                # Ministry of Habous feed, cache and fetch
+│   ├── quran/                 # QuranCorpus + the browse/search/text facades over it
+│   └── PrayerTimesProvider.kt # the one answer to "what time is Fajr here"
 ├── engine/                    # Prayer math, Hijri calendar, Qibla, sky, audio
 ├── service/                   # Alarm receiver/scheduler, alert service
 └── ui/
@@ -508,8 +512,94 @@ existing install those three channel names stay English whatever the app does. T
 platform limit, not something the code can work around; the strings are there so a fresh
 install is not the only one that reads correctly.
 
+### Prayer times ran an hour fast in Rabat, and the mosque's table was fetchable all along
+
+The app answered **13:16** for Dhuhr in Rabat on 1 November 2026. The Ministry of Habous
+printed **12:16**. The whole day was an hour late, and the cause was a table:
+
+```kotlin
+if (location.country.contains("Morocco")) return 1.0 // Morocco WEST (UTC+1)
+```
+
+Morocco had not been on UTC+1 since **20 September 2026**, when decree 2.26.530 put the
+country on GMT permanently. The app had guessed a fact the device already knows, and the
+guess went stale. Every row of that table was the same kind of guess — Egypt pinned to
++3 all year (it is +2 in winter), and the `"UK"`/`"USA"` branches could never match
+`United Kingdom`/`United States`, so they were dead code that *looked* like support.
+
+`PrayerTimeZone.forDay(date, deviceZone)` now trusts the device's zone, with one narrow
+exception: `Africa/Casablanca` and `Africa/El_Aaiun` are pinned to UTC from the decree
+onwards, because a phone whose tzdata predates the decree still reports +1 — the exact
+hour this change set out to remove. Before the decree the zone's own rules are correct
+and are left alone. The resolved zone travels on `PrayerTimesDay.zoneId`; the alarm
+scheduler used to ask `ZoneId.systemDefault()` a second time, which is a second opinion
+about the same fact and disagreed on precisely the days the two clocks differ. The same
+clock now feeds the countdown and the next-prayer reading (`PrayerTimeZone.localNow()`);
+they used to be compared against the device's clock, which on a pre-decree phone is an
+hour ahead, so each prayer looked passed before it was.
+
+**The sun was also frozen.** The engine evaluated the sun's declination and equation of
+time once at 00:00 UT and reused them for every prayer. At Rabat that is worth under a
+minute; at Reykjavík in late March, where declination moves ~0.4° a day, it is worth up
+to five. `eventUt` now iterates each event against the sun's position *at that event*.
+For 25 March 2026 at 64.15°N the old code answered 04:12 / 07:12 / 13:34 / 16:42 / 19:56
+/ 22:42; the iterated engine answers 04:11 / 07:11 / 13:34 / 16:43 / 19:58 / 22:47. An
+independent service (Aladhan, MWL) agrees to 1–2 minutes with the second set and is four
+minutes away from the first. Times also round to the nearest minute now; they used to
+floor the seconds, so every prayer was announced up to 59 seconds early.
+
+**The ministry's own margins.** Its table is not raw astronomy: Sunrise is announced 3
+minutes early, Dhuhr 5 minutes late, Maghrib 4 minutes late. Those are the ministry's
+announcement practice, so they live on `CalculationMethod.MOROCCO_MINISTRY` and travel
+with the convention. `MOROCCO_CITY_DELTAS`, a hand-written per-city map with Rabat at
+zero and Oujda at −20, is gone.
+
+With that, the calculation reproduces Rabat's published day to the minute on most days
+and within **±1 minute across the whole month** — the ministry computes each city from a
+reference point it does not publish, and no amount of tuning makes unpublished data
+appear. One minute is the offline floor, and the month-wide property in
+`PrayerCalculationTest` is the contract. The hour is the failure that matters, and it is
+gone.
+
+**So when there is a connection, ask the ministry.** `HabousFeed` reads
+`habous.gov.ma/data/horaires-YYYY-MM.js` — the file the ministry's own page script
+loads, 190 cities, one row of six times per day. The interesting part is which row to
+believe. Names and coordinates were both tried and both misassigned cities (Rabat to
+Kénitra, Casablanca to Mohammedia, because a name match is a guess and the ministry
+publishes no coordinates). The app instead computes the day from the reader's own
+coordinates and adopts the published row that **agrees with it** on every prayer within
+3 minutes, allowing only whole-hour clock shifts. If no row agrees — a reader in Paris,
+or a row that is minutes away but not on a whole-hour clock — the calculation stands.
+The matched city's name is never shown, because the app is not claiming to know which
+city it is; it is claiming the row says the same thing the correct answer says.
+
+`HabousStore` keeps only that one city (~2 KB, not the 290 KB feed) and forgets it after
+a move of more than 30 km or a change of clock, so neither a stale city nor a stale
+shift can outlive the reader's situation. Adoption is limited to the Moroccan method
+and the standard (Shafi/Maliki) shadow factor: the ministry's Asr is published for that
+factor, and a Hanafi reader asked for a different one, so their day stays calculated
+rather than silently overridden.
+
+`PrayerTimesProvider.forDate` is the single decision point: the day the ViewModel shows
+and the alarm scheduler both ask it, and the month grid and adjacent-day pager
+deliberately do not — a grid or a pager that switched conventions halfway through would
+be worse than one a minute off its neighbour.
+
+One caption had to change with it. Settings' privacy card said **Completely offline**,
+and the calculation sheet's subtitle said **Computed on this device**. Both were true of
+every version before this one and are false now, so they read *Works without a
+connection* and *Method, place and adjustments*, in all eleven languages; the privacy
+note names the one exception instead of promising there is none. A privacy claim the
+code no longer honours is the same kind of bug as a wrong prayer time, only quieter.
+
+One build detail: `www.habous.gov.ma` serves its leaf certificate without the Sectigo
+intermediate that signed it, so Android cannot build a chain to a root it trusts. The
+intermediate is bundled in `res/raw/habous_intermediate.pem` and scoped to that one
+site in `res/xml/network_security_config.xml`; cleartext stays off everywhere.
+
 ## Data sources & attribution
 
+- Prayer times, Moroccan convention: the official monthly timetable of the **Ministry of Habous and Islamic Affairs** (وزارة الأوقاف والشؤون الإسلامية), `https://www.habous.gov.ma/data/horaires-YYYY-MM.js`, fetched only when the device is online and adopted only when it agrees with the on-device calculation for the reader's place. Offline, times are computed on-device.
 - Quran Arabic (Uthmani 1.1) and partition metadata: **Tanzil Project** (CC BY 3.0) — https://tanzil.net — see `app/src/main/resources/quran/SOURCES.md` for hashes and notices.
 - English translation: **Saheeh International**, shown in-app as “English — Saheeh International”.
 - Verse audio: **everyayah.com**, streamed on demand in the reciter the reader chooses (Mishary Rashid Alafasy, Abdul Basit Abdus Samad, Mahmoud Khalil Al-Husary, Saud Ash-Shuraim).
@@ -531,10 +621,10 @@ desktop session, a parallel Compose build gets OOM-killed, so it runs without
 parallelism and with a bounded worker count. `./gradlew` works anywhere it has a
 JDK and memory for it.
 
-571 tests. The pure-JVM suites (Quran corpus integrity, the Madinah layout's
-corpus-wide properties, page fitting, gesture maths, search, prayer maths, Qibla
-bearing and guidance, localisation coverage,
-sky-text contrast) run on any host, including ARM64 Linux/Termux.
+143 tests. The pure-JVM suites (prayer maths against the ministry's published
+month, the Habous feed's parser and selection gate, Qibla bearing and guidance,
+Hijri labels, localisation coverage, the Room migrations, contrast and layout
+properties) run on any host, including ARM64 Linux/Termux.
 
 The Robolectric classes need an **x86_64 Linux or macOS** host: Robolectric 4.15+
 requires its native runtime, which has no ARM64 Linux build. `app/build.gradle.kts`
@@ -587,9 +677,13 @@ credentials, which are standard for debug builds and never used for release.
   place while the adhan fired for another. `LocationStore` is now the only reader and
   the only writer. It is included in the standard OS app backup
   (`res/xml/data_extraction_rules.xml`); uninstall wipes it.
-- The only network use is streaming verse audio from `https://everyayah.com`
-  on demand. If the stream fails or times out (12 s watchdog), the reader is
-  told the recitation needs a connection; the surah does not march on.
+- The network is used in exactly two places. Verse audio streams from
+  `https://everyayah.com` on demand; if the stream fails or times out (12 s watchdog),
+  the reader is told the recitation needs a connection. Prayer times may fetch the
+  Ministry of Habous' monthly timetable once per month while online
+  (`HabousClient`), sending no location, identifier or query — the same file every
+  reader receives. Nothing is uploaded; there is no server of ours, no analytics and
+  no account. With the radio off, every screen still works.
 
 ## Production build & release
 
@@ -600,20 +694,20 @@ Debug APK (installable directly):
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Signed release bundle/APK (requires the env credentials above):
+Signed release bundle/APK (requires the env credentials above). Either export
+them directly, or keep them in the gitignored `.env` and source it:
 
 ```bash
-export KEYSTORE_PATH=/path/to/my-upload-key.jks
-export STORE_PASSWORD='***'
-export KEY_PASSWORD='***'
+cp .env.example .env    # once, then fill it in
+set -a; . ./.env; set +a
 ./gradlew assembleRelease   # APK
 ./gradlew bundleRelease     # AAB for Play publishing
 ```
 
-If `KEYSTORE_PATH` is unset or the file is missing, the build logs a warning and
-signs with the local `debug.keystore` so `assembleRelease` still succeeds for
-verification. **Never publish a debug-signed build** — confirm the warning is
-absent in your CI log.
+Gradle reads the process environment, not `.env` itself: sourcing the file is what
+puts the variables there. If `KEYSTORE_PATH` is unset or the file is missing, the
+release task fails; it never falls back to `debug.keystore`. **Never publish a
+debug-signed build.**
 
 Release notes:
 
@@ -1020,12 +1114,17 @@ instrument rather than a spinning image.
 
 ## Known limitations
 
-- Verse audio needs connectivity; everything else is offline.
+- Verse audio needs connectivity, and so does adopting the Ministry of Habous'
+  published table; everything else — including prayer times, to within a minute —
+  works offline.
 - Robolectric and screenshot tests need an x86_64 host; they are skipped
   automatically on ARM64 (see Tests above).
-- Time-zone offsets use a small built-in table for known countries
-  (Morocco, Saudi Arabia, Egypt, Turkey, UK, US) and the device zone otherwise;
-  travelers crossing zones should re-open the app so times recompute.
+- The legal clock comes from the device's time zone, not from a built-in table;
+  the only override is Morocco's 2026 switch to GMT (`PrayerTimeZone`). A traveler
+  whose device zone has not caught up, or who keeps a foreign zone on purpose,
+  sees times in that zone's clock; re-opening the app after the phone updates its
+  zone recomputes them. A device with tzdata older than the Moroccan decree is
+  still correct, because the decree date is pinned in code.
 - Custom coordinates are validated to -90…+90 / -180…+180. Above the Arctic
   circle (or below the Antarctic circle) during polar day/night the sun never
   reaches some twilight angles, so the engine applies the standard

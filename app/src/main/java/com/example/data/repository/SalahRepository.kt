@@ -260,8 +260,9 @@ class SalahRepository(
                 networkRequest,
                 object : ConnectivityManager.NetworkCallback() {
                     override fun onAvailable(network: Network) {
-                        // Reported, not acted on. There is nothing to fetch: prayer
-                        // times are computed here.
+                        // The ViewModel adopts the Ministry of Habous' month
+                        // while this is true; the value is otherwise only
+                        // shown in Settings.
                         _isOnlineFlow.value = true
                     }
 
@@ -283,13 +284,13 @@ class SalahRepository(
     }
 
     /**
-     * Whether the device currently has a connection.
+     * Reads the current connectivity state, and only that.
      *
-     * **It fetches nothing, and nothing here ever did.** This was called
-     * `refreshOnlineDataSync` and its entire body was to write one of two
-     * sentences into [lastCheckedFlow] - "Online · Synced at 14:32 (Verified
-     * Ephemeris)" or "Offline · Calculated on-device (14:32)" - having contacted
-     * no server. The app has no HTTP client; `grep` for one returns nothing.
+     * This was called `refreshOnlineDataSync` and its entire body wrote one of
+     * two sentences into a "last checked" flow - "Online · Synced at 14:32
+     * (Verified Ephemeris)" - having contacted no server, which is why those
+     * sentences were deleted. It still fetches nothing: the one request the app
+     * makes lives in `HabousClient`, is optional, and never runs on this flow.
      */
     fun refreshConnectivity() {
         _isOnlineFlow.value = checkIsOnline()

@@ -5,6 +5,7 @@ import com.example.R
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.ZoneId
 
 /**
  * @param iconRes per-prayer artwork from the Salah Icons set (CC BY 4.0). Each
@@ -63,6 +64,17 @@ data class PrayerTime(
     val dateTime: LocalDateTime
 )
 
+/**
+ * One day's schedule.
+ *
+ * @param zoneId the legal clock these [prayers] are written in. It travels with
+ *   the day because a `LocalTime` alone is ambiguous: 05:17 is a different
+ *   instant in Casablanca and in Cairo. The alarm scheduler converts these
+ *   wall-clock times to instants, and it used to do so with
+ *   `ZoneId.systemDefault()` - a second opinion about the same fact, which
+ *   silently disagreed with the engine on exactly the days the two clocks
+ *   differ (travel, and Morocco's 2026 change of legal time).
+ */
 data class PrayerTimesDay(
     val date: LocalDate,
     val prayers: List<PrayerTime>,
@@ -70,22 +82,45 @@ data class PrayerTimesDay(
     val midnight: LocalTime,
     val lastThirdOfNight: LocalTime,
     val calculationMethod: CalculationMethod,
-    val location: UserLocation
+    val location: UserLocation,
+    val zoneId: ZoneId
 )
 
+/**
+ * A calculation convention: the twilight angles, and the margins a particular
+ * authority adds to the astronomical event afterwards.
+ *
+ * The margins are the non-obvious half. Morocco's ministry does not publish the
+ * raw astronomical event; it publishes the moment the mosque announces, which
+ * is a whole number of minutes later for Dhuhr and Maghrib and earlier for
+ * Sunrise. Measured against the ministry's November 2026 table for Rabat, the
+ * margins are Sunrise −3, Dhuhr +5, Maghrib +4; with them the calculated day
+ * reproduces the published day to the minute. Without them it is up to five
+ * minutes early at Dhuhr and four at Maghrib, all year.
+ *
+ * @param sunriseOffsetMinutes additive margin on the astronomical sunrise
+ * @param dhuhrOffsetMinutes additive margin on solar noon
+ * @param maghribOffsetMinutes additive margin on the astronomical sunset
+ */
 enum class CalculationMethod(
     val title: String,
     val description: String,
     val fajrAngle: Double,
     val ishaAngle: Double,
-    val isMoroccoNationalTable: Boolean = false
+    val isMoroccoNationalTable: Boolean = false,
+    val sunriseOffsetMinutes: Int = 0,
+    val dhuhrOffsetMinutes: Int = 0,
+    val maghribOffsetMinutes: Int = 0
 ) {
     MOROCCO_MINISTRY(
         "Kingdom of Morocco (Habous)",
         "Official national table by Ministry of Islamic Affairs & Habous",
         19.0,
         17.0,
-        isMoroccoNationalTable = true
+        isMoroccoNationalTable = true,
+        sunriseOffsetMinutes = -3,
+        dhuhrOffsetMinutes = 5,
+        maghribOffsetMinutes = 4
     ),
     MWL(
         "Muslim World League",
@@ -143,7 +178,23 @@ data class PrayerAdjustments(
     val asr: Int = 0,
     val maghrib: Int = 0,
     val isha: Int = 0
-)
+) {
+    /**
+     * This reader's adjustment for [prayer], in minutes.
+     *
+     * Named by prayer so that a consumer holding a [Prayer] - the published
+     * timetable does - can apply the reader's intent without restating the
+     * prayer-to-field mapping. That mapping exists once, here.
+     */
+    fun forPrayer(prayer: Prayer): Int = when (prayer) {
+        Prayer.FAJR -> fajr
+        Prayer.SUNRISE -> sunrise
+        Prayer.DHUHR -> dhuhr
+        Prayer.ASR -> asr
+        Prayer.MAGHRIB -> maghrib
+        Prayer.ISHA -> isha
+    }
+}
 
 data class UserLocation(
     val name: String,
