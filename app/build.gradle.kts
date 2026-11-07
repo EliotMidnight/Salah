@@ -85,7 +85,7 @@ android {
   //   KEYSTORE_PATH  path to the upload .keystore / .jks
   //   STORE_PASSWORD keystore password
   //   KEY_ALIAS      key alias (defaults to "upload")
-  //   KEY_PASSWORD   key password
+  //   KEY_PASSWORD   key password (defaults to STORE_PASSWORD)
   val uploadKeystore = System.getenv("KEYSTORE_PATH")?.let { file(it) }?.takeIf { it.exists() }
   val storePasswordEnv = System.getenv("STORE_PASSWORD")
   val hasReleaseCreds = uploadKeystore != null && !storePasswordEnv.isNullOrEmpty()
@@ -94,8 +94,8 @@ android {
     create("release") {
       storeFile = uploadKeystore ?: file("${rootDir}/debug.keystore")
       storePassword = storePasswordEnv ?: "android"
-      keyAlias = System.getenv("KEY_ALIAS") ?: "androiddebugkey"
-      keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
+      keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
+      keyPassword = System.getenv("KEY_PASSWORD") ?: storePasswordEnv ?: "android"
     }
     create("debugConfig") {
       storeFile = file("${rootDir}/debug.keystore")
